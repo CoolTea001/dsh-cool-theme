@@ -1,0 +1,17 @@
+node_modules/
+.pnpm-store/
+dist/
+lib/*.tsbuildinfo
+*.tsbuildinfo
+*.log
+pnpm-debug.log
+.tmp/
+.cache/
+coverage/
+.DS_Store
+.env
+.env.*
+.agents/
+.vscode/
+.idea/
+*.orig

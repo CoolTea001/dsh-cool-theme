@@ -1,0 +1,80 @@
+{
+  "name": "dsh-cool-theme",
+  "version": "0.1.0",
+  "description": "A plugin for changing themes for DSH, with a number of popular default themes built in.",
+  "type": "module",
+  "license": "MIT",
+  "author": "CoolTea",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CoolTea001/dsh-cool-theme.git"
+  },
+  "homepage": "https://github.com/CoolTea001/dsh-cool-theme#readme",
+  "bugs": {
+    "url": "https://github.com/CoolTea001/dsh-cool-theme/issues"
+  },
+  "keywords": [
+    "dsh",
+    "cordis",
+    "plugin",
+    "theme",
+    "deepseek-harness",
+    "nord",
+    "one-dark",
+    "github"
+  ],
+  "main": "lib/index.js",
+  "types": "lib/types/host/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/host/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsdown && tsc -p tsconfig.json --emitDeclarationOnly",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check": "pnpm typecheck && pnpm build",
+    "prepublishOnly": "pnpm run check",
+    "dev": "tsdown --watch",
+    "dev:types": "tsc -p tsconfig.json --watch --emitDeclarationOnly"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [],
+      "platform": "web"
+    }
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "packageManager": "pnpm@11.21.0",
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "~18.3.1",
+    "tsdown": "^0.22.2",
+    "typescript": "^6.0.3"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0"
+  }
+}

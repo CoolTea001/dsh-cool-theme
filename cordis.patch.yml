@@ -1,0 +1,4 @@
+# dsh-cool-theme bundle patch: mount the host plugin
+- insert:
+    - id: dsh-cool-theme
+      name: dsh-cool-theme
