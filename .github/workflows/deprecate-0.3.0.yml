@@ -11,4 +11,6 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org/
-      - run: npm deprecate dsh-cool-theme@0.3.0 "retracted - feature rollback, please use 0.3.1 or 0.2.0" --provenance || npm deprecate dsh-cool-theme@0.3.0 "retracted - feature rollback, please use 0.3.1 or 0.2.0"
+      - run: |
+          npm deprecate dsh-cool-theme@0.3.0 "retracted - feature rollback, please use 0.3.1 or 0.2.0" --verbose || echo "first attempt failed"
+          npm view dsh-cool-theme@0.3.0 deprecated || true
