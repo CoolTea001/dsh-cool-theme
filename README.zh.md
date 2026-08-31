@@ -1,3 +1,5 @@
+![dsh-cool-theme cover](https://cdn.cooltea.top/dsh-cool-theme/readme-cover-v0.1.0.png)
+
 # dsh-cool-theme
 
 [English](./README.md) · 中文

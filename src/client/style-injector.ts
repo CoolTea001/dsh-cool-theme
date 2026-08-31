@@ -7,18 +7,22 @@ declare const styles: { insert: (css: string) => () => void }
 export function createStyleInjector() {
   const disposers = new Set<() => void>()
 
+  function track(dispose: () => void): () => void {
+    const wrapped = () => {
+      try {
+        dispose()
+      } catch {}
+      disposers.delete(wrapped)
+    }
+    disposers.add(wrapped)
+    return wrapped
+  }
+
   function insert(css: string): () => void {
     try {
       if (typeof styles !== 'undefined' && typeof (styles as any).insert === 'function') {
         const dispose = (styles as any).insert(css) as () => void
-        const wrapped = () => {
-          try {
-            dispose?.()
-          } catch {}
-          disposers.delete(wrapped)
-        }
-        disposers.add(wrapped)
-        return wrapped
+        if (typeof dispose === 'function') return track(dispose)
       }
     } catch {}
 
@@ -26,12 +30,7 @@ export function createStyleInjector() {
     tag.dataset.plugin = 'dsh-cool-theme'
     tag.textContent = css
     document.head.appendChild(tag)
-    const wrapped = () => {
-      tag.remove()
-      disposers.delete(wrapped)
-    }
-    disposers.add(wrapped)
-    return wrapped
+    return track(() => tag.remove())
   }
 
   function disposeAll() {
