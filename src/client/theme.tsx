@@ -128,4 +128,91 @@ export function registerTheme(ctx: any) {
       React.createElement(ThemePanel, { t: props?.t ?? ((key: ThemeKey) => zh[key]), theme, getPreset, setPreset }),
     )
   })
+
+  // Hide the built-in Appearance switch in General settings and unify on
+  // dsh-cool-theme's Theme panel (light/dark/system + presets). Primary
+  // mechanism is slot shadowing: a low-priority empty entry for the same id
+  // wins the list cell and renders nothing, so the original AppearanceRow is
+  // never projected. A lightweight CSS + MutationObserver fallback covers
+  // hashed-class rotation and future template shifts.
+  const HIDE_APPEARANCE_CSS =
+    '.OVFIkW_section [data-slot="settings.general.item"] .D7wrZG_group{display:none !important;}'
+  let hideCssDisposer: (() => void) | null = null
+  let apObs: MutationObserver | null = null
+
+  function isAppearanceNode(el: Element): boolean {
+    // AppearanceRow is the only item that renders three theme cubes / the title "外观"/"Appearance"
+    const text = el.textContent || ''
+    const hasTitle = text.includes('外观') || text.includes('Appearance')
+    const hasCubes =
+      el.querySelector('[class*="themeCube"]') !== null ||
+      el.querySelector('[class*="D7wrZG"]') !== null
+    return hasTitle && hasCubes
+  }
+
+  function hideAppearanceInGeneral() {
+    if (typeof document === 'undefined') return
+    const container = document.querySelector('.OVFIkW_section [data-slot="settings.general.item"]')
+    if (!container) return
+    for (const child of Array.from(container.children)) {
+      if (isAppearanceNode(child as Element)) {
+        ;(child as HTMLElement).style.display = 'none'
+      }
+    }
+  }
+
+  slots.inject('settings.general.item', () => {
+    try {
+      hideCssDisposer = injector.insert(HIDE_APPEARANCE_CSS)
+    } catch {}
+    // Slot shadowing: priority -1 outranks the built-in 0 and renders null
+    let disposeShadow: (() => void) | null = null
+    try {
+      disposeShadow = slots.register(
+        { name: 'settings.general.item', id: 'appearance', priority: -1 } as any,
+        () => null,
+      )
+    } catch {}
+
+    // Fallback observer: if shadowing is ignored (e.g. future DSH changes), hide by DOM inspection
+    if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') {
+      hideAppearanceInGeneral()
+      try {
+        apObs = new MutationObserver(hideAppearanceInGeneral)
+        const target = document.body
+        apObs.observe(target, { childList: true, subtree: true })
+      } catch {}
+    }
+
+    return () => {
+      if (disposeShadow) {
+        try {
+          disposeShadow()
+        } catch {}
+        disposeShadow = null
+      }
+      if (hideCssDisposer) {
+        try {
+          hideCssDisposer()
+        } catch {}
+        hideCssDisposer = null
+      }
+      if (apObs) {
+        try {
+          apObs.disconnect()
+        } catch {}
+        apObs = null
+      }
+      // Restore any fallback-hidden nodes
+      if (typeof document !== 'undefined') {
+        const container = document.querySelector('.OVFIkW_section [data-slot="settings.general.item"]')
+        if (container) {
+          for (const child of Array.from(container.children)) {
+            const el = child as HTMLElement
+            if (el.style.display === 'none') el.style.display = ''
+          }
+        }
+      }
+    }
+  })
 }
