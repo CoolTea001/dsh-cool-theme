@@ -1,5 +1,6 @@
 import type { StaticMap } from './css/primitives.js'
 
+import { aura } from './presets/aura.js'
 import { ayu } from './presets/ayu.js'
 import { catppuccin } from './presets/catppuccin.js'
 import { dracula } from './presets/dracula.js'
@@ -17,6 +18,7 @@ import { zenburn } from './presets/zenburn.js'
 type PresetDef = { label: string; light: StaticMap; dark: StaticMap }
 
 export const PRESETS = {
+  aura,
   ayu,
   catppuccin,
   dracula,
