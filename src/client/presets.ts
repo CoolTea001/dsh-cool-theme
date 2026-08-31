@@ -1,4 +1,4 @@
-﻿import type { StaticMap } from './css/primitives.js'
+import type { StaticMap } from './css/primitives.js'
 
 import { ayu } from './presets/ayu.js'
 import { catppuccin } from './presets/catppuccin.js'
@@ -32,21 +32,12 @@ export const PRESETS = {
   zenburn,
 } as const satisfies Record<string, PresetDef>
 
-/** `native` is a legacy storage alias for `dsh` — both mean “system default, no overrides”. */
+/** `native` is a legacy storage alias for `dsh` — both mean "system default, no overrides". */
 export type PresetId = keyof typeof PRESETS | 'native'
 
 export const presetOptions: { value: PresetId; label: string }[] = [
-  { value: 'dsh', label: 'DSH' },
-  { value: 'ayu', label: 'Ayu' },
-  { value: 'catppuccin', label: 'Catppuccin' },
-  { value: 'dracula', label: 'Dracula' },
-  { value: 'github', label: 'GitHub' },
-  { value: 'gruvbox', label: 'Gruvbox' },
-  { value: 'monokai', label: 'Monokai' },
-  { value: 'nord', label: 'Nord' },
-  { value: 'onedark', label: 'One Dark' },
-  { value: 'rosepine', label: 'Rosé Pine' },
-  { value: 'solarized', label: 'Solarized' },
-  { value: 'tokyonight', label: 'Tokyo Night' },
-  { value: 'zenburn', label: 'Zenburn' },
+  { value: 'dsh', label: PRESETS.dsh.label },
+  ...(Object.keys(PRESETS) as (keyof typeof PRESETS)[])
+    .filter((id) => id !== 'dsh')
+    .map((id) => ({ value: id as PresetId, label: PRESETS[id].label })),
 ]

@@ -48,16 +48,20 @@ export function registerTheme(ctx: any) {
   let baselineDisposer: (() => void) | null = null
   let overrideDispose: (() => void) | null = null
   let fallbackDispose: (() => void) | null = null
-  const dispose = (fn: (() => void) | null) => {
+
+  const release = (fn: (() => void) | null) => {
     if (!fn) return null
-    try { fn() } catch {}
+    try {
+      fn()
+    } catch {}
     return null
   }
+
   function ensureBaseline(active: boolean) {
     if (active) {
       if (!baselineDisposer) baselineDisposer = injector.insert(buildBaseCss())
     } else if (baselineDisposer) {
-      baselineDisposer = dispose(baselineDisposer)
+      baselineDisposer = release(baselineDisposer)
     }
   }
 
@@ -65,20 +69,26 @@ export function registerTheme(ctx: any) {
     for (const key of [THEME_STORAGE_KEY, THEME_STORAGE_KEY_LEGACY] as const) {
       try {
         const cur = localStorage.getItem(key)
-        if (isValidPreset(cur)) {
-          const normalized = cur === 'native' ? 'dsh' : (cur as PresetId)
-          if (cur !== normalized) try { localStorage.setItem(THEME_STORAGE_KEY, normalized) } catch {}
-          else if (key === THEME_STORAGE_KEY_LEGACY) try { localStorage.setItem(THEME_STORAGE_KEY, cur!) } catch {}
-          return normalized
+        if (!isValidPreset(cur)) continue
+        const normalized = cur === 'native' ? 'dsh' : (cur as PresetId)
+        if (cur !== normalized) {
+          try {
+            localStorage.setItem(THEME_STORAGE_KEY, normalized)
+          } catch {}
+        } else if (key === THEME_STORAGE_KEY_LEGACY) {
+          try {
+            localStorage.setItem(THEME_STORAGE_KEY, cur!)
+          } catch {}
         }
+        return normalized
       } catch {}
     }
     return 'dsh'
   }
 
   function applyPreset(id: PresetId) {
-    overrideDispose = dispose(overrideDispose)
-    fallbackDispose = dispose(fallbackDispose)
+    overrideDispose = release(overrideDispose)
+    fallbackDispose = release(fallbackDispose)
     if (NOOP.has(id)) {
       ensureBaseline(false)
       return
@@ -95,19 +105,19 @@ export function registerTheme(ctx: any) {
   }
 
   function setPreset(id: PresetId) {
-    try { localStorage.setItem(THEME_STORAGE_KEY, id) } catch {}
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, id)
+    } catch {}
     applyPreset(id)
   }
 
-  const init = getPreset()
-  ensureBaseline(!NOOP.has(init))
-  if (!NOOP.has(init)) applyPreset(init)
+  applyPreset(getPreset())
 
   ctx.effect(() => () => {
-    pluginCssDisposer && dispose(pluginCssDisposer)
-    baselineDisposer = dispose(baselineDisposer)
-    overrideDispose = dispose(overrideDispose)
-    fallbackDispose = dispose(fallbackDispose)
+    release(pluginCssDisposer)
+    baselineDisposer = release(baselineDisposer)
+    overrideDispose = release(overrideDispose)
+    fallbackDispose = release(fallbackDispose)
     injector.disposeAll()
   })
 

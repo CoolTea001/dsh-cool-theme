@@ -8,9 +8,6 @@
  *
  * Changing a theme = providing a new light + dark map for these 85 variables.
  * Semantic aliases automatically follow. No other file needs to change.
- *
- * Baseline below is the Figma baseline the user provided (light ≡ dark initially).
- * To make dark mode actually dark, override the dark map via a preset (see presets.ts).
  */
 export type StaticMap = Record<string, string>;
 export declare const PRIMITIVES_LIGHT: StaticMap;
