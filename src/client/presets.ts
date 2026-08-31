@@ -3,6 +3,8 @@ import type { StaticMap } from './css/primitives.js'
 import { aura } from './presets/aura.js'
 import { ayu } from './presets/ayu.js'
 import { catppuccin } from './presets/catppuccin.js'
+import { catppuccinFrappe } from './presets/catppuccin-frappe.js'
+import { catppuccinMacchiato } from './presets/catppuccin-macchiato.js'
 import { dracula } from './presets/dracula.js'
 import { dsh } from './presets/dsh.js'
 import { github } from './presets/github.js'
@@ -21,6 +23,8 @@ export const PRESETS = {
   aura,
   ayu,
   catppuccin,
+  'catppuccin-frappe': catppuccinFrappe,
+  'catppuccin-macchiato': catppuccinMacchiato,
   dracula,
   dsh,
   github,
