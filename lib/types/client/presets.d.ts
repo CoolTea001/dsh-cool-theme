@@ -308,6 +308,131 @@ export declare const PRESETS: {
             readonly '--shiki-token-link': "#83A598";
         };
     };
+    readonly kanagawa: {
+        readonly label: "Kanagawa";
+        readonly light: {
+            readonly '--shiki-token-constant': "#5A6A8A";
+            readonly '--shiki-token-string': "#587353";
+            readonly '--shiki-token-comment': "#8A9A7B";
+            readonly '--shiki-token-keyword': "#957FB8";
+            readonly '--shiki-token-parameter': "#8A6A2E";
+            readonly '--shiki-token-function': "#2D4F67";
+            readonly '--shiki-token-string-expression': "#587353";
+            readonly '--shiki-token-punctuation': "#43436C";
+            readonly '--shiki-token-link': "#2D4F67";
+        };
+        readonly dark: {
+            readonly '--shiki-token-constant': "#DCA561";
+            readonly '--shiki-token-string': "#98BB6C";
+            readonly '--shiki-token-comment': "#727169";
+            readonly '--shiki-token-keyword': "#957FB8";
+            readonly '--shiki-token-parameter': "#FFA066";
+            readonly '--shiki-token-function': "#7E9CD8";
+            readonly '--shiki-token-string-expression': "#98BB6C";
+            readonly '--shiki-token-punctuation': "#DCD7BA";
+            readonly '--shiki-token-link': "#7FB4CA";
+        };
+    };
+    readonly 'lucent-orng': {
+        readonly label: "Lucent Orng";
+        readonly light: {
+            readonly '--shiki-token-constant': "#9A3412";
+            readonly '--shiki-token-string': "#166534";
+            readonly '--shiki-token-comment': "#9A8B7A";
+            readonly '--shiki-token-keyword': "#C2410C";
+            readonly '--shiki-token-parameter': "#EA580C";
+            readonly '--shiki-token-function': "#9A3412";
+            readonly '--shiki-token-string-expression': "#166534";
+            readonly '--shiki-token-punctuation': "#57534E";
+            readonly '--shiki-token-link': "#9A3412";
+        };
+        readonly dark: {
+            readonly '--shiki-token-constant': "#FB923C";
+            readonly '--shiki-token-string': "#4ADE80";
+            readonly '--shiki-token-comment': "#8C7A65";
+            readonly '--shiki-token-keyword': "#FF8904";
+            readonly '--shiki-token-parameter': "#FDBA74";
+            readonly '--shiki-token-function': "#FF8904";
+            readonly '--shiki-token-string-expression': "#4ADE80";
+            readonly '--shiki-token-punctuation': "#F5E6D3";
+            readonly '--shiki-token-link': "#FF8904";
+        };
+    };
+    readonly material: {
+        readonly label: "Material";
+        readonly light: {
+            readonly '--shiki-token-constant': "#1565C0";
+            readonly '--shiki-token-string': "#2E7D32";
+            readonly '--shiki-token-comment': "#6B7C8D";
+            readonly '--shiki-token-keyword': "#7C4DFF";
+            readonly '--shiki-token-parameter': "#EF6C00";
+            readonly '--shiki-token-function': "#1565C0";
+            readonly '--shiki-token-string-expression': "#2E7D32";
+            readonly '--shiki-token-punctuation': "#37474F";
+            readonly '--shiki-token-link': "#1565C0";
+        };
+        readonly dark: {
+            readonly '--shiki-token-constant': "#FFCB6B";
+            readonly '--shiki-token-string': "#C3E88D";
+            readonly '--shiki-token-comment': "#676E95";
+            readonly '--shiki-token-keyword': "#C792EA";
+            readonly '--shiki-token-parameter': "#FFCB6B";
+            readonly '--shiki-token-function': "#82AAFF";
+            readonly '--shiki-token-string-expression': "#C3E88D";
+            readonly '--shiki-token-punctuation': "#EEFFFF";
+            readonly '--shiki-token-link': "#82AAFF";
+        };
+    };
+    readonly matrix: {
+        readonly label: "Matrix";
+        readonly light: {
+            readonly '--shiki-token-constant': "#0A5300";
+            readonly '--shiki-token-string': "#0A7A00";
+            readonly '--shiki-token-comment': "#5A7A5A";
+            readonly '--shiki-token-keyword': "#0A5300";
+            readonly '--shiki-token-parameter': "#5A7A00";
+            readonly '--shiki-token-function': "#0A5300";
+            readonly '--shiki-token-string-expression': "#0A7A00";
+            readonly '--shiki-token-punctuation': "#2E3B2E";
+            readonly '--shiki-token-link': "#0A5300";
+        };
+        readonly dark: {
+            readonly '--shiki-token-constant': "#76FF03";
+            readonly '--shiki-token-string': "#00E676";
+            readonly '--shiki-token-comment': "#4A7A4A";
+            readonly '--shiki-token-keyword': "#00FF41";
+            readonly '--shiki-token-parameter': "#76FF03";
+            readonly '--shiki-token-function': "#00FF41";
+            readonly '--shiki-token-string-expression': "#00E676";
+            readonly '--shiki-token-punctuation': "#CCFFCC";
+            readonly '--shiki-token-link': "#00FF41";
+        };
+    };
+    readonly mercury: {
+        readonly label: "Mercury";
+        readonly light: {
+            readonly '--shiki-token-constant': "#334155";
+            readonly '--shiki-token-string': "#047857";
+            readonly '--shiki-token-comment': "#64748B";
+            readonly '--shiki-token-keyword': "#7C3AED";
+            readonly '--shiki-token-parameter': "#B45309";
+            readonly '--shiki-token-function': "#334155";
+            readonly '--shiki-token-string-expression': "#047857";
+            readonly '--shiki-token-punctuation': "#334155";
+            readonly '--shiki-token-link': "#0284C7";
+        };
+        readonly dark: {
+            readonly '--shiki-token-constant': "#38BDF8";
+            readonly '--shiki-token-string': "#34D399";
+            readonly '--shiki-token-comment': "#64748B";
+            readonly '--shiki-token-keyword': "#A78BFA";
+            readonly '--shiki-token-parameter': "#FBBF24";
+            readonly '--shiki-token-function': "#38BDF8";
+            readonly '--shiki-token-string-expression': "#34D399";
+            readonly '--shiki-token-punctuation': "#E2E8F0";
+            readonly '--shiki-token-link': "#38BDF8";
+        };
+    };
     readonly monokai: {
         readonly label: "Monokai";
         readonly light: {
@@ -331,6 +456,31 @@ export declare const PRESETS: {
             readonly '--shiki-token-string-expression': "#A9DC76";
             readonly '--shiki-token-punctuation': "#FCFCFA";
             readonly '--shiki-token-link': "#AB9DF2";
+        };
+    };
+    readonly nightowl: {
+        readonly label: "Night Owl";
+        readonly light: {
+            readonly '--shiki-token-constant': "#0B2948";
+            readonly '--shiki-token-string': "#0A7A5A";
+            readonly '--shiki-token-comment': "#6B7B8D";
+            readonly '--shiki-token-keyword': "#7C3AED";
+            readonly '--shiki-token-parameter': "#8A6A00";
+            readonly '--shiki-token-function': "#0B2948";
+            readonly '--shiki-token-string-expression': "#0A7A5A";
+            readonly '--shiki-token-punctuation': "#2C3E50";
+            readonly '--shiki-token-link': "#0B2948";
+        };
+        readonly dark: {
+            readonly '--shiki-token-constant': "#FFEB95";
+            readonly '--shiki-token-string': "#22DA6E";
+            readonly '--shiki-token-comment': "#637777";
+            readonly '--shiki-token-keyword': "#C792EA";
+            readonly '--shiki-token-parameter': "#F78C6C";
+            readonly '--shiki-token-function': "#82AAFF";
+            readonly '--shiki-token-string-expression': "#22DA6E";
+            readonly '--shiki-token-punctuation': "#D6DEEB";
+            readonly '--shiki-token-link': "#7FDBCA";
         };
     };
     readonly nord: {
@@ -383,6 +533,106 @@ export declare const PRESETS: {
             readonly '--shiki-token-link': "#61AFEF";
         };
     };
+    readonly opencode: {
+        readonly label: "OpenCode";
+        readonly light: {
+            readonly '--shiki-token-constant': "#4F46E5";
+            readonly '--shiki-token-string': "#059669";
+            readonly '--shiki-token-comment': "#6B7280";
+            readonly '--shiki-token-keyword': "#7C3AED";
+            readonly '--shiki-token-parameter': "#B45309";
+            readonly '--shiki-token-function': "#4F46E5";
+            readonly '--shiki-token-string-expression': "#059669";
+            readonly '--shiki-token-punctuation': "#27272A";
+            readonly '--shiki-token-link': "#4F46E5";
+        };
+        readonly dark: {
+            readonly '--shiki-token-constant': "#5E6AD2";
+            readonly '--shiki-token-string': "#0DBF6A";
+            readonly '--shiki-token-comment': "#6B7280";
+            readonly '--shiki-token-keyword': "#A78BFA";
+            readonly '--shiki-token-parameter': "#FF8A00";
+            readonly '--shiki-token-function': "#5E6AD2";
+            readonly '--shiki-token-string-expression': "#0DBF6A";
+            readonly '--shiki-token-punctuation': "#A1A1AA";
+            readonly '--shiki-token-link': "#5E6AD2";
+        };
+    };
+    readonly orng: {
+        readonly label: "Orng";
+        readonly light: {
+            readonly '--shiki-token-constant': "#9A3412";
+            readonly '--shiki-token-string': "#166534";
+            readonly '--shiki-token-comment': "#9A8B7A";
+            readonly '--shiki-token-keyword': "#C2410C";
+            readonly '--shiki-token-parameter': "#EA580C";
+            readonly '--shiki-token-function': "#9A3412";
+            readonly '--shiki-token-string-expression': "#166534";
+            readonly '--shiki-token-punctuation': "#451A03";
+            readonly '--shiki-token-link': "#9A3412";
+        };
+        readonly dark: {
+            readonly '--shiki-token-constant': "#FF8A00";
+            readonly '--shiki-token-string': "#22C55E";
+            readonly '--shiki-token-comment': "#8C6A4A";
+            readonly '--shiki-token-keyword': "#FF6B00";
+            readonly '--shiki-token-parameter': "#FDBA74";
+            readonly '--shiki-token-function': "#FF6B00";
+            readonly '--shiki-token-string-expression': "#22C55E";
+            readonly '--shiki-token-punctuation': "#FFEFD6";
+            readonly '--shiki-token-link': "#FF6B00";
+        };
+    };
+    readonly 'osaka-jade': {
+        readonly label: "Osaka Jade";
+        readonly light: {
+            readonly '--shiki-token-constant': "#0F6F5C";
+            readonly '--shiki-token-string': "#0B7A3E";
+            readonly '--shiki-token-comment': "#6B8A7A";
+            readonly '--shiki-token-keyword': "#0F6F5C";
+            readonly '--shiki-token-parameter': "#8A6A00";
+            readonly '--shiki-token-function': "#0F6F5C";
+            readonly '--shiki-token-string-expression': "#0B7A3E";
+            readonly '--shiki-token-punctuation': "#1A3A2A";
+            readonly '--shiki-token-link': "#0F6F5C";
+        };
+        readonly dark: {
+            readonly '--shiki-token-constant': "#6A9589";
+            readonly '--shiki-token-string': "#98BB6C";
+            readonly '--shiki-token-comment': "#6B8A7A";
+            readonly '--shiki-token-keyword': "#00A86B";
+            readonly '--shiki-token-parameter': "#E6C384";
+            readonly '--shiki-token-function': "#00A86B";
+            readonly '--shiki-token-string-expression': "#98BB6C";
+            readonly '--shiki-token-punctuation': "#D0E8D8";
+            readonly '--shiki-token-link': "#7FB4CA";
+        };
+    };
+    readonly palenight: {
+        readonly label: "Palenight";
+        readonly light: {
+            readonly '--shiki-token-constant': "#3A4A6B";
+            readonly '--shiki-token-string': "#2E7D32";
+            readonly '--shiki-token-comment': "#6B7C8D";
+            readonly '--shiki-token-keyword': "#7C4DFF";
+            readonly '--shiki-token-parameter': "#B47A00";
+            readonly '--shiki-token-function': "#3A4A6B";
+            readonly '--shiki-token-string-expression': "#2E7D32";
+            readonly '--shiki-token-punctuation': "#3C435E";
+            readonly '--shiki-token-link': "#3A4A6B";
+        };
+        readonly dark: {
+            readonly '--shiki-token-constant': "#FFCB6B";
+            readonly '--shiki-token-string': "#C3E88D";
+            readonly '--shiki-token-comment': "#676E95";
+            readonly '--shiki-token-keyword': "#C792EA";
+            readonly '--shiki-token-parameter': "#FFCB6B";
+            readonly '--shiki-token-function': "#82AAFF";
+            readonly '--shiki-token-string-expression': "#C3E88D";
+            readonly '--shiki-token-punctuation': "#A6ACCD";
+            readonly '--shiki-token-link': "#82AAFF";
+        };
+    };
     readonly rosepine: {
         readonly label: "Rosé Pine";
         readonly light: {
@@ -433,6 +683,56 @@ export declare const PRESETS: {
             readonly '--shiki-token-link': "#63ABDF";
         };
     };
+    readonly synthwave84: {
+        readonly label: "Synthwave 84";
+        readonly light: {
+            readonly '--shiki-token-constant': "#6B21A8";
+            readonly '--shiki-token-string': "#0E7A5A";
+            readonly '--shiki-token-comment': "#8A7FA8";
+            readonly '--shiki-token-keyword': "#C0265A";
+            readonly '--shiki-token-parameter': "#9A6A00";
+            readonly '--shiki-token-function': "#6B21A8";
+            readonly '--shiki-token-string-expression': "#0E7A5A";
+            readonly '--shiki-token-punctuation': "#3A2E4A";
+            readonly '--shiki-token-link': "#6B21A8";
+        };
+        readonly dark: {
+            readonly '--shiki-token-constant': "#FEDE5D";
+            readonly '--shiki-token-string': "#36F9F6";
+            readonly '--shiki-token-comment': "#848BBD";
+            readonly '--shiki-token-keyword': "#FF7EDB";
+            readonly '--shiki-token-parameter': "#FEDE5D";
+            readonly '--shiki-token-function': "#FF7EDB";
+            readonly '--shiki-token-string-expression': "#36F9F6";
+            readonly '--shiki-token-punctuation': "#FFFFFF";
+            readonly '--shiki-token-link': "#36F9F6";
+        };
+    };
+    readonly system: {
+        readonly label: "System";
+        readonly light: {
+            readonly '--shiki-token-constant': "#007AFF";
+            readonly '--shiki-token-string': "#34C759";
+            readonly '--shiki-token-comment': "#8E8E93";
+            readonly '--shiki-token-keyword': "#AF52DE";
+            readonly '--shiki-token-parameter': "#FF9500";
+            readonly '--shiki-token-function': "#007AFF";
+            readonly '--shiki-token-string-expression': "#34C759";
+            readonly '--shiki-token-punctuation': "#1C1C1E";
+            readonly '--shiki-token-link': "#007AFF";
+        };
+        readonly dark: {
+            readonly '--shiki-token-constant': "#0A84FF";
+            readonly '--shiki-token-string': "#30D158";
+            readonly '--shiki-token-comment': "#8E8E93";
+            readonly '--shiki-token-keyword': "#BF5AF2";
+            readonly '--shiki-token-parameter': "#FF9F0A";
+            readonly '--shiki-token-function': "#0A84FF";
+            readonly '--shiki-token-string-expression': "#30D158";
+            readonly '--shiki-token-punctuation': "#F5F5F7";
+            readonly '--shiki-token-link': "#0A84FF";
+        };
+    };
     readonly tokyonight: {
         readonly label: "Tokyo Night";
         readonly light: {
@@ -456,6 +756,56 @@ export declare const PRESETS: {
             readonly '--shiki-token-string-expression': "#9ECE6A";
             readonly '--shiki-token-punctuation': "#C0CAF5";
             readonly '--shiki-token-link': "#7AA2F7";
+        };
+    };
+    readonly vercel: {
+        readonly label: "Vercel";
+        readonly light: {
+            readonly '--shiki-token-constant': "#0070F3";
+            readonly '--shiki-token-string': "#0A7A42";
+            readonly '--shiki-token-comment': "#8A8A8A";
+            readonly '--shiki-token-keyword': "#000000";
+            readonly '--shiki-token-parameter': "#B45309";
+            readonly '--shiki-token-function': "#0070F3";
+            readonly '--shiki-token-string-expression': "#0A7A42";
+            readonly '--shiki-token-punctuation': "#000000";
+            readonly '--shiki-token-link': "#0070F3";
+        };
+        readonly dark: {
+            readonly '--shiki-token-constant': "#3291FF";
+            readonly '--shiki-token-string': "#0CCB6A";
+            readonly '--shiki-token-comment': "#8A8A8A";
+            readonly '--shiki-token-keyword': "#FFFFFF";
+            readonly '--shiki-token-parameter': "#F5A623";
+            readonly '--shiki-token-function': "#3291FF";
+            readonly '--shiki-token-string-expression': "#0CCB6A";
+            readonly '--shiki-token-punctuation': "#FFFFFF";
+            readonly '--shiki-token-link': "#3291FF";
+        };
+    };
+    readonly vesper: {
+        readonly label: "Vesper";
+        readonly light: {
+            readonly '--shiki-token-constant': "#3A3A3A";
+            readonly '--shiki-token-string': "#5A7A3A";
+            readonly '--shiki-token-comment': "#8A8A8A";
+            readonly '--shiki-token-keyword': "#3A3A3A";
+            readonly '--shiki-token-parameter': "#8A6A2E";
+            readonly '--shiki-token-function': "#3A3A3A";
+            readonly '--shiki-token-string-expression': "#5A7A3A";
+            readonly '--shiki-token-punctuation': "#2A2A2A";
+            readonly '--shiki-token-link': "#3A3A3A";
+        };
+        readonly dark: {
+            readonly '--shiki-token-constant': "#E8E8E8";
+            readonly '--shiki-token-string': "#B8C8A8";
+            readonly '--shiki-token-comment': "#8A8A8A";
+            readonly '--shiki-token-keyword': "#E8E8E8";
+            readonly '--shiki-token-parameter': "#D6C8A8";
+            readonly '--shiki-token-function': "#E8E8E8";
+            readonly '--shiki-token-string-expression': "#B8C8A8";
+            readonly '--shiki-token-punctuation': "#E8E8E8";
+            readonly '--shiki-token-link': "#E8E8E8";
         };
     };
     readonly zenburn: {
