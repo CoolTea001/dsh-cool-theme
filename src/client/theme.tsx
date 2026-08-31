@@ -129,6 +129,83 @@ export function registerTheme(ctx: any) {
     )
   })
 
+  // Fix nav icon: settings panel uses a gear for unknown section ids. Replace it with a palette for the Theme section.
+  const PALETTE_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M0 0h24v24H0z" fill="none"/><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M12 22a1 1 0 0 1 0-20a10 9 0 0 1 10 9a5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></g></svg>'
+
+  let paletteObs: MutationObserver | null = null
+  function patchThemeNavIcon() {
+    if (typeof document === 'undefined') return
+    // Resolve current label in both locales — nav label is locale-sensitive
+    let currentLabel = ''
+    try {
+      currentLabel = t('nav')
+    } catch {}
+    const candidates = new Set<string>([currentLabel, zh.nav, en.nav].filter(Boolean) as string[])
+    // Settings nav cells: hashed class is zOa2rq_navCell but match broadly for forward-compat
+    const cells = document.querySelectorAll(
+      '[class*="navCell"], button[class*="navCell"]',
+    )
+    const toPatch: Element[] = []
+    if (cells.length > 0) {
+      cells.forEach((c) => toPatch.push(c))
+    } else {
+      // Fallback: any button inside the settings nav
+      document.querySelectorAll('[class*="nav"] button').forEach((b) => toPatch.push(b))
+    }
+    for (const cell of toPatch) {
+      const labelEl = cell.querySelector('[class*="navLabel"]') || cell
+      const text = (labelEl?.textContent || cell.textContent || '').trim()
+      const isThemeCell = Array.from(candidates).some((lbl) => text === lbl || text.includes(lbl))
+      if (!isThemeCell) continue
+      // Already patched?
+      if (cell.querySelector('[data-palette-icon]')) continue
+      const svg = cell.querySelector('svg')
+      if (!svg) continue
+      // Hide gear and insert palette
+      ;(svg as unknown as HTMLElement).style.display = 'none'
+      svg.setAttribute('data-palette-hidden', '1')
+      const holder = document.createElement('span')
+      holder.setAttribute('data-palette-icon', '1')
+      holder.style.display = 'inline-flex'
+      holder.style.flex = 'none'
+      holder.setAttribute('aria-hidden', 'true')
+      holder.innerHTML = PALETTE_SVG
+      svg.parentNode?.insertBefore(holder, svg.nextSibling)
+    }
+  }
+
+  if (typeof document !== 'undefined' && typeof MutationObserver !== 'undefined') {
+    // Run once and observe future panel opens / locale switches
+    try {
+      patchThemeNavIcon()
+    } catch {}
+    try {
+      paletteObs = new MutationObserver(() => {
+        try {
+          patchThemeNavIcon()
+        } catch {}
+      })
+      paletteObs.observe(document.body, { childList: true, subtree: true, characterData: true })
+    } catch {}
+    ctx.effect(() => () => {
+      if (paletteObs) {
+        try {
+          paletteObs.disconnect()
+        } catch {}
+        paletteObs = null
+      }
+      // Restore hidden gears on dispose
+      if (typeof document !== 'undefined') {
+        document.querySelectorAll('svg[data-palette-hidden="1"]').forEach((el) => {
+          ;(el as unknown as HTMLElement).style.display = ''
+          el.removeAttribute('data-palette-hidden')
+        })
+        document.querySelectorAll('[data-palette-icon]').forEach((el) => el.remove())
+      }
+    })
+  }
+
   // Hide the built-in Appearance switch in General settings and unify on
   // dsh-cool-theme's Theme panel (light/dark/system + presets). Primary
   // mechanism is slot shadowing: a low-priority empty entry for the same id
