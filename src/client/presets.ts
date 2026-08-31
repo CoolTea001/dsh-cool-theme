@@ -5,8 +5,12 @@ import { ayu } from './presets/ayu.js'
 import { catppuccin } from './presets/catppuccin.js'
 import { catppuccinFrappe } from './presets/catppuccin-frappe.js'
 import { catppuccinMacchiato } from './presets/catppuccin-macchiato.js'
+import { cobalt2 } from './presets/cobalt2.js'
+import { cursor } from './presets/cursor.js'
 import { dracula } from './presets/dracula.js'
 import { dsh } from './presets/dsh.js'
+import { everforest } from './presets/everforest.js'
+import { flexoki } from './presets/flexoki.js'
 import { github } from './presets/github.js'
 import { gruvbox } from './presets/gruvbox.js'
 import { monokai } from './presets/monokai.js'
@@ -25,8 +29,12 @@ export const PRESETS = {
   catppuccin,
   'catppuccin-frappe': catppuccinFrappe,
   'catppuccin-macchiato': catppuccinMacchiato,
+  cobalt2,
+  cursor,
   dracula,
   dsh,
+  everforest,
+  flexoki,
   github,
   gruvbox,
   monokai,

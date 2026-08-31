@@ -124,6 +124,56 @@ export declare const PRESETS: {
             readonly '--shiki-token-link': "#91D7E3";
         };
     };
+    readonly cobalt2: {
+        readonly label: "Cobalt2";
+        readonly light: {
+            readonly '--shiki-token-constant': "#0054A6";
+            readonly '--shiki-token-string': "#0E7A4A";
+            readonly '--shiki-token-comment': "#6B7C8D";
+            readonly '--shiki-token-keyword': "#A31515";
+            readonly '--shiki-token-parameter': "#8A6A00";
+            readonly '--shiki-token-function': "#0054A6";
+            readonly '--shiki-token-string-expression': "#0E7A4A";
+            readonly '--shiki-token-punctuation': "#334454";
+            readonly '--shiki-token-link': "#0054A6";
+        };
+        readonly dark: {
+            readonly '--shiki-token-constant': "#FFC600";
+            readonly '--shiki-token-string': "#3AD900";
+            readonly '--shiki-token-comment': "#7C8B9E";
+            readonly '--shiki-token-keyword': "#FF9D00";
+            readonly '--shiki-token-parameter': "#FFC600";
+            readonly '--shiki-token-function': "#0088FF";
+            readonly '--shiki-token-string-expression': "#3AD900";
+            readonly '--shiki-token-punctuation': "#E1EFFF";
+            readonly '--shiki-token-link': "#0088FF";
+        };
+    };
+    readonly cursor: {
+        readonly label: "Cursor";
+        readonly light: {
+            readonly '--shiki-token-constant': "#4F46E5";
+            readonly '--shiki-token-string': "#059669";
+            readonly '--shiki-token-comment': "#6B7280";
+            readonly '--shiki-token-keyword': "#7C3AED";
+            readonly '--shiki-token-parameter': "#B45309";
+            readonly '--shiki-token-function': "#4F46E5";
+            readonly '--shiki-token-string-expression': "#059669";
+            readonly '--shiki-token-punctuation': "#3F3F46";
+            readonly '--shiki-token-link': "#4F46E5";
+        };
+        readonly dark: {
+            readonly '--shiki-token-constant': "#5E6AD2";
+            readonly '--shiki-token-string': "#0DBF6A";
+            readonly '--shiki-token-comment': "#6B7280";
+            readonly '--shiki-token-keyword': "#A78BFA";
+            readonly '--shiki-token-parameter': "#FF8A00";
+            readonly '--shiki-token-function': "#5E6AD2";
+            readonly '--shiki-token-string-expression': "#0DBF6A";
+            readonly '--shiki-token-punctuation': "#A1A1AA";
+            readonly '--shiki-token-link': "#5E6AD2";
+        };
+    };
     readonly dracula: {
         readonly label: "Dracula";
         readonly light: {
@@ -156,6 +206,56 @@ export declare const PRESETS: {
         };
         readonly dark: {
             readonly [x: string]: string;
+        };
+    };
+    readonly everforest: {
+        readonly label: "Everforest";
+        readonly light: {
+            readonly '--shiki-token-constant': "#8DA101";
+            readonly '--shiki-token-string': "#4D7D0F";
+            readonly '--shiki-token-comment': "#8B9A7E";
+            readonly '--shiki-token-keyword': "#DF69A0";
+            readonly '--shiki-token-parameter': "#DFA000";
+            readonly '--shiki-token-function': "#42675A";
+            readonly '--shiki-token-string-expression': "#4D7D0F";
+            readonly '--shiki-token-punctuation': "#5C6A72";
+            readonly '--shiki-token-link': "#3A94C5";
+        };
+        readonly dark: {
+            readonly '--shiki-token-constant': "#DBBC7F";
+            readonly '--shiki-token-string': "#A7C080";
+            readonly '--shiki-token-comment': "#859289";
+            readonly '--shiki-token-keyword': "#D699B6";
+            readonly '--shiki-token-parameter': "#E69875";
+            readonly '--shiki-token-function': "#7FBBB3";
+            readonly '--shiki-token-string-expression': "#A7C080";
+            readonly '--shiki-token-punctuation': "#D3C6AA";
+            readonly '--shiki-token-link': "#83C092";
+        };
+    };
+    readonly flexoki: {
+        readonly label: "Flexoki";
+        readonly light: {
+            readonly '--shiki-token-constant': "#BC5215";
+            readonly '--shiki-token-string': "#66800B";
+            readonly '--shiki-token-comment': "#6F6E69";
+            readonly '--shiki-token-keyword': "#A02F6F";
+            readonly '--shiki-token-parameter': "#AD8301";
+            readonly '--shiki-token-function': "#205EA6";
+            readonly '--shiki-token-string-expression': "#66800B";
+            readonly '--shiki-token-punctuation': "#575653";
+            readonly '--shiki-token-link': "#205EA6";
+        };
+        readonly dark: {
+            readonly '--shiki-token-constant': "#DA702C";
+            readonly '--shiki-token-string': "#879A39";
+            readonly '--shiki-token-comment': "#6F6E69";
+            readonly '--shiki-token-keyword': "#CE5D97";
+            readonly '--shiki-token-parameter': "#D0A215";
+            readonly '--shiki-token-function': "#4385BE";
+            readonly '--shiki-token-string-expression': "#879A39";
+            readonly '--shiki-token-punctuation': "#CECDC3";
+            readonly '--shiki-token-link': "#4385BE";
         };
     };
     readonly github: {
