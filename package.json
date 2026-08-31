@@ -1,6 +1,6 @@
 {
   "name": "dsh-cool-theme",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "description": "A plugin for changing themes for DSH, with a number of popular default themes built in.",
   "type": "module",
   "license": "MIT",
