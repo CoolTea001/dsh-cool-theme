@@ -8,11 +8,11 @@
 
 ## 描述
 
-DeepSeek Harness 主题插件 — 支持 浅色 / 深色 / 跟随系统 外观切换，并提供 12 款主流预设主题。
+DeepSeek Harness 主题插件 — 支持 浅色 / 深色 / 跟随系统 外观切换，并提供 34 款预设主题。
 
 ## 功能介绍
 
-主题管理（侧边栏底部齿轮 → 设置 → 主题），支持 `浅色` / `深色` / `跟随系统` 外观切换，并提供 12 款主流预设：Nord、One Dark、GitHub、Catppuccin、Dracula、Tokyo Night、Solarized、Gruvbox、Monokai、Rosé Pine、Ayu、Zenburn，以及原生 DeepSeek Harness 主题，所有主题均已适配浅色模式和深色模式。
+主题管理（侧边栏底部齿轮 → 设置 → 主题），支持 `浅色` / `深色` / `跟随系统` 外观切换，并提供 34 款预设：Aura、Ayu、Catppuccin、Catppuccin Frappe、Catppuccin Macchiato、Cobalt2、Cursor、DSH、Dracula、Everforest、Flexoki、GitHub、Gruvbox、Kanagawa、Lucent Orng、Material、Matrix、Mercury、Monokai、Night Owl、Nord、One Dark、OpenCode、Orng、Osaka Jade、Palenight、Rosé Pine、Solarized、Synthwave 84、System、Tokyo Night、Vercel、Vesper、Zenburn，所有主题均已适配浅色模式和深色模式。
 
 ## 安装教程
 

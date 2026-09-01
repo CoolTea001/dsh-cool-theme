@@ -8,11 +8,11 @@ English · [中文](./README.zh.md)
 
 ## Description
 
-DeepSeek Harness theme plugin — supports light / dark / system appearance switching with 12 popular preset themes.
+DeepSeek Harness theme plugin — supports light / dark / system appearance switching with 34 preset themes.
 
 ## Features
 
-Theme management (sidebar gear → Settings → Theme), supports `light` / `dark` / `system` appearance switching and provides 12 popular presets: Nord, One Dark, GitHub, Catppuccin, Dracula, Tokyo Night, Solarized, Gruvbox, Monokai, Rosé Pine, Ayu, Zenburn plus the native DeepSeek Harness theme. All presets support both light and dark modes.
+Theme management (sidebar gear → Settings → Theme), supports `light` / `dark` / `system` appearance switching and provides 34 presets: Aura, Ayu, Catppuccin, Catppuccin Frappe, Catppuccin Macchiato, Cobalt2, Cursor, DSH, Dracula, Everforest, Flexoki, GitHub, Gruvbox, Kanagawa, Lucent Orng, Material, Matrix, Mercury, Monokai, Night Owl, Nord, One Dark, OpenCode, Orng, Osaka Jade, Palenight, Rosé Pine, Solarized, Synthwave 84, System, Tokyo Night, Vercel, Vesper, Zenburn. All presets support both light and dark modes.
 
 ## Installation
 
