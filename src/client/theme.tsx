@@ -19,7 +19,6 @@ import {
   decodeList,
   extractSeeds,
   newThemeId,
-  nextThemeName,
   normalizeCustom,
   parseEnvelope,
 } from './custom.js'
@@ -34,8 +33,6 @@ import { zh, en, type ThemeKey } from './locales.js'
 const BASE_CSS = [
   '.ct-select{box-sizing:border-box;display:inline-flex;align-items:center;gap:12px;height:36px;padding:0 14px;border:none;border-radius:18px;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:14px;line-height:22px;white-space:nowrap;width:auto;min-width:0;max-width:100%;}',
   '.ct-select:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);}',
-  // Locked while the custom theme owns the colours: dimmed and not clickable.
-  '.ct-select:disabled{opacity:.5;cursor:not-allowed;}',
   '.ct-select:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
   '.ct-select-label{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;}',
   '.ct-select-chevron{flex:none;color:var(--dsw-alias-label-tertiary);display:inline-flex;transition:transform 120ms ease;}',
@@ -59,61 +56,70 @@ const BASE_CSS = [
   '.ct-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding-right:48px;}',
   '.ct-row-title{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:400;line-height:22px;}',
   '.ct-row-desc{color:var(--dsw-alias-label-tertiary);font-size:12px;font-weight:400;line-height:18px;}',
-  '.ct-group{padding:8px 0px}',
-  // The wrapper owns the outer border and the radius, and clips the grid to it.
-  // Cells therefore draw only the inner rules.
-  '.ct-table-wrap{border:1px solid var(--dsw-alias-border-l2);border-radius:10px;overflow:hidden;}',
-  '.ct-table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary);}',
-  '.ct-table th,.ct-table td{border-right:1px solid var(--dsw-alias-border-l2);border-bottom:1px solid var(--dsw-alias-border-l2);padding:9px 14px;text-align:left;vertical-align:middle;}',
-  '.ct-table th:last-child,.ct-table td:last-child{border-right:none;}',
-  // Transparent rather than absent: the last row keeps its 1px border box so
-  // every row measures the same, while the wrapper paints the bottom edge.
-  '.ct-table tbody tr:last-child td{border-bottom-color:transparent;}',
-  // Header shares the cells' colour, a 22px line box so the row is exactly as
-  // tall as a body row (whose height comes from the 22px swatch), and a
-  // distinct surface so it still reads as a header band.
-  '.ct-table thead th{font-size:13px;line-height:22px;font-weight:600;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-2));}',
-  '.ct-table tbody tr:hover{background:var(--dsw-alias-interactive-bg-hover);}',
-  '.ct-table .ct-td-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
-  '.ct-table .ct-td-color{width:152px;}',
-  // Block-level flex: an inline-flex swatch would sit on the cell's text
-  // baseline and pick up descender space, which would make body rows taller
-  // than the header. A block box keeps every body row at exactly 22px + padding.
-  '.ct-cell{display:flex;align-items:center;gap:6px;min-width:0;}',
-  '.ct-cell-swatch{appearance:none;-webkit-appearance:none;flex:none;width:20px;height:20px;padding:0;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:transparent;cursor:pointer;}',
-  '.ct-cell-swatch::-webkit-color-swatch-wrapper{padding:0px;}',
-  '.ct-cell-swatch::-webkit-color-swatch{border:none;border-radius:4px;}',
-  '.ct-cell-swatch::-moz-color-swatch{border:none;border-radius:4px;}',
-  '.ct-cell-swatch:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
-  '.ct-cell-text{flex:1 1 auto;min-width:0;box-sizing:border-box;height:22px;padding:0 6px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary,var(--dsw-alias-label-tertiary));font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;line-height:20px;font-variant-numeric:tabular-nums;}',
-  '.ct-cell-text:hover{border-color:var(--dsw-alias-border-l2);}',
-  '.ct-cell-text:focus{outline:none;border-color:var(--dsw-alias-border-l3);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);}',
-  '.ct-actions{padding:16px 2px;display:flex;gap:12px;justify-content:flex-end;}',
-  // Saved-theme list under the editor. Cards rather than ruled rows, matching
-  // the preset picker in DSH's own settings: a 0.5px hairline and a 20px radius.
-  // Every entry keeps that same face — the active one is marked by its badge
-  // alone, so selection never competes with the hover fill.
+  // Colour editor: one row per group, its name on the left and every seed's
+  // round swatch on the right. The swatch IS the native picker, so a click
+  // opens the platform colour chooser directly.
+  '.ct-seed-row{display:flex;align-items:center;gap:16px;padding:12px 0;}',
+  '.ct-seed-label{flex:0 0 auto;min-width:96px;padding-left:2px;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);}',
+  '.ct-seed-dots{flex:1 1 auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:10px;}',
+  // The visible swatch is the wrapper, not the native colour input: its shape
+  // and its border therefore come from one `border-radius` and cannot disagree
+  // with the engine's own swatch rendering. The input sits on top, invisible,
+  // and is the hit target that opens the platform picker. No `overflow:hidden`:
+  // the input never paints, and the tooltip below has to escape the circle.
+  '.ct-seed-dot{position:relative;box-sizing:border-box;display:inline-block;flex:none;width:26px;height:26px;border:1px solid var(--dsw-alias-border-l2);border-radius:50%;cursor:pointer;}',
+  '.ct-seed-input{position:absolute;inset:0;box-sizing:border-box;width:100%;height:100%;padding:0;border:none;background:transparent;opacity:0;cursor:pointer;}',
+  '.ct-seed-dot:focus-within{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
+  // Hover tooltip naming the token, matching DSH's own `data-tip` bubble.
+  '.ct-seed-dot::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 7px);left:50%;z-index:20;transform:translateX(-50%);padding:3px 8px;border-radius:6px;background:var(--dsw-alias-label-primary,#151517);color:var(--dsw-alias-bg-layer-3,#fff);font-size:11px;font-weight:400;line-height:17px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .12s;}',
+  '.ct-seed-dot:hover::after,.ct-seed-dot:focus-within::after{opacity:1;}',
+  // Saved-theme cards, matching DSH's own provider rows: an outlined card with
+  // the name and its "in use" dot on the left, and the row's actions on the
+  // right. The active entry is marked by the dot alone, so selection never
+  // competes with the hover fill.
   '.ct-list{margin-top:4px;display:flex;flex-direction:column;gap:8px;}',
-  '.ct-list-row{display:flex;align-items:center;gap:12px;padding:10px 12px 10px 16px;border:.5px solid var(--dsw-alias-border-l4);border-radius:20px;background:transparent;cursor:pointer;transition:border-color .16s ease,background .16s ease;}',
+  '.ct-list-row{display:flex;align-items:center;gap:10px;padding:12px 14px;border:.5px solid var(--dsw-alias-border-l4);border-radius:16px;background:transparent;cursor:pointer;transition:border-color .16s ease,background .16s ease;}',
   '.ct-list-row:hover{background:var(--dsw-alias-interactive-bg-hover);}',
+  '.ct-list-identity{display:inline-flex;align-items:center;gap:6px;flex:1 1 auto;min-width:0;}',
   // The name is clickable (loads the theme); the card's own hover fill is the
   // only cue — an underline on top of it would read as a link, not a surface.
-  '.ct-list-name{flex:1 1 auto;min-width:0;text-align:left;border:none;background:transparent;cursor:pointer;font:inherit;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 0;}',
-  // Metrics match .ct-list-name on purpose: renaming should look like editing the
-  // existing text, not like a form control appearing.
-  '.ct-list-input{flex:1 1 auto;min-width:0;box-sizing:border-box;padding:2px 0;border:none;border-radius:0;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:20px;}',
-  '.ct-list-input:focus{outline:none;}',
-  '.ct-list-actions{display:flex;align-items:center;gap:2px;flex:none;}',
-  // High-contrast chip: inverting label-primary/bg-layer-3 stays readable in both
-  // appearances, and does not depend on the accent the user happens to pick.
-  '.ct-list-badge{font-size:11px;line-height:18px;font-weight:500;padding:0 8px;border-radius:9px;margin-right:6px;color:var(--dsw-alias-bg-layer-3,#fff);background:var(--dsw-alias-label-primary,#151517);}',
-  '.ct-icon-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:none;border-radius:8px;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;}',
-  // Tooltip bubble, matching DSH's icon-row `data-tip` pseudo-element.
-  '.ct-icon-btn::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);padding:3px 8px;border-radius:6px;background:var(--dsw-alias-label-primary,#151517);color:var(--dsw-alias-bg-layer-3,#fff);font-size:11px;line-height:17px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .12s;}',
-  '.ct-icon-btn:hover::after,.ct-icon-btn:focus-visible::after{opacity:1;}',
-  '.ct-icon-btn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);}',
-  '.ct-icon-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
-  '.ct-icon-btn-danger:hover{color:var(--dsw-static-red-500,rgb(239,68,68));}',
+  '.ct-list-name{min-width:0;text-align:left;border:none;background:transparent;cursor:pointer;font:inherit;font-size:14px;line-height:22px;font-weight:500;color:var(--dsw-alias-label-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0;}',
+  '.ct-list-name:disabled{cursor:default;}',
+  // DSH's configured-credential dot: an 8px success circle that annotates the
+  // name rather than competing with it.
+  '.ct-list-dot{box-sizing:border-box;display:inline-block;flex:none;width:8px;height:8px;border-radius:50%;corner-shape:round;background:var(--dsw-alias-state-success-primary);}',
+  '.ct-list-actions{display:inline-flex;align-items:center;gap:4px;flex:none;margin-left:auto;}',
+  // The dense capsule (DSH Button `.sm`) every row action wears.
+  '.ct-list-btn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:28px;padding:0 10px;border:.5px solid var(--dsw-alias-border-l3);border-radius:14px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:12px;line-height:18px;}',
+  '.ct-list-btn:hover{background:var(--dsw-alias-interactive-bg-hover);}',
+  '.ct-list-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
+  // Delete is the borderless danger variant, exactly as DSH styles row removal.
+  '.ct-list-btn-danger{border:none;color:var(--dsw-alias-state-error-primary);}',
+  '.ct-list-btn-danger:hover{background:var(--dsw-alias-interactive-bg-hover-danger);}',
+  // Expanded editor card: the same 16px face as a collapsed row, opened up.
+  // Spacing is carried entirely by the children's own padding (no flex `gap`),
+  // so the head, the colour rows and the footer all sit on one 24px rhythm.
+  '.ct-editor{padding:16px;border:.5px solid var(--dsw-alias-border-l4);border-radius:16px;background:transparent;display:flex;flex-direction:column;gap:0;}',
+  '.ct-editor-head{display:flex;align-items:center;gap:10px;padding-bottom:12px;}',
+  '.ct-editor-name{flex:1 1 auto;min-width:0;box-sizing:border-box;height:36px;padding:0 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:14px;line-height:22px;}',
+  '.ct-editor-name::placeholder{color:var(--dsw-alias-label-tertiary);}',
+  '.ct-editor-name:hover{border-color:var(--dsw-alias-border-l3);}',
+  '.ct-editor-name:focus{outline:none;border-color:var(--dsw-alias-border-l3);background:var(--dsw-alias-bg-base);}',
+  // Light/dark segmented control: which appearance the swatches below edit.
+  // Sized to the name field beside it so the two share one row height.
+  '.ct-mode{box-sizing:border-box;display:inline-flex;flex:none;height:36px;padding:2px;border-radius:10px;background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-2));}',
+  '.ct-mode-btn{box-sizing:border-box;height:32px;padding:0 10px;border:none;border-radius:8px;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;font:inherit;font-size:12px;line-height:18px;}',
+  '.ct-mode-btn:hover{color:var(--dsw-alias-label-primary);}',
+  '.ct-mode-btn-on{background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);}',
+  '.ct-mode-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
+  '.ct-editor-actions{display:flex;justify-content:flex-end;gap:12px;padding-top:12px;}',
+  // The large, full-width call to action that appends a new theme card. Dashed
+  // like DSH's own "add" affordances on the model settings page, so it reads as
+  // a place rather than a command: same 44px height, 16px radius and plus glyph.
+  '.ct-add-btn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;height:44px;margin-top:8px;padding:0 14px;border:1px dashed var(--dsw-alias-border-l3);border-radius:16px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:14px;line-height:22px;}',
+  '.ct-add-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);}',
+  '.ct-add-btn:disabled{opacity:.4;cursor:default;}',
+  '.ct-add-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
   // Confirm dialog, matching DSH's own Modal metrics.
   '.ct-modal-root{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;}',
   '.ct-modal-mask{position:absolute;inset:0;background:var(--dsw-alias-bg-mask-1,rgba(0,0,0,.24));backdrop-filter:var(--dsw-mask-blur,blur(2px));}',
@@ -247,6 +253,18 @@ export function registerTheme(ctx: any) {
     } catch {}
   }
 
+  /**
+   * Choose the preset a future custom theme seeds from, without touching the
+   * colours currently on screen. The custom editor stays the live theme; the
+   * preset is only the template the next "add" inherits.
+   */
+  function setCustomBase(base: PresetId) {
+    lastPreset = base
+    try {
+      localStorage.setItem(CUSTOM_THEME_STORAGE_KEY, encodeCustom(base, loadCustom().theme))
+    } catch {}
+  }
+
   function apply(src: Selection | PresetDef) {
     overrideDispose = release(overrideDispose)
     fallbackDispose = release(fallbackDispose)
@@ -368,32 +386,31 @@ export function registerTheme(ctx: any) {
     list: readList,
     activeId: readActiveId,
     load: loadSaved,
+    /** Point the "in use" badge at an entry, or clear it entirely. */
+    setActive(id: string | null) {
+      writeRaw(CUSTOM_ACTIVE_STORAGE_KEY, id)
+    },
     refresh: refreshSaved,
-    /** Update the active entry, or create one on the first save. */
-    async save(): Promise<SavedTheme[]> {
+    /** Persist the current draft as a new named entry and make it active. */
+    async create(name: string): Promise<SavedTheme[]> {
       const draft = loadCustom()
-      const roster = readList()
-      const active = readActiveId()
-      const current = active ? roster.find((e) => e.id === active) : undefined
-      if (current) {
-        await pushThemes([{ ...current, base: draft.base, theme: draft.theme }], fallbackForBase)
-      } else {
-        const entry: SavedTheme = {
-          id: newThemeId(),
-          name: nextThemeName(t('custom.defaultName'), roster.map((e) => e.name)),
-          base: draft.base,
-          theme: draft.theme,
-          assets: [],
-        }
-        await pushThemes([entry], fallbackForBase)
-        writeRaw(CUSTOM_ACTIVE_STORAGE_KEY, entry.id)
+      const entry: SavedTheme = {
+        id: newThemeId(),
+        name,
+        base: draft.base,
+        theme: draft.theme,
+        assets: [],
       }
+      await pushThemes([entry], fallbackForBase)
+      writeRaw(CUSTOM_ACTIVE_STORAGE_KEY, entry.id)
       return refreshSaved()
     },
-    async rename(id: string, name: string): Promise<SavedTheme[]> {
+    /** Write the current draft (and a new name) back to an existing entry. */
+    async update(id: string, name: string): Promise<SavedTheme[]> {
       const entry = readList().find((e) => e.id === id)
       if (!entry) return readList()
-      await pushThemes([{ ...entry, name }], fallbackForBase)
+      const draft = loadCustom()
+      await pushThemes([{ ...entry, name, theme: draft.theme }], fallbackForBase)
       return refreshSaved()
     },
     /** Copy an entry so the copy can be tweaked independently; the copy becomes active. */
@@ -468,6 +485,7 @@ export function registerTheme(ctx: any) {
         setSelection,
         getCustom: loadCustom,
         setCustom,
+        setCustomBase,
         resetCustom,
         saved,
         getHostToast: () => sharedToast,

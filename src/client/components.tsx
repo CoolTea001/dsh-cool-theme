@@ -9,10 +9,10 @@ import { type ThemeKey } from './locales.js'
 import { ThemeApiUnavailableError } from './theme-files.js'
 import {
   type CustomTheme,
+  type Mode,
   type SavedTheme,
-  type SeedPair,
   SHIKI_KEYS,
-  tryToHex,
+  nextThemeName,
 } from './custom.js'
 
 /** Reserved menu value that switches to the user-defined theme. */
@@ -20,6 +20,19 @@ export const CUSTOM_SELECTION = CUSTOM_PRESET_ID
 export type Selection = PresetId | typeof CUSTOM_SELECTION
 
 export type CustomState = { base: PresetId; theme: CustomTheme }
+
+/**
+ * The card currently open in the editor, plus the state to restore if the user
+ * cancels. Editing previews live, so cancel has to put the previous theme back.
+ */
+type Editing = {
+  /** null while composing a brand-new theme. */
+  id: string | null
+  name: string
+  /** Active entry before editing began; null when none was active. */
+  originId: string | null
+  originDraft: CustomTheme
+}
 
 function IconChevron() {
   return React.createElement(
@@ -56,14 +69,8 @@ function SchemeMenu(props: {
   value: string
   options: { value: string; label: string }[]
   onSelect: (v: string) => void
-  /**
-   * Locked while another mode owns the theme. The custom theme editor is the
-   * live source of colours then, so letting the picker run would either switch
-   * the theme away from the custom one or silently re-seed it and drop edits.
-   */
-  disabled?: boolean
 }) {
-  const { value, options, onSelect, disabled } = props
+  const { value, options, onSelect } = props
   const [open, setOpen] = React.useState(false)
   const rootRef = React.useRef<HTMLSpanElement>(null)
   const listRef = React.useRef<HTMLDivElement>(null)
@@ -96,15 +103,14 @@ function SchemeMenu(props: {
       {
         type: 'button',
         className: 'ct-select',
-        disabled,
         'aria-haspopup': 'menu',
-        'aria-expanded': open && !disabled,
+        'aria-expanded': open,
         onClick: () => setOpen(!open),
       },
       React.createElement('span', { className: 'ct-select-label' }, selected?.label ?? ''),
       React.createElement('span', { className: 'ct-select-chevron' }, React.createElement(IconChevron, null)),
     ),
-    open && !disabled
+    open
       ? React.createElement(
           'div',
           {
@@ -134,111 +140,6 @@ function SchemeMenu(props: {
           }),
         )
       : null,
-  )
-}
-
-/**
- * One table cell: a swatch that opens the native picker, plus a text field that
- * accepts the colour in several notations. The field edits a local draft so
- * half-typed input never reaches the theme; it commits on Enter or blur and
- * reverts when the text cannot be parsed.
- */
-function ColorCell(props: { value: string; label: string; onChange: (v: string) => void }) {
-  const { value, label, onChange } = props
-  const [draft, setDraft] = React.useState(value)
-  const [editing, setEditing] = React.useState(false)
-
-  // Follow outside changes (preset switch, reset, swatch pick) unless the user
-  // is mid-edit, in which case their text wins until they commit or leave.
-  React.useEffect(() => {
-    if (!editing) setDraft(value)
-  }, [value, editing])
-
-  function commit(raw: string) {
-    const next = tryToHex(raw)
-    if (next) onChange(next)
-    else setDraft(value)
-  }
-
-  return React.createElement(
-    'div',
-    { className: 'ct-cell' },
-    React.createElement('input', {
-      className: 'ct-cell-swatch',
-      type: 'color',
-      value,
-      'aria-label': label,
-      onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
-        const v = e.target.value.toUpperCase()
-        setDraft(v)
-        onChange(v)
-      },
-    }),
-    React.createElement('input', {
-      className: 'ct-cell-text',
-      type: 'text',
-      value: draft,
-      'aria-label': label,
-      spellCheck: false,
-      autoComplete: 'off',
-      onFocus: (e: React.FocusEvent<HTMLInputElement>) => {
-        setEditing(true)
-        // Select the whole value so the first click lets the user type a
-        // replacement. A later click in the already-focused field still places
-        // a caret, so partial edits keep working.
-        e.currentTarget.select()
-      },
-      onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDraft(e.target.value),
-      onBlur: (e: React.FocusEvent<HTMLInputElement>) => {
-        setEditing(false)
-        commit(e.target.value)
-      },
-      onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
-        const el = e.target as HTMLInputElement
-        if (e.key === 'Enter') {
-          commit(el.value)
-          el.blur()
-        } else if (e.key === 'Escape') {
-          setDraft(value)
-          el.blur()
-        }
-      },
-    }),
-  )
-}
-
-/** One `<tr>` of the editor table: name, then a light and a dark swatch cell. */function SeedRow(props: {
-  name: string
-  hint: string
-  lightLabel: string
-  darkLabel: string
-  pair: SeedPair
-  onChange: (next: SeedPair) => void
-}) {
-  const { name, hint, lightLabel, darkLabel, pair, onChange } = props
-  return React.createElement(
-    'tr',
-    null,
-    // The full description lives in the tooltip so the table stays compact.
-    React.createElement('td', { className: 'ct-td-name', title: hint }, name),
-    React.createElement(
-      'td',
-      { className: 'ct-td-color' },
-      React.createElement(ColorCell, {
-        label: `${name} ${lightLabel}`,
-        value: pair.light,
-        onChange: (v: string) => onChange({ ...pair, light: v }),
-      }),
-    ),
-    React.createElement(
-      'td',
-      { className: 'ct-td-color' },
-      React.createElement(ColorCell, {
-        label: `${name} ${darkLabel}`,
-        value: pair.dark,
-        onChange: (v: string) => onChange({ ...pair, dark: v }),
-      }),
-    ),
   )
 }
 
@@ -353,180 +254,121 @@ function ToastBadge() {
 }
 
 /**
- * Inline Lucide icons (ISC), so the plugin needs no icon dependency.
- * Path data taken verbatim from lucide-static v1.45.0.
+ * Plus glyph for the add button, path data taken verbatim from DSH's own
+ * `IconPlusOutline16` so the two controls read as the same affordance.
  */
-type IconNode = { tag: 'path' | 'rect'; attrs: Record<string, string | number> }
-
-const ICON_RENAME: IconNode[] = [
-  { tag: 'path', attrs: { d: 'M13 21h8' } },
-  { tag: 'path', attrs: { d: 'm15 5 4 4' } },
-  {
-    tag: 'path',
-    attrs: {
-      d: 'M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z',
-    },
-  },
-]
-
-const ICON_COPY: IconNode[] = [
-  { tag: 'rect', attrs: { width: 14, height: 14, x: 8, y: 8, rx: 2, ry: 2 } },
-  { tag: 'path', attrs: { d: 'M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2' } },
-]
-
-const ICON_TRASH: IconNode[] = [
-  { tag: 'path', attrs: { d: 'M10 11v6' } },
-  { tag: 'path', attrs: { d: 'M14 11v6' } },
-  { tag: 'path', attrs: { d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6' } },
-  { tag: 'path', attrs: { d: 'M3 6h18' } },
-  { tag: 'path', attrs: { d: 'M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' } },
-]
-
-function Icon(props: { nodes: IconNode[] }) {
+function IconPlus(props: { size?: number }) {
+  const { size = 14 } = props
   return React.createElement(
     'svg',
     {
-      width: 15,
-      height: 15,
-      viewBox: '0 0 24 24',
+      width: size,
+      height: size,
+      viewBox: '0 0 16 16',
       fill: 'none',
-      stroke: 'currentColor',
-      strokeWidth: 2,
-      strokeLinecap: 'round',
-      strokeLinejoin: 'round',
+      xmlns: 'http://www.w3.org/2000/svg',
       'aria-hidden': true,
       focusable: false,
     },
-    ...props.nodes.map((n, i) => React.createElement(n.tag, { key: i, ...n.attrs })),
+    React.createElement('path', {
+      d: 'M8.64453 1.5V7.34961H14.5V8.65039H8.64453V14.5H7.34473V8.65039H1.5V7.34961H7.34473V1.5H8.64453Z',
+      fill: 'currentColor',
+    }),
   )
 }
 
 /**
- * Icon-only action button. The label rides on `data-tip` for the styled bubble
- * and on `aria-label` for assistive tech — no `title`, which would stack the
- * native tooltip on top of ours.
+ * One collapsed saved-theme card: the name activates the theme, the trailing
+ * controls rename (by opening the editor), duplicate and delete it. The card as
+ * a whole is a click target too, but its controls own their clicks.
  */
-function IconButton(props: {
-  label: string
-  nodes: IconNode[]
-  danger?: boolean
-  onClick: () => void
-}) {
-  const { label, nodes, danger, onClick } = props
-  return React.createElement(
-    'button',
-    {
-      type: 'button',
-      className: danger ? 'ct-icon-btn ct-icon-btn-danger' : 'ct-icon-btn',
-      'data-tip': label,
-      'aria-label': label,
-      onClick,
-    },
-    React.createElement(Icon, { nodes }),
-  )
-}
-
-/** The saved-theme list under the editor: activate, rename, duplicate, delete. */
-function SavedList(props: {
-  list: SavedTheme[]
-  activeId: string | null
+function ThemeCard(props: {
+  entry: SavedTheme
+  active: boolean
+  /** Locked while another card is open in the editor. */
+  disabled: boolean
   t: (key: ThemeKey) => string
-  onRename: (id: string, name: string) => void
-  onDuplicate: (id: string) => void
-  onDelete: (entry: SavedTheme) => void
-  onLoad: (id: string) => void
+  onActivate: () => void
+  onEdit: () => void
+  onDuplicate: () => void
+  onDelete: () => void
 }) {
-  const { list, activeId, t, onRename, onDuplicate, onDelete, onLoad } = props
-  const [editingId, setEditingId] = React.useState<string | null>(null)
-  const [draft, setDraft] = React.useState('')
+  const { entry, active, disabled, t, onActivate, onEdit, onDuplicate, onDelete } = props
 
-  function startRename(entry: SavedTheme) {
-    setEditingId(entry.id)
-    setDraft(entry.name)
-  }
-  function commit(id: string) {
-    const name = draft.trim()
-    if (name) onRename(id, name)
-    setEditingId(null)
-  }
+  /** One dense capsule action; `danger` is the borderless delete variant. */
+  const action = (label: string, onClick: () => void, danger?: boolean) =>
+    React.createElement(
+      'button',
+      {
+        type: 'button',
+        className: danger ? 'ct-list-btn ct-list-btn-danger' : 'ct-list-btn',
+        onClick,
+      },
+      label,
+    )
 
   return React.createElement(
     'div',
-    { className: 'ct-list' },
-    ...list.map((entry) =>
+    {
+      className: 'ct-list-row',
+      onClick: disabled ? undefined : onActivate,
+    },
+    React.createElement(
+      'span',
+      { className: 'ct-list-identity' },
       React.createElement(
-        'div',
+        'button',
         {
-          className: 'ct-list-row',
-          key: entry.id,
-          // The card is the target, not just its title: a click anywhere on it
-          // loads the theme. While renaming, the entry keeps its clicks — blur
-          // has already committed the draft by the time this runs.
-          onClick: () => {
-            if (editingId !== entry.id) onLoad(entry.id)
+          className: 'ct-list-name',
+          type: 'button',
+          disabled,
+          // Keeps the keyboard/AT path to loading and stops the card's own
+          // handler from loading the same theme a second time.
+          onClick: (e: React.MouseEvent) => {
+            e.stopPropagation()
+            onActivate()
           },
         },
-        editingId === entry.id
-          ? React.createElement('input', {
-              className: 'ct-list-input',
-              type: 'text',
-              value: draft,
-              autoFocus: true,
-              'aria-label': t('custom.rename'),
-              // Rename starts ready to overwrite: the whole name is selected.
-              onFocus: (e: React.FocusEvent<HTMLInputElement>) => e.currentTarget.select(),
-              onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDraft(e.target.value),
-              onBlur: () => commit(entry.id),
-              onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
-                if (e.key === 'Enter') commit(entry.id)
-                else if (e.key === 'Escape') setEditingId(null)
-              },
-            })
-          : React.createElement(
-              'button',
-              {
-                className: 'ct-list-name',
-                type: 'button',
-                // Keeps the keyboard/AT path to loading and stops the card's own
-                // handler from loading the same theme a second time.
-                onClick: (e: React.MouseEvent) => {
-                  e.stopPropagation()
-                  onLoad(entry.id)
-                },
-              },
-              entry.name,
-            ),
-        React.createElement(
-          'div',
-          {
-            className: 'ct-list-actions',
-            // The three actions own their clicks: without this the card would
-            // also load the theme on every rename, duplicate or delete.
-            onClick: (e: React.MouseEvent) => e.stopPropagation(),
-          },
-          activeId === entry.id
-            ? React.createElement('span', { className: 'ct-list-badge' }, t('custom.inUse'))
-            : null,
-          React.createElement(IconButton, {
-            label: t('custom.rename'),
-            nodes: ICON_RENAME,
-            onClick: () => startRename(entry),
-          }),
-          React.createElement(IconButton, {
-            label: t('custom.duplicate'),
-            nodes: ICON_COPY,
-            onClick: () => onDuplicate(entry.id),
-          }),
-          React.createElement(IconButton, {
-            label: t('custom.delete'),
-            nodes: ICON_TRASH,
-            danger: true,
-            onClick: () => onDelete(entry),
-          }),
-        ),
+        entry.name,
       ),
+      // The in-use marker: DSH's configured dot, annotating the name rather
+      // than adding a badge that competes with it.
+      active
+        ? React.createElement('span', {
+            className: 'ct-list-dot',
+            role: 'img',
+            'aria-label': t('custom.inUse'),
+            title: t('custom.inUse'),
+          })
+        : null,
+    ),
+    React.createElement(
+      'div',
+      {
+        className: 'ct-list-actions',
+        // The actions own their clicks: without this the card would also load
+        // the theme on every edit, duplicate or delete.
+        onClick: (e: React.MouseEvent) => e.stopPropagation(),
+      },
+      action(t('custom.edit'), onEdit),
+      action(t('custom.duplicate'), onDuplicate),
+      action(t('custom.delete'), onDelete, true),
     ),
   )
+}
+
+/**
+ * Which appearance the colour dots edit. `system` resolves through the same
+ * media query the shell uses, so the editor opens on what is on screen.
+ */
+function effectiveMode(scheme: string): Mode {
+  if (scheme === 'dark') return 'dark'
+  if (scheme === 'light') return 'light'
+  try {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  } catch {
+    return 'light'
+  }
 }
 
 export function ThemePanel(props: {
@@ -535,16 +377,22 @@ export function ThemePanel(props: {
   setSelection: (s: Selection) => void
   getCustom: () => CustomState
   setCustom: (theme: CustomTheme) => void
+  /** Pick the preset future custom themes seed from, without applying it. */
+  setCustomBase: (base: PresetId) => void
   resetCustom: () => CustomTheme
   saved: {
     /** Cached roster; empty until `refresh` resolves. */
     list: () => SavedTheme[]
     activeId: () => string | null
     load: (id: string) => CustomTheme | null
+    /** Point the "in use" badge at an entry, or clear it entirely. */
+    setActive: (id: string | null) => void
     /** Re-read the roster from the Host, migrating the legacy browser list once. */
     refresh: () => Promise<SavedTheme[]>
-    save: () => Promise<SavedTheme[]>
-    rename: (id: string, name: string) => Promise<SavedTheme[]>
+    /** Persist the current draft as a new named entry and make it active. */
+    create: (name: string) => Promise<SavedTheme[]>
+    /** Write the current draft (and name) back to an existing entry. */
+    update: (id: string, name: string) => Promise<SavedTheme[]>
     duplicate: (id: string) => Promise<CustomTheme | null>
     remove: (id: string) => Promise<SavedTheme[]>
   }
@@ -556,13 +404,20 @@ export function ThemePanel(props: {
   getHostToast: () => ((props: any) => any) | null
   t: (key: ThemeKey) => string
 }) {
-  const { theme, getSelection, setSelection, getCustom, setCustom, resetCustom, saved, getHostToast, t } = props
+  const { theme, getSelection, setSelection, getCustom, setCustom, setCustomBase, resetCustom, saved, getHostToast, t } = props
   let initScheme = 'system'
   try {
     const snap = theme?.getTheme()
     if (snap?.preference) initScheme = snap.preference
   } catch {}
   const [scheme, setScheme] = React.useState(initScheme)
+  // The appearance the dots edit. Following the appearance switch keeps the
+  // editor showing the colours that are actually on screen; the toggle inside
+  // the editor can still override it for a one-off edit of the other side.
+  const [seedMode, setSeedMode] = React.useState<Mode>(() => effectiveMode(initScheme))
+  React.useEffect(() => {
+    setSeedMode(effectiveMode(scheme))
+  }, [scheme])
   const [selection, setSelectionState] = React.useState<Selection>(() => getSelection())
   const [custom, setCustomState] = React.useState<CustomTheme>(() => getCustom().theme)
   // The preset the picker keeps showing. Turning the custom switch on must not
@@ -574,6 +429,9 @@ export function ThemePanel(props: {
   const [list, setList] = React.useState<SavedTheme[]>(() => saved.list())
   const [activeId, setActiveId] = React.useState<string | null>(() => saved.activeId())
   const [pendingDelete, setPendingDelete] = React.useState<SavedTheme | null>(null)
+  // The card open in the editor. Null means every card is collapsed and only the
+  // "add" button is showing, which is the state the panel opens in.
+  const [editing, setEditing] = React.useState<Editing | null>(null)
   // `seq` keys the banner so an identical repeated message restarts its cycle
   // instead of reusing the mounted one, whose timer has already run out.
   const [toast, setToast] = React.useState<{ seq: number; text: string } | null>(null)
@@ -620,12 +478,6 @@ export function ThemePanel(props: {
     }
   }
 
-  async function onSave() {
-    if ((await mutate(() => saved.save())) === null) return
-    syncSaved()
-    showToast(t('custom.toast.saved'))
-  }
-
   function onLoadSaved(id: string) {
     const next = saved.load(id)
     if (next) setCustomState(next)
@@ -633,6 +485,56 @@ export function ThemePanel(props: {
     // (locked) preset row shows that base while custom mode is on.
     setShownPreset(getCustom().base)
     syncSaved()
+  }
+
+  /** Snapshot the state an edit must return to when it is cancelled. */
+  function beginEditing(id: string | null, name: string): Editing {
+    return { id, name, originId: saved.activeId(), originDraft: getCustom().theme }
+  }
+
+  /** Open a fresh, unsaved theme seeded from the current preset. */
+  function startAdd() {
+    // Snapshot the previous draft before `resetCustom` overwrites it, so cancel
+    // can put the user back on the theme they had.
+    const origin = beginEditing(null, nextThemeName(t('custom.defaultName'), list.map((e) => e.name)))
+    const draft = resetCustom()
+    setEditing(origin)
+    setCustomState(draft)
+  }
+
+  /** Open an existing card for editing; it also becomes the previewed theme. */
+  function startEdit(entry: SavedTheme) {
+    const next = beginEditing(entry.id, entry.name)
+    setEditing(next)
+    onLoadSaved(entry.id)
+  }
+
+  /** Discard the open editor and put the previously applied theme back. */
+  function cancelEdit() {
+    if (!editing) return
+    if (editing.originId) onLoadSaved(editing.originId)
+    else {
+      setCustom(editing.originDraft)
+      setCustomState(editing.originDraft)
+      // Previewing the edited entry moved the active pointer; put it back.
+      saved.setActive(null)
+    }
+    setEditing(null)
+    syncSaved()
+  }
+
+  /** Commit the open editor: create a new entry, or update the one being edited. */
+  async function saveEdit() {
+    if (!editing) return
+    const name = editing.name.trim() || t('custom.defaultName')
+    const id = editing.id
+    const next = await mutate(() => (id === null ? saved.create(name) : saved.update(id, name)))
+    if (next === null) return
+    setEditing(null)
+    syncSaved()
+    setCustomState(getCustom().theme)
+    setShownPreset(getCustom().base)
+    showToast(t('custom.toast.saved'))
   }
 
   async function onDuplicate(id: string) {
@@ -645,15 +547,12 @@ export function ThemePanel(props: {
     if (next) showToast(t('custom.toast.duplicated'))
   }
 
-  async function onRename(id: string, name: string) {
-    await mutate(() => saved.rename(id, name))
-    syncSaved()
-  }
-
   async function onConfirmDelete() {
     if (!pendingDelete) return
     const id = pendingDelete.id
     setPendingDelete(null)
+    // A deleted card must not stay open in the editor.
+    setEditing((cur) => (cur?.id === id ? null : cur))
     if ((await mutate(() => saved.remove(id))) === null) return
     setActiveId(saved.activeId())
     // Removing the active entry re-seats the first remaining one, so the draft
@@ -671,24 +570,39 @@ export function ThemePanel(props: {
   }
 
   /**
-   * The preset picker. Unreachable while the custom switch is on — the picker
-   * is disabled then — so this only ever applies the chosen preset.
+   * The preset picker. While custom mode is on the choice is only a template:
+   * it re-points the base preset that the next added custom theme inherits,
+   * leaving the live custom colours alone. Otherwise it applies the preset.
    */
   function pickPreset(id: PresetId) {
+    setShownPreset(id)
+    if (customOn) {
+      setCustomBase(id)
+      // With an editor open the template is also the starting point: re-seed
+      // the draft so the swatches on screen are the preset the card records.
+      if (editing) setCustomState(resetCustom())
+      return
+    }
     setSelectionState(id)
     setSelection(id)
-    setShownPreset(id)
   }
 
   /** The custom switch. Turning it off returns to the preset seeds came from. */
   function toggleCustom(on: boolean) {
     if (on) {
+      // The preset the user was just on becomes the template the next added
+      // custom theme inherits, so the dropdown and the draft cannot disagree.
+      const base = selection as PresetId
+      setCustomBase(base)
+      setShownPreset(base)
       setSelectionState(CUSTOM_SELECTION)
       setSelection(CUSTOM_SELECTION)
       // Entering custom mode may have just seeded a fresh palette.
       setCustomState(getCustom().theme)
       return
     }
+    // The editor only exists inside custom mode, so leaving closes any draft.
+    setEditing(null)
     const target = getCustom().base
     setSelectionState(target)
     setSelection(target)
@@ -698,11 +612,6 @@ export function ThemePanel(props: {
   function editCustom(next: CustomTheme) {
     setCustomState(next)
     setCustom(next)
-  }
-
-  function onReset() {
-    setCustomState(resetCustom())
-    showToast(t('custom.toast.reset'))
   }
 
   const schemeOptions = [
@@ -732,14 +641,14 @@ export function ThemePanel(props: {
         'div',
         { className: 'ct-row-main' },
         React.createElement('div', { className: 'ct-row-title' }, t('presets.title')),
-        React.createElement('div', { className: 'ct-row-desc' }, t(customOn ? 'presets.disabled' : 'presets.desc')),
+        // While custom mode is on this row picks the template for the next
+        // added theme rather than applying a preset, and says so.
+        React.createElement('div', { className: 'ct-row-desc' }, t(customOn ? 'presets.base' : 'presets.desc')),
       ),
       React.createElement(SchemeMenu, {
         value: customOn ? shownPreset : selection,
         options: presetOptions,
         onSelect: (v) => pickPreset(v as PresetId),
-        // Custom mode owns the colours, so the picker is locked while it is on.
-        disabled: customOn,
       }),
     ),
     React.createElement(
@@ -760,113 +669,191 @@ export function ThemePanel(props: {
   ]
 
   if (customOn) {
-    /** A plain seed row: one base colour per appearance. */
-    const seedRow = (key: 'accent' | 'green' | 'amber' | 'red', title: ThemeKey, desc: ThemeKey) =>
-      React.createElement(SeedRow, {
-        key,
-        name: t(title),
-        hint: t(desc),
-        lightLabel: t('custom.seed.light'),
-        darkLabel: t('custom.seed.dark'),
-        pair: custom[key],
-        onChange: (next: SeedPair) => editCustom({ ...custom, [key]: next } as CustomTheme),
-      })
+    /**
+     * One editable colour. The dot edits whichever appearance the mode toggle
+     * is on; the tooltip carries the seed's plain-language description.
+     */
+    type SeedDot = {
+      key: string
+      name: string
+      hint: string
+      value: string
+      onChange: (v: string) => void
+    }
 
-    /** The neutral row edits the ramp's two endpoints rather than two per-mode
-     *  colours, so its column labels differ from every other row. */
-    const neutralRow = React.createElement(SeedRow, {
-      key: 'neutral',
-      name: t('custom.neutral.title'),
-      hint: t('custom.neutral.desc'),
-      lightLabel: t('custom.neutral.lightest'),
-      darkLabel: t('custom.neutral.darkest'),
-      pair: { light: custom.neutralLightest, dark: custom.neutralDarkest },
-      onChange: (p: SeedPair) =>
-        editCustom({ ...custom, neutralLightest: p.light, neutralDarkest: p.dark }),
-    })
-
-    const seedRows: any[] = [
-      seedRow('accent', 'custom.accent.title', 'custom.accent.desc'),
-      neutralRow,
-      seedRow('green', 'custom.green.title', 'custom.green.desc'),
-      seedRow('amber', 'custom.amber.title', 'custom.amber.desc'),
-      seedRow('red', 'custom.red.title', 'custom.red.desc'),
-    ]
-
-    const shikiRows = SHIKI_KEYS.map((k) =>
-      React.createElement(SeedRow, {
-        key: `shiki-${k}`,
-        name: t(`shiki.${k}` as ThemeKey),
-        hint: t('custom.shiki.desc'),
-        lightLabel: t('custom.seed.light'),
-        darkLabel: t('custom.seed.dark'),
-        pair: custom.shiki[k],
-        onChange: (next: SeedPair) => editCustom({ ...custom, shiki: { ...custom.shiki, [k]: next } }),
-      }),
-    )
-
-    /** One bordered table: its first column header names the group. */
-    const group = (key: string, firstColumn: ThemeKey, rows: any[]) =>
+    /** A group row: its name on the left, every seed's dot on the right. */
+    const dotRow = (key: string, label: string, dots: SeedDot[]) =>
       React.createElement(
         'div',
-        { className: 'ct-group', key },
+        { className: 'ct-seed-row', key },
+        React.createElement('div', { className: 'ct-seed-label' }, label),
         React.createElement(
           'div',
-          { className: 'ct-table-wrap' },
-          React.createElement(
-            'table',
-            { className: 'ct-table' },
+          { className: 'ct-seed-dots' },
+          ...dots.map((d) =>
             React.createElement(
-              'thead',
-              null,
-              React.createElement(
-                'tr',
-                null,
-                React.createElement('th', { className: 'ct-td-name' }, t(firstColumn)),
-                React.createElement('th', { className: 'ct-td-color' }, t('custom.seed.light')),
-                React.createElement('th', { className: 'ct-td-color' }, t('custom.seed.dark')),
-              ),
+              'label',
+              {
+                key: d.key,
+                className: 'ct-seed-dot',
+                // The wrapper paints the colour; the input inside is invisible.
+                style: { background: d.value },
+                // Names the token this swatch edits; rendered as the styled
+                // bubble by `.ct-seed-dot::after` (the invisible input on top is
+                // the real hover target, so a native `title` would never fire).
+                'data-tip': d.name,
+              },
+              React.createElement('input', {
+                className: 'ct-seed-input',
+                type: 'color',
+                value: d.value,
+                // The bubble above names the token; assistive tech also gets the
+                // fuller description, which the bubble is too small to carry.
+                'aria-label': `${d.name} — ${d.hint}`,
+                onChange: (e: React.ChangeEvent<HTMLInputElement>) => d.onChange(e.target.value.toUpperCase()),
+              }),
             ),
-            React.createElement('tbody', null, ...rows),
           ),
         ),
       )
 
-    children.push(
-      group('seeds', 'custom.table.seeds', seedRows),
-      group('shiki', 'custom.table.shiki', shikiRows),
-      // Actions sit on the right: reset re-seeds the draft, save commits it to
-      // the list (updating the active entry, or creating the first one).
+    const pair = (key: 'accent' | 'green' | 'amber' | 'red', title: ThemeKey, desc: ThemeKey): SeedDot => ({
+      key,
+      name: t(title),
+      hint: t(desc),
+      value: custom[key][seedMode],
+      onChange: (v: string) => editCustom({ ...custom, [key]: { ...custom[key], [seedMode]: v } }),
+    })
+
+    // The neutral row edits the ramp's two endpoints rather than a per-mode
+    // colour, so its two ends are named for what they are.
+    const neutral: SeedDot = {
+      key: 'neutral',
+      name: t('custom.neutral.title'),
+      hint: `${t('custom.neutral.desc')} — ${seedMode === 'light' ? t('custom.neutral.lightest') : t('custom.neutral.darkest')}`,
+      value: seedMode === 'light' ? custom.neutralLightest : custom.neutralDarkest,
+      onChange: (v: string) =>
+        editCustom(seedMode === 'light' ? { ...custom, neutralLightest: v } : { ...custom, neutralDarkest: v }),
+    }
+
+    const seedDots: SeedDot[] = [
+      pair('accent', 'custom.accent.title', 'custom.accent.desc'),
+      neutral,
+      pair('green', 'custom.green.title', 'custom.green.desc'),
+      pair('amber', 'custom.amber.title', 'custom.amber.desc'),
+      pair('red', 'custom.red.title', 'custom.red.desc'),
+    ]
+
+    const shikiDots: SeedDot[] = SHIKI_KEYS.map((k) => ({
+      key: k,
+      name: t(`shiki.${k}` as ThemeKey),
+      hint: t('custom.shiki.desc'),
+      value: custom.shiki[k][seedMode],
+      onChange: (v: string) =>
+        editCustom({ ...custom, shiki: { ...custom.shiki, [k]: { ...custom.shiki[k], [seedMode]: v } } }),
+    }))
+
+    /** The light/dark segmented control above the dots. */
+    const modeButton = (id: Mode, label: string) =>
       React.createElement(
-        'div',
-        { className: 'ct-actions', key: 'actions' },
-        React.createElement(
-          'button',
-          { type: 'button', className: 'ct-btn', onClick: onReset },
-          t('custom.reset'),
-        ),
-        React.createElement(
-          'button',
-          { type: 'button', className: 'ct-btn ct-btn-primary', onClick: onSave },
-          t('custom.save'),
-        ),
+        'button',
+        {
+          key: id,
+          type: 'button',
+          className: seedMode === id ? 'ct-mode-btn ct-mode-btn-on' : 'ct-mode-btn',
+          'aria-pressed': seedMode === id,
+          onClick: () => setSeedMode(id),
+        },
+        label,
+      )
+
+    const modeToggle = React.createElement(
+      'div',
+      { className: 'ct-mode', role: 'group', 'aria-label': t('custom.mode.label') },
+      modeButton('light', t('custom.seed.light')),
+      modeButton('dark', t('custom.seed.dark')),
+    )
+
+    // The open editor: a name field, the two colour groups, then cancel/save.
+    // Both a brand-new draft and a reopened saved entry share this body.
+    const editorName = React.createElement('input', {
+      className: 'ct-editor-name',
+      type: 'text',
+      value: editing?.name ?? '',
+      placeholder: t('custom.name.placeholder'),
+      'aria-label': t('custom.name.placeholder'),
+      autoFocus: true,
+      onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+        setEditing((cur) => (cur ? { ...cur, name: e.target.value } : cur)),
+      onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') void saveEdit()
+        else if (e.key === 'Escape') cancelEdit()
+      },
+    })
+
+    const editorActions = React.createElement(
+      'div',
+      { className: 'ct-editor-actions' },
+      React.createElement('button', { type: 'button', className: 'ct-btn', onClick: cancelEdit }, t('custom.cancel')),
+      React.createElement(
+        'button',
+        { type: 'button', className: 'ct-btn ct-btn-primary', onClick: () => void saveEdit() },
+        t('custom.save'),
       ),
     )
 
-    if (list.length > 0) {
-      children.push(
-        React.createElement(SavedList, {
-          key: 'saved-list',
-          list,
-          activeId,
-          t,
-          onRename,
-          onDuplicate,
-          onDelete: (entry: SavedTheme) => setPendingDelete(entry),
-          onLoad: onLoadSaved,
-        }),
+    const editorCard = (key: string) =>
+      React.createElement(
+        'div',
+        { className: 'ct-editor', key },
+        React.createElement(
+          'div',
+          { className: 'ct-editor-head' },
+          editorName,
+          modeToggle,
+        ),
+        dotRow('seeds', t('custom.group.seeds'), seedDots),
+        dotRow('shiki', t('custom.group.shiki'), shikiDots),
+        editorActions,
       )
-    }
+
+    const cards: any[] = list.map((entry) =>
+      editing && editing.id === entry.id
+        ? editorCard(entry.id)
+        : React.createElement(ThemeCard, {
+            key: entry.id,
+            entry,
+            active: activeId === entry.id,
+            // One editor at a time: other cards keep their actions, but a click
+            // on the card body must not fight the open draft for the preview.
+            disabled: editing !== null,
+            t,
+            onActivate: () => onLoadSaved(entry.id),
+            onEdit: () => startEdit(entry),
+            onDuplicate: () => void onDuplicate(entry.id),
+            onDelete: () => setPendingDelete(entry),
+          }),
+    )
+
+    // A new theme is appended above the add button, matching the order the cards
+    // are listed in.
+    if (editing && editing.id === null) cards.push(editorCard('new-editor'))
+
+    children.push(
+      React.createElement('div', { className: 'ct-list', key: 'saved-list' }, ...cards),
+      React.createElement(
+        'button',
+        {
+          key: 'add',
+          type: 'button',
+          className: 'ct-add-btn',
+          disabled: editing !== null,
+          onClick: startAdd,
+        },
+        React.createElement(IconPlus, null),
+        t('custom.add'),
+      ),
+    )
   }
 
   if (pendingDelete) {

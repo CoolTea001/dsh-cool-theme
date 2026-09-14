@@ -16,6 +16,10 @@ Theme management (sidebar gear → Settings → Theme), supports `light` / `dark
 
 Custom colors: build your own scheme from 28 seeds — neutral, accent, success, warning, error, and the 9 syntax-highlighting tokens — each with separate light and dark values. The scales use exactly the same maths as the presets, so a custom theme is simply a preset computed at runtime. The editor previews what each appearance actually renders.
 
+Custom themes are off by default. Turning the switch on reveals the saved-theme cards plus an **Add custom theme** button: clicking it opens an editable card above the button with a name field and the colour rows, and the card is committed with **Save** or discarded with **Cancel**. Every saved card can be reopened with its **Edit** button.
+
+The preset picker stays usable while the custom theme is on. It no longer applies a preset then — it chooses the template that new custom themes start from: with an editor open the draft re-seeds to that preset, and otherwise the live colours stay as they are. Each colour row shows one round swatch per seed, and the light/dark toggle above them switches which appearance's values the swatches edit.
+
 ## Where custom themes live
 
 Each saved custom theme is one directory under `$DSH_HOME/cool-theme/themes/<id>/` (`$DSH_HOME` defaults to `~/.dsh`):

@@ -18,16 +18,22 @@ export declare function ThemePanel(props: {
     setSelection: (s: Selection) => void;
     getCustom: () => CustomState;
     setCustom: (theme: CustomTheme) => void;
+    /** Pick the preset future custom themes seed from, without applying it. */
+    setCustomBase: (base: PresetId) => void;
     resetCustom: () => CustomTheme;
     saved: {
         /** Cached roster; empty until `refresh` resolves. */
         list: () => SavedTheme[];
         activeId: () => string | null;
         load: (id: string) => CustomTheme | null;
+        /** Point the "in use" badge at an entry, or clear it entirely. */
+        setActive: (id: string | null) => void;
         /** Re-read the roster from the Host, migrating the legacy browser list once. */
         refresh: () => Promise<SavedTheme[]>;
-        save: () => Promise<SavedTheme[]>;
-        rename: (id: string, name: string) => Promise<SavedTheme[]>;
+        /** Persist the current draft as a new named entry and make it active. */
+        create: (name: string) => Promise<SavedTheme[]>;
+        /** Write the current draft (and name) back to an existing entry. */
+        update: (id: string, name: string) => Promise<SavedTheme[]>;
         duplicate: (id: string) => Promise<CustomTheme | null>;
         remove: (id: string) => Promise<SavedTheme[]>;
     };
