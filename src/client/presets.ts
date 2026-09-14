@@ -35,7 +35,8 @@ import { vercel } from './presets/vercel.js'
 import { vesper } from './presets/vesper.js'
 import { zenburn } from './presets/zenburn.js'
 
-type PresetDef = { label: string; light: StaticMap; dark: StaticMap }
+/** A fully resolved theme: one primitive map per appearance. */
+export type PresetDef = { label: string; light: StaticMap; dark: StaticMap }
 
 export const PRESETS = {
   aura,

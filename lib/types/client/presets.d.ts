@@ -1,3 +1,10 @@
+import type { StaticMap } from './css/primitives.js';
+/** A fully resolved theme: one primitive map per appearance. */
+export type PresetDef = {
+    label: string;
+    light: StaticMap;
+    dark: StaticMap;
+};
 export declare const PRESETS: {
     readonly aura: {
         readonly label: "Aura";

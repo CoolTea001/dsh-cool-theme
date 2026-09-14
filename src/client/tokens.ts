@@ -1,4 +1,4 @@
-import { PRESETS, type PresetId } from './presets.js'
+import { PRESETS, type PresetId, type PresetDef } from './presets.js'
 import { PRIMITIVES_LIGHT, PRIMITIVES_DARK, buildPrimitivesCss, primitiveOverrides } from './css/primitives.js'
 import { SHIKI_CSS } from './css/shiki.js'
 
@@ -8,9 +8,19 @@ export function buildBaseCss(): string {
 
 const NOOP_PRESETS = new Set<PresetId>(['native', 'dsh'])
 
-function resolvePreset(id: PresetId) {
-  if (NOOP_PRESETS.has(id)) return null
-  const preset = PRESETS[id as keyof typeof PRESETS]
+/**
+ * Accepts either a preset id or an already-built `PresetDef` (what a custom
+ * theme produces). Both go through the identical merge, so a custom theme is
+ * not a special case anywhere downstream.
+ */
+export function resolvePreset(src: PresetId | PresetDef) {
+  let preset: PresetDef | null
+  if (typeof src === 'string') {
+    if (NOOP_PRESETS.has(src)) return null
+    preset = PRESETS[src as keyof typeof PRESETS] ?? null
+  } else {
+    preset = src
+  }
   if (!preset) return null
   return {
     light: { ...PRIMITIVES_LIGHT, ...preset.light },
@@ -18,14 +28,14 @@ function resolvePreset(id: PresetId) {
   }
 }
 
-export function buildOverrides(id: PresetId): Record<string, { light: string; dark: string }> {
-  const resolved = resolvePreset(id)
+export function buildOverrides(src: PresetId | PresetDef): Record<string, { light: string; dark: string }> {
+  const resolved = resolvePreset(src)
   if (!resolved) return {}
   return primitiveOverrides(resolved.light, resolved.dark)
 }
 
-export function buildFullCssFallback(id: PresetId): string {
-  const resolved = resolvePreset(id)
+export function buildFullCssFallback(src: PresetId | PresetDef): string {
+  const resolved = resolvePreset(src)
   if (!resolved) return ''
   const toBlock = (m: Record<string, string>) =>
     Object.entries(m)
