@@ -14,6 +14,7 @@
  *   shiki    9 syntax tokens
  */
 import type { PresetDef } from './presets.js';
+import type { ThemeAsset } from '../contract.js';
 export type { PresetDef };
 export type Mode = 'light' | 'dark';
 /** One seed colour per appearance. */
@@ -88,6 +89,11 @@ export type SavedTheme = {
     /** Preset the seeds derive from; used for the "reset" fallback. */
     base: string;
     theme: CustomTheme;
+    /**
+     * Media stored beside the seeds. Empty until themes carry a background, but
+     * always carried through a rewrite so a later edit cannot drop one.
+     */
+    assets: ThemeAsset[];
 };
 /** Collision-resistant enough for a local list, and stable across reloads. */
 export declare function newThemeId(): string;

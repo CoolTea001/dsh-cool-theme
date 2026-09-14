@@ -18,17 +18,25 @@ export declare function ThemePanel(props: {
     setSelection: (s: Selection) => void;
     getCustom: () => CustomState;
     setCustom: (theme: CustomTheme) => void;
-    rebaseCustom: (base: PresetId) => CustomTheme;
     resetCustom: () => CustomTheme;
     saved: {
+        /** Cached roster; empty until `refresh` resolves. */
         list: () => SavedTheme[];
         activeId: () => string | null;
-        save: () => SavedTheme[];
         load: (id: string) => CustomTheme | null;
-        rename: (id: string, name: string) => SavedTheme[];
-        duplicate: (id: string) => CustomTheme | null;
-        remove: (id: string) => SavedTheme[];
+        /** Re-read the roster from the Host, migrating the legacy browser list once. */
+        refresh: () => Promise<SavedTheme[]>;
+        save: () => Promise<SavedTheme[]>;
+        rename: (id: string, name: string) => Promise<SavedTheme[]>;
+        duplicate: (id: string) => Promise<CustomTheme | null>;
+        remove: (id: string) => Promise<SavedTheme[]>;
     };
+    /**
+     * The shell's own Toast, or null when the host does not share its primitives
+     * module with plugins. Read at render time: the async resolution lands long
+     * before the first action a banner can report.
+     */
+    getHostToast: () => ((props: any) => any) | null;
     t: (key: ThemeKey) => string;
 }): React.DetailedReactHTMLElement<{
     style: {

@@ -6,6 +6,7 @@ import * as React from 'react'
 import { CUSTOM_PRESET_ID } from '../contract.js'
 import { type PresetId, presetOptions } from './presets.js'
 import { type ThemeKey } from './locales.js'
+import { ThemeApiUnavailableError } from './theme-files.js'
 import {
   type CustomTheme,
   type SavedTheme,
@@ -31,16 +32,18 @@ function IconChevron() {
   )
 }
 
-function IconCheck() {
+/** The menu's selected-row tick: 16px, pushed to the trailing edge. */
+function IconCheck(props: { size?: number; className?: string }) {
+  const { size = 16, className } = props
   return React.createElement(
     'svg',
     {
-      width: 16,
-      height: 16,
+      width: size,
+      height: size,
       viewBox: '0 0 16 16',
       fill: 'none',
       xmlns: 'http://www.w3.org/2000/svg',
-      style: { marginLeft: 'auto', color: 'var(--dsw-alias-label-primary)', display: 'inline-flex' },
+      className,
     },
     React.createElement('path', {
       d: 'M15.0498 3.92579L8.49512 12.3818C8.25774 12.6881 8.04517 12.9645 7.84668 13.1689C7.63957 13.3823 7.38732 13.5841 7.04492 13.6719C6.86373 13.7183 6.6757 13.7346 6.48926 13.7197C6.13666 13.6915 5.8528 13.5355 5.6123 13.3604C5.38201 13.1926 5.12573 12.9567 4.83984 12.6953L1.03125 9.21289L1.96875 8.1875L5.77734 11.6699C6.08684 11.9529 6.27773 12.1249 6.43066 12.2363C6.50183 12.2882 6.54699 12.3135 6.57324 12.3252C6.58525 12.3305 6.59269 12.3322 6.5957 12.333C6.59802 12.3336 6.59961 12.334 6.59961 12.334C6.63317 12.3367 6.66758 12.3335 6.7002 12.3252C6.7002 12.3252 6.70211 12.3251 6.7041 12.3242C6.70698 12.3229 6.71348 12.319 6.72461 12.3115C6.74849 12.2956 6.78843 12.2642 6.84961 12.2012C6.98138 12.0654 7.13957 11.8628 7.39648 11.5313L13.9502 3.07422L15.0498 3.92579Z',
@@ -53,8 +56,14 @@ function SchemeMenu(props: {
   value: string
   options: { value: string; label: string }[]
   onSelect: (v: string) => void
+  /**
+   * Locked while another mode owns the theme. The custom theme editor is the
+   * live source of colours then, so letting the picker run would either switch
+   * the theme away from the custom one or silently re-seed it and drop edits.
+   */
+  disabled?: boolean
 }) {
-  const { value, options, onSelect } = props
+  const { value, options, onSelect, disabled } = props
   const [open, setOpen] = React.useState(false)
   const rootRef = React.useRef<HTMLSpanElement>(null)
   const listRef = React.useRef<HTMLDivElement>(null)
@@ -87,14 +96,15 @@ function SchemeMenu(props: {
       {
         type: 'button',
         className: 'ct-select',
+        disabled,
         'aria-haspopup': 'menu',
-        'aria-expanded': open,
+        'aria-expanded': open && !disabled,
         onClick: () => setOpen(!open),
       },
       React.createElement('span', { className: 'ct-select-label' }, selected?.label ?? ''),
       React.createElement('span', { className: 'ct-select-chevron' }, React.createElement(IconChevron, null)),
     ),
-    open
+    open && !disabled
       ? React.createElement(
           'div',
           {
@@ -119,7 +129,7 @@ function SchemeMenu(props: {
                 },
               },
               React.createElement('span', { className: 'ct-menu-item-label' }, o.label),
-              sel ? React.createElement(IconCheck, null) : null,
+              sel ? React.createElement(IconCheck, { className: 'ct-menu-check' }) : null,
             )
           }),
         )
@@ -294,6 +304,54 @@ function ConfirmDialog(props: {
   )
 }
 
+/** Which banner a failed roster call deserves. */
+function toastKeyFor(error: unknown): ThemeKey {
+  return error instanceof ThemeApiUnavailableError ? 'custom.toast.unavailable' : 'custom.toast.failed'
+}
+
+/** Full-opacity hold before the fade starts. DSH's own default; mirrors the stylesheet's delay. */
+const TOAST_HOLD_MS = 3000
+/** Fade duration. Mirrors the stylesheet's fade animation. */
+const TOAST_FADE_MS = 1000
+
+/**
+ * Transient confirmation banner: a leading result badge plus the copy, top
+ * center, sliding in, holding, fading out, then reporting done so the owner can
+ * unmount it. Metrics, tokens, badge and timing follow DSH's own toast — the
+ * badge is the success circle its confirmations wear — but the component is
+ * local: the plugin must keep answering a save on a host that does not share
+ * the primitives module.
+ *
+ * TOAST_HOLD_MS and TOAST_FADE_MS have to agree with the `ct-toast` animation
+ * in the injected stylesheet, which owns the visual timing.
+ * @param props.text - resolved, already-localized copy.
+ * @param props.onDone - called once the fade completes; unmount the toast here.
+ */
+function Toast(props: { text: string; onDone: () => void }) {
+  const { text, onDone } = props
+  React.useEffect(() => {
+    const timer = setTimeout(onDone, TOAST_HOLD_MS + TOAST_FADE_MS)
+    return () => clearTimeout(timer)
+  }, [onDone])
+  // `status` rather than DSH's `alert`: these confirm an action the user just
+  // took, so they should not interrupt whatever the screen reader is saying.
+  return React.createElement(
+    'div',
+    { className: 'ct-toast', role: 'status' },
+    React.createElement(ToastBadge),
+    React.createElement('span', { className: 'ct-toast-text' }, text),
+  )
+}
+
+/** The leading badge every confirmation wears: a success ring around the check. */
+function ToastBadge() {
+  return React.createElement(
+    'span',
+    { className: 'ct-toast-icon', 'aria-hidden': true },
+    React.createElement(IconCheck, { size: 12 }),
+  )
+}
+
 /**
  * Inline Lucide icons (ISC), so the plugin needs no icon dependency.
  * Path data taken verbatim from lucide-static v1.45.0.
@@ -398,7 +456,16 @@ function SavedList(props: {
     ...list.map((entry) =>
       React.createElement(
         'div',
-        { className: 'ct-list-row', key: entry.id },
+        {
+          className: 'ct-list-row',
+          key: entry.id,
+          // The card is the target, not just its title: a click anywhere on it
+          // loads the theme. While renaming, the entry keeps its clicks — blur
+          // has already committed the draft by the time this runs.
+          onClick: () => {
+            if (editingId !== entry.id) onLoad(entry.id)
+          },
+        },
         editingId === entry.id
           ? React.createElement('input', {
               className: 'ct-list-input',
@@ -417,12 +484,26 @@ function SavedList(props: {
             })
           : React.createElement(
               'button',
-              { className: 'ct-list-name', type: 'button', onClick: () => onLoad(entry.id) },
+              {
+                className: 'ct-list-name',
+                type: 'button',
+                // Keeps the keyboard/AT path to loading and stops the card's own
+                // handler from loading the same theme a second time.
+                onClick: (e: React.MouseEvent) => {
+                  e.stopPropagation()
+                  onLoad(entry.id)
+                },
+              },
               entry.name,
             ),
         React.createElement(
           'div',
-          { className: 'ct-list-actions' },
+          {
+            className: 'ct-list-actions',
+            // The three actions own their clicks: without this the card would
+            // also load the theme on every rename, duplicate or delete.
+            onClick: (e: React.MouseEvent) => e.stopPropagation(),
+          },
           activeId === entry.id
             ? React.createElement('span', { className: 'ct-list-badge' }, t('custom.inUse'))
             : null,
@@ -454,20 +535,28 @@ export function ThemePanel(props: {
   setSelection: (s: Selection) => void
   getCustom: () => CustomState
   setCustom: (theme: CustomTheme) => void
-  rebaseCustom: (base: PresetId) => CustomTheme
   resetCustom: () => CustomTheme
   saved: {
+    /** Cached roster; empty until `refresh` resolves. */
     list: () => SavedTheme[]
     activeId: () => string | null
-    save: () => SavedTheme[]
     load: (id: string) => CustomTheme | null
-    rename: (id: string, name: string) => SavedTheme[]
-    duplicate: (id: string) => CustomTheme | null
-    remove: (id: string) => SavedTheme[]
+    /** Re-read the roster from the Host, migrating the legacy browser list once. */
+    refresh: () => Promise<SavedTheme[]>
+    save: () => Promise<SavedTheme[]>
+    rename: (id: string, name: string) => Promise<SavedTheme[]>
+    duplicate: (id: string) => Promise<CustomTheme | null>
+    remove: (id: string) => Promise<SavedTheme[]>
   }
+  /**
+   * The shell's own Toast, or null when the host does not share its primitives
+   * module with plugins. Read at render time: the async resolution lands long
+   * before the first action a banner can report.
+   */
+  getHostToast: () => ((props: any) => any) | null
   t: (key: ThemeKey) => string
 }) {
-  const { theme, getSelection, setSelection, getCustom, setCustom, rebaseCustom, resetCustom, saved, t } = props
+  const { theme, getSelection, setSelection, getCustom, setCustom, resetCustom, saved, getHostToast, t } = props
   let initScheme = 'system'
   try {
     const snap = theme?.getTheme()
@@ -485,6 +574,15 @@ export function ThemePanel(props: {
   const [list, setList] = React.useState<SavedTheme[]>(() => saved.list())
   const [activeId, setActiveId] = React.useState<string | null>(() => saved.activeId())
   const [pendingDelete, setPendingDelete] = React.useState<SavedTheme | null>(null)
+  // `seq` keys the banner so an identical repeated message restarts its cycle
+  // instead of reusing the mounted one, whose timer has already run out.
+  const [toast, setToast] = React.useState<{ seq: number; text: string } | null>(null)
+  const toastSeq = React.useRef(0)
+
+  function showToast(text: string) {
+    toastSeq.current += 1
+    setToast({ seq: toastSeq.current, text })
+  }
 
   /** Re-read both the list and the active pointer after any list mutation. */
   function syncSaved() {
@@ -492,28 +590,77 @@ export function ThemePanel(props: {
     setActiveId(saved.activeId())
   }
 
-  function onSave() {
-    setList(saved.save())
-    setActiveId(saved.activeId())
+  // The roster lives in the Host's files, so it arrives asynchronously. Until
+  // it does the list renders empty rather than flashing the legacy browser
+  // copy the migration is about to replace.
+  React.useEffect(() => {
+    let cancelled = false
+    void saved
+      .refresh()
+      .then(() => {
+        if (!cancelled) syncSaved()
+      })
+      .catch((error: unknown) => {
+        // Unreachable Host: keep whatever the browser still has, and say which
+        // failure this is rather than showing an empty roster as if nothing
+        // were saved.
+        if (!cancelled) showToast(t(toastKeyFor(error)))
+      })
+    return () => { cancelled = true }
+    // Mount-only: the store owns its own cache and every mutation refreshes it.
+  }, [])
+
+  /** Run one roster mutation, surfacing a failed round trip as a banner. */
+  async function mutate<T>(operation: () => Promise<T>): Promise<T | null> {
+    try {
+      return await operation()
+    } catch (error) {
+      showToast(t(toastKeyFor(error)))
+      return null
+    }
+  }
+
+  async function onSave() {
+    if ((await mutate(() => saved.save())) === null) return
+    syncSaved()
+    showToast(t('custom.toast.saved'))
   }
 
   function onLoadSaved(id: string) {
     const next = saved.load(id)
     if (next) setCustomState(next)
+    // Loading an entry can change the base preset its seeds came from, and the
+    // (locked) preset row shows that base while custom mode is on.
+    setShownPreset(getCustom().base)
     syncSaved()
   }
 
-  function onDuplicate(id: string) {
-    const next = saved.duplicate(id)
-    if (next) setCustomState(next)
+  async function onDuplicate(id: string) {
+    const next = await mutate(() => saved.duplicate(id))
+    if (next) {
+      setCustomState(next)
+      setShownPreset(getCustom().base)
+    }
+    syncSaved()
+    if (next) showToast(t('custom.toast.duplicated'))
+  }
+
+  async function onRename(id: string, name: string) {
+    await mutate(() => saved.rename(id, name))
     syncSaved()
   }
 
-  function onConfirmDelete() {
+  async function onConfirmDelete() {
     if (!pendingDelete) return
-    setList(saved.remove(pendingDelete.id))
-    setActiveId(saved.activeId())
+    const id = pendingDelete.id
     setPendingDelete(null)
+    if ((await mutate(() => saved.remove(id))) === null) return
+    setActiveId(saved.activeId())
+    // Removing the active entry re-seats the first remaining one, so the draft
+    // has to follow it rather than keeping the deleted theme's seeds on screen.
+    setCustomState(getCustom().theme)
+    setShownPreset(getCustom().base)
+    setList(saved.list())
   }
 
   function pickScheme(id: string) {
@@ -524,16 +671,10 @@ export function ThemePanel(props: {
   }
 
   /**
-   * The preset picker. With the custom switch on, the choice re-seeds the
-   * editor table from that preset and custom mode stays on; otherwise it just
-   * switches the active preset.
+   * The preset picker. Unreachable while the custom switch is on — the picker
+   * is disabled then — so this only ever applies the chosen preset.
    */
   function pickPreset(id: PresetId) {
-    if (customOn) {
-      setCustomState(rebaseCustom(id))
-      setShownPreset(id)
-      return
-    }
     setSelectionState(id)
     setSelection(id)
     setShownPreset(id)
@@ -561,6 +702,7 @@ export function ThemePanel(props: {
 
   function onReset() {
     setCustomState(resetCustom())
+    showToast(t('custom.toast.reset'))
   }
 
   const schemeOptions = [
@@ -590,12 +732,14 @@ export function ThemePanel(props: {
         'div',
         { className: 'ct-row-main' },
         React.createElement('div', { className: 'ct-row-title' }, t('presets.title')),
-        React.createElement('div', { className: 'ct-row-desc' }, t('presets.desc')),
+        React.createElement('div', { className: 'ct-row-desc' }, t(customOn ? 'presets.disabled' : 'presets.desc')),
       ),
       React.createElement(SchemeMenu, {
         value: customOn ? shownPreset : selection,
         options: presetOptions,
         onSelect: (v) => pickPreset(v as PresetId),
+        // Custom mode owns the colours, so the picker is locked while it is on.
+        disabled: customOn,
       }),
     ),
     React.createElement(
@@ -716,7 +860,7 @@ export function ThemePanel(props: {
           list,
           activeId,
           t,
-          onRename: (id: string, name: string) => setList(saved.rename(id, name)),
+          onRename,
           onDuplicate,
           onDelete: (entry: SavedTheme) => setPendingDelete(entry),
           onLoad: onLoadSaved,
@@ -736,6 +880,30 @@ export function ThemePanel(props: {
         onConfirm: onConfirmDelete,
         onCancel: () => setPendingDelete(null),
       }),
+    )
+  }
+
+  // Outside the custom-mode branch: the banner reports the action, not the
+  // editor state, so switching the editor off mid-toast must not kill it.
+  if (toast) {
+    const onDone = () => setToast((cur) => (cur?.seq === toast.seq ? null : cur))
+    // The shell's toast when the host shares it — same banner the rest of DSH
+    // raises, portal included; the local one only covers a host without the
+    // primitives module.
+    const HostToast = getHostToast()
+    children.push(
+      HostToast
+        ? React.createElement(HostToast, {
+            key: `toast-${String(toast.seq)}`,
+            text: toast.text,
+            icon: React.createElement(ToastBadge),
+            onDone,
+          })
+        : React.createElement(Toast, {
+            key: `toast-${String(toast.seq)}`,
+            text: toast.text,
+            onDone,
+          }),
     )
   }
 

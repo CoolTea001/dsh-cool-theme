@@ -10,6 +10,7 @@ export declare const zh: {
     'appearance.desc': string;
     'presets.title': string;
     'presets.desc': string;
+    'presets.disabled': string;
     'scheme.light': string;
     'scheme.dark': string;
     'scheme.system': string;
@@ -41,6 +42,11 @@ export declare const zh: {
     'custom.duplicate': string;
     'custom.delete': string;
     'custom.cancel': string;
+    'custom.toast.reset': string;
+    'custom.toast.saved': string;
+    'custom.toast.duplicated': string;
+    'custom.toast.failed': string;
+    'custom.toast.unavailable': string;
     'custom.delete.title': string;
     'custom.delete.desc': string;
     'shiki.constant': string;
@@ -62,6 +68,7 @@ export declare const en: {
     'appearance.desc': string;
     'presets.title': string;
     'presets.desc': string;
+    'presets.disabled': string;
     'scheme.light': string;
     'scheme.dark': string;
     'scheme.system': string;
@@ -93,6 +100,11 @@ export declare const en: {
     'custom.duplicate': string;
     'custom.delete': string;
     'custom.cancel': string;
+    'custom.toast.reset': string;
+    'custom.toast.saved': string;
+    'custom.toast.duplicated': string;
+    'custom.toast.failed': string;
+    'custom.toast.unavailable': string;
     'custom.delete.title': string;
     'custom.delete.desc': string;
     'shiki.constant': string;

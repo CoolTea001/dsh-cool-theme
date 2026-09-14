@@ -16,6 +16,20 @@ Theme management (sidebar gear → Settings → Theme), supports `light` / `dark
 
 Custom colors: build your own scheme from 28 seeds — neutral, accent, success, warning, error, and the 9 syntax-highlighting tokens — each with separate light and dark values. The scales use exactly the same maths as the presets, so a custom theme is simply a preset computed at runtime. The editor previews what each appearance actually renders.
 
+## Where custom themes live
+
+Each saved custom theme is one directory under `$DSH_HOME/cool-theme/themes/<id>/` (`$DSH_HOME` defaults to `~/.dsh`):
+
+```
+~/.dsh/cool-theme/themes/ct_xxxxxxxx/
+  theme.json      # name, source preset, and the 28 seeds
+  assets/         # media carried with the theme (reserved)
+```
+
+`theme.json` is the whole record, so a theme can be copied to another machine by copying its directory. Writing is atomic: a reader sees either the previous file or the next one.
+
+Themes a browser saved before this layout existed are adopted into files on first load — each browser-side theme whose id the Host does not already have, so a theme migrated by one browser is not written twice. The browser copy is removed only after the write is confirmed.
+
 ## Installation
 
 The easiest way is to let DSH install it for you. For manual installation, see:

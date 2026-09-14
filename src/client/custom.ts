@@ -17,6 +17,7 @@
 import type { StaticMap } from './css/primitives.js'
 import { PRIMITIVES_LIGHT, PRIMITIVES_DARK } from './css/primitives.js'
 import type { PresetDef } from './presets.js'
+import type { ThemeAsset } from '../contract.js'
 import { buildScale, BLUISH_STEPS, NEUTRAL_STEPS, buildSemanticScales } from './presets/_helpers.js'
 
 export type { PresetDef }
@@ -303,6 +304,11 @@ export type SavedTheme = {
   /** Preset the seeds derive from; used for the "reset" fallback. */
   base: string
   theme: CustomTheme
+  /**
+   * Media stored beside the seeds. Empty until themes carry a background, but
+   * always carried through a rewrite so a later edit cannot drop one.
+   */
+  assets: ThemeAsset[]
 }
 
 /** Collision-resistant enough for a local list, and stable across reloads. */
@@ -332,7 +338,13 @@ export function decodeList(
       const e = item as Partial<SavedTheme>
       if (typeof e?.id !== 'string' || typeof e?.name !== 'string') continue
       const base = typeof e.base === 'string' ? e.base : ''
-      out.push({ id: e.id, name: e.name, base, theme: normalizeCustom(e.theme, fallbackFor(base)) })
+      out.push({
+        id: e.id,
+        name: e.name,
+        base,
+        theme: normalizeCustom(e.theme, fallbackFor(base)),
+        assets: Array.isArray(e.assets) ? e.assets : [],
+      })
     }
     return out
   } catch {

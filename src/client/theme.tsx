@@ -5,6 +5,7 @@ import {
   CUSTOM_THEME_STORAGE_KEY,
   CUSTOM_LIST_STORAGE_KEY,
   CUSTOM_ACTIVE_STORAGE_KEY,
+  CUSTOM_MIGRATED_STORAGE_KEY,
 } from '../contract.js'
 import { PRESETS, type PresetId, type PresetDef } from './presets.js'
 import { buildBaseCss, buildOverrides, buildFullCssFallback } from './tokens.js'
@@ -15,7 +16,6 @@ import {
   type SavedTheme,
   buildCustomPreset,
   encodeCustom,
-  encodeList,
   decodeList,
   extractSeeds,
   newThemeId,
@@ -23,11 +23,19 @@ import {
   normalizeCustom,
   parseEnvelope,
 } from './custom.js'
+import {
+  fetchThemes,
+  pushThemes,
+  removeTheme as removeThemeFile,
+  legacyThemesToAdopt,
+} from './theme-files.js'
 import { zh, en, type ThemeKey } from './locales.js'
 
 const BASE_CSS = [
   '.ct-select{box-sizing:border-box;display:inline-flex;align-items:center;gap:12px;height:36px;padding:0 14px;border:none;border-radius:18px;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:14px;line-height:22px;white-space:nowrap;width:auto;min-width:0;max-width:100%;}',
   '.ct-select:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);}',
+  // Locked while the custom theme owns the colours: dimmed and not clickable.
+  '.ct-select:disabled{opacity:.5;cursor:not-allowed;}',
   '.ct-select:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
   '.ct-select-label{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;}',
   '.ct-select-chevron{flex:none;color:var(--dsw-alias-label-tertiary);display:inline-flex;transition:transform 120ms ease;}',
@@ -81,13 +89,16 @@ const BASE_CSS = [
   '.ct-cell-text:hover{border-color:var(--dsw-alias-border-l2);}',
   '.ct-cell-text:focus{outline:none;border-color:var(--dsw-alias-border-l3);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);}',
   '.ct-actions{padding:16px 2px;display:flex;gap:12px;justify-content:flex-end;}',
-  // Saved-theme list under the editor.
-  '.ct-list{margin-top:4px;border-top:1px solid var(--dsw-alias-border-l2);}',
-  '.ct-list-row{display:flex;align-items:center;gap:12px;padding:10px 2px;border-bottom:1px solid var(--dsw-alias-border-l2);}',
-  '.ct-list-row:last-child{border-bottom:none;}',
+  // Saved-theme list under the editor. Cards rather than ruled rows, matching
+  // the preset picker in DSH's own settings: a 0.5px hairline and a 20px radius.
+  // Every entry keeps that same face — the active one is marked by its badge
+  // alone, so selection never competes with the hover fill.
+  '.ct-list{margin-top:4px;display:flex;flex-direction:column;gap:8px;}',
+  '.ct-list-row{display:flex;align-items:center;gap:12px;padding:10px 12px 10px 16px;border:.5px solid var(--dsw-alias-border-l4);border-radius:20px;background:transparent;cursor:pointer;transition:border-color .16s ease,background .16s ease;}',
+  '.ct-list-row:hover{background:var(--dsw-alias-interactive-bg-hover);}',
+  // The name is clickable (loads the theme); the card's own hover fill is the
+  // only cue — an underline on top of it would read as a link, not a surface.
   '.ct-list-name{flex:1 1 auto;min-width:0;text-align:left;border:none;background:transparent;cursor:pointer;font:inherit;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 0;}',
-  // The name is clickable (loads the theme), so hover keeps a cue without a colour shift.
-  '.ct-list-name:hover{text-decoration:underline;}',
   // Metrics match .ct-list-name on purpose: renaming should look like editing the
   // existing text, not like a form control appearing.
   '.ct-list-input{flex:1 1 auto;min-width:0;box-sizing:border-box;padding:2px 0;border:none;border-radius:0;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:20px;}',
@@ -123,6 +134,19 @@ const BASE_CSS = [
   '.ct-btn-primary:hover{background:var(--dsw-static-deepseek-450,var(--dsw-static-deepseek-500,rgb(86,134,254)));}',
   '.ct-btn-danger{background:var(--dsw-static-red-500,rgb(239,68,68));border-color:transparent;color:#fff;}',
   '.ct-btn-danger:hover{background:var(--dsw-static-red-600,var(--dsw-static-red-500,rgb(236,19,19)));}',
+  // Transient confirmation banner, matching DSH's own toast: a success badge
+  // plus the copy, top center, slide in, hold, fade out. The 3000ms/1000ms pair
+  // has to agree with TOAST_HOLD_MS and TOAST_FADE_MS in components.tsx, which
+  // own the unmount timer.
+  '.ct-toast{position:fixed;top:40px;left:50%;z-index:1100;pointer-events:none;display:flex;align-items:center;gap:10px;width:max-content;max-width:min(640px,calc(100vw - 48px));padding:12px 16px;border-radius:14px;background:var(--dsw-alias-button-contrast-fill);color:var(--dsw-alias-label-primary-inverted);font-size:14px;line-height:22px;box-shadow:var(--dsw-shadow-lv3);transform:translateX(-50%);animation:ct-toast-in 160ms ease-out,ct-toast-fade 1s ease 3s forwards;}',
+  // The badge DSH's confirmations wear: an 18px success ring around the check.
+  '.ct-toast-icon{display:grid;place-items:center;flex:none;width:18px;height:18px;border:1.5px solid var(--dsw-alias-state-success-primary);border-radius:50%;corner-shape:round;color:var(--dsw-alias-state-success-primary);}',
+  '.ct-toast-text{min-width:0;}',
+  '@keyframes ct-toast-in{from{opacity:0;transform:translate(-50%,-6px);}to{opacity:1;transform:translate(-50%,0);}}',
+  '@keyframes ct-toast-fade{to{opacity:0;}}',
+  // The delayed fade is an opacity change, not movement: keeping it under
+  // reduced motion still ends the banner before the timed unmount.
+  '@media (prefers-reduced-motion: reduce){.ct-toast{animation:ct-toast-fade 1s ease 3s forwards;}}',
 ].join('\n')
 
 const NOOP = new Set<PresetId>(['native', 'dsh'])
@@ -257,21 +281,6 @@ export function registerTheme(ctx: any) {
     apply(buildCustomPreset(next))
   }
 
-  /**
-   * Re-seed the custom theme from another preset while staying in custom mode.
-   * Used when the preset picker changes with the custom switch already on, so
-   * the switch stays on and the editor table picks up that preset's palette.
-   */
-  function rebaseCustom(nextBase: PresetId): CustomTheme {
-    const next = extractSeeds(presetDef(nextBase))
-    try {
-      localStorage.setItem(CUSTOM_THEME_STORAGE_KEY, encodeCustom(nextBase, next))
-    } catch {}
-    lastPreset = nextBase
-    apply(buildCustomPreset(next))
-    return next
-  }
-
   function resetCustom(): CustomTheme {
     const base = customBase()
     const theme = extractSeeds(presetDef(base))
@@ -300,12 +309,47 @@ export function registerTheme(ctx: any) {
   const fallbackForBase = (base: string): CustomTheme =>
     extractSeeds(presetDef(isPresetId(base) ? base : lastPreset))
 
-  const readList = () => decodeList(readRaw(CUSTOM_LIST_STORAGE_KEY), fallbackForBase)
-  const writeList = (list: SavedTheme[]) => writeRaw(CUSTOM_LIST_STORAGE_KEY, encodeList(list))
+  /**
+   * The roster as the Host last reported it; `null` means it has not answered
+   * yet. Files are the source of truth, so this is a read-through cache the
+   * panel renders from, and every mutation is a round trip plus a refresh.
+   */
+  let themeCache: SavedTheme[] | null = null
+
+  /** The legacy browser list, read only until the Host has answered. */
+  const legacyList = () => decodeList(readRaw(CUSTOM_LIST_STORAGE_KEY), fallbackForBase)
+
+  /** The roster to render and resolve ids against. */
+  const readList = (): SavedTheme[] => themeCache ?? legacyList()
 
   function readActiveId(): string | null {
     const id = readRaw(CUSTOM_ACTIVE_STORAGE_KEY)
     return id && readList().some((e) => e.id === id) ? id : null
+  }
+
+  /**
+   * Adopt the themes this browser saved before they lived in files. Runs once:
+   * the marker keeps a stale browser copy from being migrated twice, and is only
+   * set after a confirmed write, so a failed migration retries next load.
+   */
+  async function migrateLegacyThemes(hostThemes: SavedTheme[]): Promise<SavedTheme[]> {
+    if (readRaw(CUSTOM_MIGRATED_STORAGE_KEY) !== null) return hostThemes
+    const adopt = legacyThemesToAdopt(legacyList(), hostThemes)
+    if (adopt.length > 0) {
+      // Throws on failure, which leaves the marker unset and the browser copy in
+      // place for the next load.
+      await pushThemes(adopt, fallbackForBase)
+    }
+    writeRaw(CUSTOM_MIGRATED_STORAGE_KEY, new Date().toISOString())
+    writeRaw(CUSTOM_LIST_STORAGE_KEY, null)
+    // Re-read rather than merging locally: the Host owns ordering and stamps.
+    return adopt.length > 0 ? fetchThemes(fallbackForBase) : hostThemes
+  }
+
+  /** Re-read the roster from the Host, migrating the legacy list on first load. */
+  async function refreshSaved(): Promise<SavedTheme[]> {
+    themeCache = await migrateLegacyThemes(await fetchThemes(fallbackForBase))
+    return themeCache
   }
 
   /** Load a saved entry into the draft and make it the active theme. */
@@ -320,53 +364,62 @@ export function registerTheme(ctx: any) {
   }
 
   const saved = {
+    /** The cached roster, or the legacy browser list until the Host answers. */
     list: readList,
     activeId: readActiveId,
     load: loadSaved,
+    refresh: refreshSaved,
     /** Update the active entry, or create one on the first save. */
-    save(): SavedTheme[] {
+    async save(): Promise<SavedTheme[]> {
       const draft = loadCustom()
-      const list = readList()
+      const roster = readList()
       const active = readActiveId()
-      if (active) {
-        const next = list.map((e) => (e.id === active ? { ...e, base: draft.base, theme: draft.theme } : e))
-        writeList(next)
-        return next
+      const current = active ? roster.find((e) => e.id === active) : undefined
+      if (current) {
+        await pushThemes([{ ...current, base: draft.base, theme: draft.theme }], fallbackForBase)
+      } else {
+        const entry: SavedTheme = {
+          id: newThemeId(),
+          name: nextThemeName(t('custom.defaultName'), roster.map((e) => e.name)),
+          base: draft.base,
+          theme: draft.theme,
+          assets: [],
+        }
+        await pushThemes([entry], fallbackForBase)
+        writeRaw(CUSTOM_ACTIVE_STORAGE_KEY, entry.id)
       }
-      const entry: SavedTheme = {
-        id: newThemeId(),
-        name: nextThemeName(t('custom.defaultName'), list.map((e) => e.name)),
-        base: draft.base,
-        theme: draft.theme,
-      }
-      const next = [...list, entry]
-      writeList(next)
-      writeRaw(CUSTOM_ACTIVE_STORAGE_KEY, entry.id)
-      return next
+      return refreshSaved()
     },
-    rename(id: string, name: string): SavedTheme[] {
-      const next = readList().map((e) => (e.id === id ? { ...e, name } : e))
-      writeList(next)
-      return next
+    async rename(id: string, name: string): Promise<SavedTheme[]> {
+      const entry = readList().find((e) => e.id === id)
+      if (!entry) return readList()
+      await pushThemes([{ ...entry, name }], fallbackForBase)
+      return refreshSaved()
     },
     /** Copy an entry so the copy can be tweaked independently; the copy becomes active. */
-    duplicate(id: string): CustomTheme | null {
-      const list = readList()
-      const src = list.find((e) => e.id === id)
+    async duplicate(id: string): Promise<CustomTheme | null> {
+      const src = readList().find((e) => e.id === id)
       if (!src) return null
       const entry: SavedTheme = {
         id: newThemeId(),
         name: `${src.name} ${t('custom.copySuffix')}`,
         base: src.base,
         theme: src.theme,
+        assets: src.assets,
       }
-      writeList([...list, entry])
+      await pushThemes([entry], fallbackForBase)
+      await refreshSaved()
       return loadSaved(entry.id)
     },
-    remove(id: string): SavedTheme[] {
-      const next = readList().filter((e) => e.id !== id)
-      writeList(next)
+    async remove(id: string): Promise<SavedTheme[]> {
       if (readRaw(CUSTOM_ACTIVE_STORAGE_KEY) === id) writeRaw(CUSTOM_ACTIVE_STORAGE_KEY, null)
+      await removeThemeFile(id)
+      const next = await refreshSaved()
+      // Deleting the active entry would otherwise leave no selection while the
+      // list still has entries: fall back to the first one, which also swaps in
+      // its theme so the removal takes effect on screen instead of leaving the
+      // deleted theme applied.
+      if (readActiveId() === null && next[0]) loadSaved(next[0].id)
       return next
     },
   }
@@ -381,6 +434,20 @@ export function registerTheme(ctx: any) {
   }
 
   apply(initialSelection)
+
+  // The shell's own toast, when the host shares its primitives module with
+  // plugins. Resolved once at mount: the module table is static, so a miss is
+  // permanent and simply keeps the local fallback in components.tsx.
+  let sharedToast: ((props: any) => any) | null = null
+  const modules: any = ctx.get('modules')
+  try {
+    void modules
+      ?.import?.('@deepseek-ai/dsh-client-ui-primitives')
+      .then((mod: any) => {
+        if (typeof mod?.Toast === 'function') sharedToast = mod.Toast
+      })
+      .catch(() => {})
+  } catch {}
 
   ctx.effect(() => () => {
     release(pluginCssDisposer)
@@ -401,9 +468,9 @@ export function registerTheme(ctx: any) {
         setSelection,
         getCustom: loadCustom,
         setCustom,
-        rebaseCustom,
         resetCustom,
         saved,
+        getHostToast: () => sharedToast,
       }),
     )
   })
