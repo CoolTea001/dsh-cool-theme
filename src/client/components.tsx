@@ -739,12 +739,25 @@ export function ThemePanel(props: {
     setPendingDelete(null)
     // A deleted card must not stay open in the editor.
     setEditing((cur) => (cur?.id === id ? null : cur))
-    if ((await mutate(() => saved.remove(id))) === null) return
+    const next = await mutate(() => saved.remove(id))
+    if (next === null) return
     setActiveId(saved.activeId())
     // Removing the active entry re-seats the first remaining one, so the draft
     // has to follow it rather than keeping the deleted theme's seeds on screen.
     setCustomState(getCustom().theme)
     setList(saved.list())
+    // Deleting the last card leaves custom mode with nothing to reopen, so the
+    // colours go back to the preset the picker is showing. Custom mode itself
+    // stays on — deleting every theme is a common step before creating a new
+    // one, and forcing the switch off would only make the user turn it back on.
+    // The draft is reseeded from that preset as well: otherwise the deleted
+    // theme would stay in the stored blob and come back as a "new" unsaved
+    // theme the next time the editor opens.
+    if (next.length === 0) {
+      setEditing(null)
+      setCustomBase(shownPreset)
+      setCustomState(resetCustom())
+    }
   }
 
   function pickScheme(id: string) {
