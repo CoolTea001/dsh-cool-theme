@@ -19,7 +19,7 @@ export declare function savedToDocument(entry: SavedTheme): Record<string, unkno
  */
 export declare class ThemeApiUnavailableError extends Error {
 }
-/** Every stored theme, newest first. */
+/** Every stored theme, in the Host's creation-time order (newest first). */
 export declare function fetchThemes(fallbackFor: (base: string) => CustomTheme): Promise<SavedTheme[]>;
 /** Insert or replace the given entries; resolves with what the Host stored. */
 export declare function pushThemes(entries: SavedTheme[], fallbackFor: (base: string) => CustomTheme): Promise<SavedTheme[]>;
