@@ -17,7 +17,7 @@ export declare function harnessHome(): string;
 export declare function themesRoot(): string;
 /** One theme's own directory. Callers must have validated `id`. */
 export declare function themeDir(id: string): string;
-/** Every stored theme, newest by creation time first; unreadable directories are skipped. */
+/** Every stored theme, oldest by creation time first; unreadable directories are skipped. */
 export declare function listThemes(): Promise<ThemeDocument[]>;
 /**
  * Insert or replace one document. `createdAt` is the caller's when the theme is

@@ -110,7 +110,7 @@ async function writeDocument(doc: ThemeDocument): Promise<void> {
   await rename(temp, documentPath(doc.id))
 }
 
-/** Every stored theme, newest by creation time first; unreadable directories are skipped. */
+/** Every stored theme, oldest by creation time first; unreadable directories are skipped. */
 export async function listThemes(): Promise<ThemeDocument[]> {
   let entries: string[]
   try {
@@ -124,7 +124,10 @@ export async function listThemes(): Promise<ThemeDocument[]> {
     const doc = await readDocument(id)
     if (doc !== null) documents.push(doc)
   }
-  documents.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+  // Creation time, oldest first: a rename or an edit must not move a theme, so
+  // only a brand-new one changes the list, and it lands at the bottom. Ties
+  // keep their directory order.
+  documents.sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0))
   return documents
 }
 

@@ -73,7 +73,7 @@ async function callApi(path: string, init?: RequestInit): Promise<Record<string,
   return isRecord(payload) ? payload : {}
 }
 
-/** Every stored theme, in the Host's creation-time order (newest first). */
+/** Every stored theme, in the Host's creation-time order (oldest first). */
 export async function fetchThemes(
   fallbackFor: (base: string) => CustomTheme,
 ): Promise<SavedTheme[]> {
