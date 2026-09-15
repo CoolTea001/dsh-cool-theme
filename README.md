@@ -1,4 +1,4 @@
-![dsh-cool-theme cover](https://cdn.cooltea.top/dsh-cool-theme/readme-cover-v0.4.0.png)
+![dsh-cool-theme cover](https://cdn.cooltea.top/dsh-cool-theme/readme-cover-v0.5.0.png)
 
 # dsh-cool-theme
 
@@ -8,47 +8,24 @@ English · [中文](./README.zh.md)
 
 ## Description
 
-DeepSeek Harness theme plugin — supports light / dark / system appearance switching with 34 preset themes.
+DeepSeek Harness theme plugin — supports Dark / Light / System appearance switching, ships 34 preset themes, and supports custom theme colors.
 
 ## Features
 
-Theme management (sidebar gear → Settings → Theme), supports `light` / `dark` / `system` appearance switching and provides 34 presets: Aura, Ayu, Catppuccin, Catppuccin Frappe, Catppuccin Macchiato, Cobalt2, Cursor, DSH, Dracula, Everforest, Flexoki, GitHub, Gruvbox, Kanagawa, Lucent Orng, Material, Matrix, Mercury, Monokai, Night Owl, Nord, One Dark, OpenCode, Orng, Osaka Jade, Palenight, Rosé Pine, Solarized, Synthwave 84, System, Tokyo Night, Vercel, Vesper, Zenburn. All presets support both light and dark modes.
-
-Custom colors: build your own scheme from 30 seeds — a neutral ramp per appearance, accent, success, warning, error, and the 9 syntax-highlighting tokens — each with separate light and dark values. The scales use exactly the same maths as the presets, so a custom theme is simply a preset computed at runtime. The editor previews what each appearance actually renders.
-
-Unlike the presets, which ship one neutral ramp shared by both appearances, a custom theme builds one ramp per appearance. DSH's alias layer reads different steps in each appearance (light: step 00 for surfaces and step 1000 for text; dark: step 950 for surfaces and step 50 for text), so a shared ramp binds the light body text to the dark surfaces and neither can be tuned on its own. Splitting the ramp removes that coupling.
-
-Custom themes are off by default. Turning the switch on reveals the saved-theme cards plus an **Add custom theme** button: clicking it opens an editable card above the button with a name field and the colour rows, and the card is committed with **Save** or discarded with **Cancel**. Every saved card can be reopened with its **Edit** button. An open card with unsaved edits guards the settings dialog: closing it (the close button, the mask, or Escape) asks first, and discarding puts the pre-edit theme back.
-
-The preset picker is locked while the custom theme is on. Preset and custom are independent selections: a new custom theme seeds its colours from whichever preset is currently selected, and nothing else ties the two together. Each colour row shows one round swatch per seed — two for neutral, reading background then foreground — and the light/dark toggle above them switches which appearance's values the swatches edit. Because the same ramp end means opposite things in the two appearances, each neutral swatch resolves its role for the selected appearance instead of naming a fixed ramp position.
-
-## Where custom themes live
-
-Each saved custom theme is one directory under `$DSH_HOME/cool-theme/themes/<id>/` (`$DSH_HOME` defaults to `~/.dsh`):
-
-```
-~/.dsh/cool-theme/themes/ct_xxxxxxxx/
-  theme.json      # name, source preset, and the 30 seeds
-  assets/         # media carried with the theme (reserved)
-```
-
-`theme.json` is the whole record, so a theme can be copied to another machine by copying its directory. Writing is atomic: a reader sees either the previous file or the next one.
-
-Themes a browser saved before this layout existed are adopted into files on first load — each browser-side theme whose id the Host does not already have, so a theme migrated by one browser is not written twice. The browser copy is removed only after the write is confirmed.
+1. **Appearance switching:** The appearance switch from General settings is now managed in Theme settings. You can set the appearance (dark, light, or system) in the Settings dialog → Theme tab.
+2. **34 preset themes:** 34 built-in presets, each adapted to both dark and light appearance: Aura, Ayu, Catppuccin, Catppuccin Frappe, Catppuccin Macchiato, Cobalt2, Cursor, DSH, Dracula, Everforest, Flexoki, GitHub, Gruvbox, Kanagawa, Lucent Orng, Material, Matrix, Mercury, Monokai, Night Owl, Nord, One Dark, OpenCode, Orng, Osaka Jade, Palenight, Rosé Pine, Solarized, Synthwave 84, System, Tokyo Night, Vercel, Vesper, Zenburn.
+3. **Custom themes:** Turn on custom themes to create your own (colors inherit from the currently selected preset), and freely change the theme colors.
 
 ## Installation
 
-The easiest way is to let DSH install it for you. For manual installation, see:
-
-```
-# Install
-dsh plugin --profile <your-profile> add dsh-cool-theme
+```bash
+# Install: dsh plugin --profile <your-profile> add dsh-cool-theme
+dsh plugin --profile web add dsh-cool-theme # Web
+dsh plugin --profile desktop add dsh-cool-theme # Desktop
 
 # Uninstall
 dsh plugin --profile <your-profile> remove dsh-cool-theme
 ```
-
-> Replace `<your-profile>` with your DSH profile, e.g. `web` for DSH Web and `desktop` for DSH Desktop.
 
 ## Contributing
 
