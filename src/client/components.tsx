@@ -10,6 +10,7 @@ import { ThemeApiUnavailableError } from './theme-files.js'
 import {
   type CustomTheme,
   type Mode,
+  type NeutralRamp,
   type SavedTheme,
   type SeedPair,
   SHIKI_KEYS,
@@ -44,12 +45,33 @@ function samePair(a: SeedPair | undefined, b: SeedPair | undefined): boolean {
   return a?.light === b?.light && a?.dark === b?.dark
 }
 
-/** Structural equality over all 28 seeds, ignoring key order. */
+/** Structural equality of the two endpoints of one neutral ramp. */
+function sameRamp(a: NeutralRamp | undefined, b: NeutralRamp | undefined): boolean {
+  return a?.lightest === b?.lightest && a?.darkest === b?.darkest
+}
+
+/** Structural equality over all 30 seeds, ignoring key order. */
 function sameSeeds(a: CustomTheme, b: CustomTheme): boolean {
-  if (a.neutralLightest !== b.neutralLightest || a.neutralDarkest !== b.neutralDarkest) return false
+  if (!sameRamp(a.neutral?.light, b.neutral?.light) || !sameRamp(a.neutral?.dark, b.neutral?.dark)) return false
   if (!samePair(a.accent, b.accent) || !samePair(a.green, b.green)) return false
   if (!samePair(a.amber, b.amber) || !samePair(a.red, b.red)) return false
   return SHIKI_KEYS.every((k) => samePair(a.shiki?.[k], b.shiki?.[k]))
+}
+
+/** The two roles one appearance's neutral ramp fills, in display order. */
+const NEUTRAL_ROLES = ['background', 'foreground'] as const
+type NeutralRole = (typeof NEUTRAL_ROLES)[number]
+
+/**
+ * The ramp end that paints an appearance's background or foreground. DSH points
+ * its aliases at step 00 for light surfaces and step 1000 for light text, then
+ * swaps both in dark (950 surfaces, 50 text), so the same end means opposite
+ * things in the two appearances. Naming the role and resolving it per appearance
+ * keeps the swatches in a stable background-then-foreground order.
+ */
+function neutralEndForRole(mode: Mode, role: NeutralRole): 'lightest' | 'darkest' {
+  const backgroundIsLightest = mode === 'light'
+  return (role === 'background') === backgroundIsLightest ? 'lightest' : 'darkest'
 }
 
 /**
@@ -853,20 +875,29 @@ export function ThemePanel(props: {
       onChange: (v: string) => editCustom({ ...custom, [key]: { ...custom[key], [seedMode]: v } }),
     })
 
-    // The neutral row edits the ramp's two endpoints rather than a per-mode
-    // colour, so its two ends are named for what they are.
-    const neutral: SeedDot = {
-      key: 'neutral',
-      name: t('custom.neutral.title'),
-      hint: `${t('custom.neutral.desc')} — ${seedMode === 'light' ? t('custom.neutral.lightest') : t('custom.neutral.darkest')}`,
-      value: seedMode === 'light' ? custom.neutralLightest : custom.neutralDarkest,
-      onChange: (v: string) =>
-        editCustom(seedMode === 'light' ? { ...custom, neutralLightest: v } : { ...custom, neutralDarkest: v }),
-    }
+    // One dot per role, always background then foreground: the ramp is
+    // per-appearance now, so these two dots only ever move the appearance the
+    // toggle is on — the light dots can no longer change the dark body text.
+    // Which end each role sits on flips with the appearance, so it is resolved
+    // rather than hard-coded.
+    const neutralDots: SeedDot[] = NEUTRAL_ROLES.map((role) => {
+      const end = neutralEndForRole(seedMode, role)
+      return {
+        key: `neutral-${end}`,
+        name: t(role === 'background' ? 'custom.neutral.roleBackground' : 'custom.neutral.roleForeground'),
+        hint: `${t('custom.neutral.title')} · ${t('custom.neutral.desc')} — ${t(end === 'lightest' ? 'custom.neutral.lightest' : 'custom.neutral.darkest')}`,
+        value: custom.neutral[seedMode][end],
+        onChange: (v: string) =>
+          editCustom({
+            ...custom,
+            neutral: { ...custom.neutral, [seedMode]: { ...custom.neutral[seedMode], [end]: v } },
+          }),
+      }
+    })
 
     const seedDots: SeedDot[] = [
       pair('accent', 'custom.accent.title', 'custom.accent.desc'),
-      neutral,
+      ...neutralDots,
       pair('green', 'custom.green.title', 'custom.green.desc'),
       pair('amber', 'custom.amber.title', 'custom.amber.desc'),
       pair('red', 'custom.red.title', 'custom.red.desc'),

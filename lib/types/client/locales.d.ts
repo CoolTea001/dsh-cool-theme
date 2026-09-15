@@ -23,6 +23,8 @@ export declare const zh: {
     'custom.neutral.desc': string;
     'custom.neutral.lightest': string;
     'custom.neutral.darkest': string;
+    'custom.neutral.roleBackground': string;
+    'custom.neutral.roleForeground': string;
     'custom.accent.title': string;
     'custom.accent.desc': string;
     'custom.green.title': string;
@@ -83,6 +85,8 @@ export declare const en: {
     'custom.neutral.desc': string;
     'custom.neutral.lightest': string;
     'custom.neutral.darkest': string;
+    'custom.neutral.roleBackground': string;
+    'custom.neutral.roleForeground': string;
     'custom.accent.title': string;
     'custom.accent.desc': string;
     'custom.green.title': string;

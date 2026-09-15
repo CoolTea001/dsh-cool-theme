@@ -14,11 +14,13 @@ DeepSeek Harness theme plugin — supports light / dark / system appearance swit
 
 Theme management (sidebar gear → Settings → Theme), supports `light` / `dark` / `system` appearance switching and provides 34 presets: Aura, Ayu, Catppuccin, Catppuccin Frappe, Catppuccin Macchiato, Cobalt2, Cursor, DSH, Dracula, Everforest, Flexoki, GitHub, Gruvbox, Kanagawa, Lucent Orng, Material, Matrix, Mercury, Monokai, Night Owl, Nord, One Dark, OpenCode, Orng, Osaka Jade, Palenight, Rosé Pine, Solarized, Synthwave 84, System, Tokyo Night, Vercel, Vesper, Zenburn. All presets support both light and dark modes.
 
-Custom colors: build your own scheme from 28 seeds — neutral, accent, success, warning, error, and the 9 syntax-highlighting tokens — each with separate light and dark values. The scales use exactly the same maths as the presets, so a custom theme is simply a preset computed at runtime. The editor previews what each appearance actually renders.
+Custom colors: build your own scheme from 30 seeds — a neutral ramp per appearance, accent, success, warning, error, and the 9 syntax-highlighting tokens — each with separate light and dark values. The scales use exactly the same maths as the presets, so a custom theme is simply a preset computed at runtime. The editor previews what each appearance actually renders.
+
+Unlike the presets, which ship one neutral ramp shared by both appearances, a custom theme builds one ramp per appearance. DSH's alias layer reads different steps in each appearance (light: step 00 for surfaces and step 1000 for text; dark: step 950 for surfaces and step 50 for text), so a shared ramp binds the light body text to the dark surfaces and neither can be tuned on its own. Splitting the ramp removes that coupling.
 
 Custom themes are off by default. Turning the switch on reveals the saved-theme cards plus an **Add custom theme** button: clicking it opens an editable card above the button with a name field and the colour rows, and the card is committed with **Save** or discarded with **Cancel**. Every saved card can be reopened with its **Edit** button. An open card with unsaved edits guards the settings dialog: closing it (the close button, the mask, or Escape) asks first, and discarding puts the pre-edit theme back.
 
-The preset picker is locked while the custom theme is on. Preset and custom are independent selections: a new custom theme seeds its colours from whichever preset is currently selected, and nothing else ties the two together. Each colour row shows one round swatch per seed, and the light/dark toggle above them switches which appearance's values the swatches edit.
+The preset picker is locked while the custom theme is on. Preset and custom are independent selections: a new custom theme seeds its colours from whichever preset is currently selected, and nothing else ties the two together. Each colour row shows one round swatch per seed — two for neutral, reading background then foreground — and the light/dark toggle above them switches which appearance's values the swatches edit. Because the same ramp end means opposite things in the two appearances, each neutral swatch resolves its role for the selected appearance instead of naming a fixed ramp position.
 
 ## Where custom themes live
 
@@ -26,7 +28,7 @@ Each saved custom theme is one directory under `$DSH_HOME/cool-theme/themes/<id>
 
 ```
 ~/.dsh/cool-theme/themes/ct_xxxxxxxx/
-  theme.json      # name, source preset, and the 28 seeds
+  theme.json      # name, source preset, and the 30 seeds
   assets/         # media carried with the theme (reserved)
 ```
 

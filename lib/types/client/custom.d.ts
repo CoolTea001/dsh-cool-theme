@@ -5,10 +5,12 @@
  * `buildScale` / `buildSemanticScales` helpers with the same steps and weights,
  * and the same `t = step / 1000` interpolation. A custom theme is therefore not
  * a special case: it produces a complete 73-primitive + 9-shiki map that flows
- * through `resolvePreset` -> `primitiveOverrides` unchanged.
+ * through `resolvePreset` -> `primitiveOverrides` unchanged. The one structural
+ * difference is the neutral ramp, which is built per appearance (see below).
  *
  * Seed groups (6):
- *   neutral  merged `--dsw-static-neutral-bluish-*` + `--dsw-static-neutral-*`
+ *   neutral  merged `--dsw-static-neutral-bluish-*` + `--dsw-static-neutral-*`,
+ *            one ramp PER appearance
  *   accent   merged `--dsw-static-deepseek-*` + `--dsw-static-blue-*`
  *   green / amber / red
  *   shiki    9 syntax tokens
@@ -25,16 +27,24 @@ export type SeedPair = {
 /** The nine `--shiki-token-*` slots, in stylesheet order. */
 export declare const SHIKI_KEYS: readonly ["constant", "string", "comment", "keyword", "parameter", "function", "string-expression", "punctuation", "link"];
 export type ShikiKey = (typeof SHIKI_KEYS)[number];
-/** Everything a user can edit. 2 + 4*2 + 9*2 = 28 colours. */
+/** The two endpoints of ONE appearance's neutral ramp: step 00 and step 1000. */
+export type NeutralRamp = {
+    lightest: string;
+    darkest: string;
+};
+/** Everything a user can edit. 2*2 + 4*2 + 9*2 = 30 colours. */
 export type CustomTheme = {
     /**
-     * Endpoints of the ONE neutral ramp shared by both appearances, matching how
-     * presets call `buildScale`. They are the ramp's lightest and darkest values,
-     * not the light/dark background colours themselves: DSH reads step 00 for the
-     * light `bg-base` and step 950 for the dark one.
+     * One neutral ramp PER appearance. DSH's alias layer picks a different step
+     * per appearance — light reads step 00 for surfaces and step 1000 for text,
+     * dark reads step 950 for surfaces and step 50 for text — so a ramp shared by
+     * both appearances ties light text to dark surfaces and cannot be tuned. Each
+     * ramp still runs lightest -> darkest; only the endpoints are per-appearance.
+     *
+     * Presets keep the single shared ramp they were authored with; only the
+     * runtime-generated custom theme splits it.
      */
-    neutralLightest: string;
-    neutralDarkest: string;
+    neutral: Record<Mode, NeutralRamp>;
     /** `--dsw-static-deepseek-*` and `--dsw-static-blue-*` share this base. */
     accent: SeedPair;
     green: SeedPair;
@@ -63,8 +73,11 @@ export declare function toHex(input: unknown): string;
  * what lets a user start from any preset without re-declaring its palette.
  */
 export declare function extractSeeds(base: PresetDef): CustomTheme;
-/** Bump when the `CustomTheme` shape changes so old blobs can be migrated. */
-export declare const CUSTOM_SCHEMA_VERSION = 1;
+/**
+ * Bump when the `CustomTheme` shape changes so old blobs can be migrated.
+ * v2 split the neutral ramp per appearance; v1 blobs stay readable.
+ */
+export declare const CUSTOM_SCHEMA_VERSION = 2;
 /** Self-contained stored form: records the preset the seeds were derived from. */
 export type CustomEnvelope = {
     v: number;
@@ -74,12 +87,14 @@ export type CustomEnvelope = {
 export declare function encodeCustom(base: string, theme: CustomTheme): string;
 /** Parse a stored blob. Returns null for absent/corrupt/foreign-version data. */
 export declare function parseEnvelope(raw: string | null): CustomEnvelope | null;
-/** Repair a partially-invalid object against `fallback`, keeping every valid colour. */ export declare function normalizeCustom(raw: unknown, fallback: CustomTheme): CustomTheme;
+/** Repair a partially-invalid object against `fallback`, keeping every valid colour. */
+export declare function normalizeCustom(raw: unknown, fallback: CustomTheme): CustomTheme;
 /**
  * Turn seeds into a full `PresetDef` using the presets' own helpers.
  *
- * The neutral ramp is built once and shared by both appearances, exactly as
- * 30 of the 34 shipped presets do.
+ * Unlike the presets (which ship one ramp for both appearances), the ramp is
+ * built once per appearance, so the light text and the dark text are no longer
+ * the two ends of the same colour axis.
  */
 export declare function buildCustomPreset(v: CustomTheme): PresetDef;
 /** A named custom theme the user saved. */

@@ -5,10 +5,12 @@
  * `buildScale` / `buildSemanticScales` helpers with the same steps and weights,
  * and the same `t = step / 1000` interpolation. A custom theme is therefore not
  * a special case: it produces a complete 73-primitive + 9-shiki map that flows
- * through `resolvePreset` -> `primitiveOverrides` unchanged.
+ * through `resolvePreset` -> `primitiveOverrides` unchanged. The one structural
+ * difference is the neutral ramp, which is built per appearance (see below).
  *
  * Seed groups (6):
- *   neutral  merged `--dsw-static-neutral-bluish-*` + `--dsw-static-neutral-*`
+ *   neutral  merged `--dsw-static-neutral-bluish-*` + `--dsw-static-neutral-*`,
+ *            one ramp PER appearance
  *   accent   merged `--dsw-static-deepseek-*` + `--dsw-static-blue-*`
  *   green / amber / red
  *   shiki    9 syntax tokens
@@ -41,16 +43,22 @@ export const SHIKI_KEYS = [
 ] as const
 export type ShikiKey = (typeof SHIKI_KEYS)[number]
 
-/** Everything a user can edit. 2 + 4*2 + 9*2 = 28 colours. */
+/** The two endpoints of ONE appearance's neutral ramp: step 00 and step 1000. */
+export type NeutralRamp = { lightest: string; darkest: string }
+
+/** Everything a user can edit. 2*2 + 4*2 + 9*2 = 30 colours. */
 export type CustomTheme = {
   /**
-   * Endpoints of the ONE neutral ramp shared by both appearances, matching how
-   * presets call `buildScale`. They are the ramp's lightest and darkest values,
-   * not the light/dark background colours themselves: DSH reads step 00 for the
-   * light `bg-base` and step 950 for the dark one.
+   * One neutral ramp PER appearance. DSH's alias layer picks a different step
+   * per appearance — light reads step 00 for surfaces and step 1000 for text,
+   * dark reads step 950 for surfaces and step 50 for text — so a ramp shared by
+   * both appearances ties light text to dark surfaces and cannot be tuned. Each
+   * ramp still runs lightest -> darkest; only the endpoints are per-appearance.
+   *
+   * Presets keep the single shared ramp they were authored with; only the
+   * runtime-generated custom theme splits it.
    */
-  neutralLightest: string
-  neutralDarkest: string
+  neutral: Record<Mode, NeutralRamp>
   /** `--dsw-static-deepseek-*` and `--dsw-static-blue-*` share this base. */
   accent: SeedPair
   green: SeedPair
@@ -88,6 +96,10 @@ const SHIKI_FALLBACK: Record<Mode, Record<ShikiKey, string>> = {
 const HEX = /^#([0-9a-f]{3,8})$/i
 const RGB_FN = /^rgba?\(([^)]*)\)$/i
 const HSL_FN = /^hsla?\(([^)]*)\)$/i
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
 const clamp255 = (n: number) => Math.max(0, Math.min(255, Math.round(n)))
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
@@ -189,6 +201,12 @@ export function extractSeeds(base: PresetDef): CustomTheme {
 
   const pair = (key: string): SeedPair => ({ light: seed(key, 'light'), dark: seed(key, 'dark') })
 
+  /** Both ends of one appearance's ramp, read from that appearance's map. */
+  const ramp = (mode: Mode): NeutralRamp => ({
+    lightest: seed('--dsw-static-neutral-bluish-00', mode),
+    darkest: seed('--dsw-static-neutral-bluish-1000', mode),
+  })
+
   const shiki = SHIKI_KEYS.reduce<Record<ShikiKey, SeedPair>>((acc, k) => {
     const cssKey = `--shiki-token-${k}`
     const lightMap = base.light as Record<string, string | undefined>
@@ -201,8 +219,10 @@ export function extractSeeds(base: PresetDef): CustomTheme {
   }, {} as Record<ShikiKey, SeedPair>)
 
   return {
-    neutralLightest: seed('--dsw-static-neutral-bluish-00', 'light'),
-    neutralDarkest: seed('--dsw-static-neutral-bluish-1000', 'dark'),
+    // A preset ships the same ramp in both maps, so reading each map for its
+    // own ramp reproduces that preset exactly — while the custom editor can now
+    // move the two ramps apart.
+    neutral: { light: ramp('light'), dark: ramp('dark') },
     accent: pair('--dsw-static-deepseek-500'),
     green: pair('--dsw-static-green-500'),
     amber: pair('--dsw-static-amber-500'),
@@ -211,8 +231,14 @@ export function extractSeeds(base: PresetDef): CustomTheme {
   }
 }
 
-/** Bump when the `CustomTheme` shape changes so old blobs can be migrated. */
-export const CUSTOM_SCHEMA_VERSION = 1
+/**
+ * Bump when the `CustomTheme` shape changes so old blobs can be migrated.
+ * v2 split the neutral ramp per appearance; v1 blobs stay readable.
+ */
+export const CUSTOM_SCHEMA_VERSION = 2
+
+/** v1 carried one neutral ramp shared by both appearances. */
+const CUSTOM_SCHEMA_VERSION_LEGACY = 1
 
 /** Self-contained stored form: records the preset the seeds were derived from. */
 export type CustomEnvelope = { v: number; base: string; theme: unknown }
@@ -227,19 +253,39 @@ export function parseEnvelope(raw: string | null): CustomEnvelope | null {
   try {
     const parsed = JSON.parse(raw) as Partial<CustomEnvelope>
     if (!parsed || typeof parsed !== 'object') return null
-    if (parsed.v !== CUSTOM_SCHEMA_VERSION) return null
+    if (parsed.v !== CUSTOM_SCHEMA_VERSION && parsed.v !== CUSTOM_SCHEMA_VERSION_LEGACY) return null
     return { v: CUSTOM_SCHEMA_VERSION, base: String(parsed.base ?? ''), theme: parsed.theme }
   } catch {
     return null
   }
 }
 
-/** Repair a partially-invalid object against `fallback`, keeping every valid colour. */export function normalizeCustom(raw: unknown, fallback: CustomTheme): CustomTheme {
-  const src = (raw ?? {}) as Partial<CustomTheme>
+/** Pre-v2 shape: the single neutral ramp shared by both appearances. */
+type LegacyNeutral = { neutralLightest?: unknown; neutralDarkest?: unknown }
+
+/**
+ * The neutral seeds in the current shape. A pre-v2 blob carried one ramp shared
+ * by both appearances; repeating it per appearance reproduces exactly what that
+ * blob rendered before the split, so existing themes migrate without a visible
+ * change.
+ */
+function neutralSeeds(src: Partial<CustomTheme> & LegacyNeutral): Partial<Record<Mode, unknown>> {
+  if (isRecord(src.neutral)) return src.neutral as Partial<Record<Mode, unknown>>
+  const shared: Record<string, unknown> = { lightest: src.neutralLightest, darkest: src.neutralDarkest }
+  return { light: shared, dark: shared }
+}
+
+/** Repair a partially-invalid object against `fallback`, keeping every valid colour. */
+export function normalizeCustom(raw: unknown, fallback: CustomTheme): CustomTheme {
+  const src = (raw ?? {}) as Partial<CustomTheme> & LegacyNeutral
   const pick = (value: unknown, fb: string): string => tryToHex(value) ?? fb
   const pickPair = (value: unknown, fb: SeedPair): SeedPair => {
     const v = (value ?? {}) as Partial<SeedPair>
     return { light: pick(v.light, fb.light), dark: pick(v.dark, fb.dark) }
+  }
+  const pickRamp = (value: unknown, fb: NeutralRamp): NeutralRamp => {
+    const v = (value ?? {}) as Partial<NeutralRamp>
+    return { lightest: pick(v.lightest, fb.lightest), darkest: pick(v.darkest, fb.darkest) }
   }
 
   const shikiSrc = (src.shiki ?? {}) as Partial<Record<ShikiKey, Partial<SeedPair>>>
@@ -248,9 +294,13 @@ export function parseEnvelope(raw: string | null): CustomEnvelope | null {
     return acc
   }, {} as Record<ShikiKey, SeedPair>)
 
+  const neutral = neutralSeeds(src)
+
   return {
-    neutralLightest: pick(src.neutralLightest, fallback.neutralLightest),
-    neutralDarkest: pick(src.neutralDarkest, fallback.neutralDarkest),
+    neutral: {
+      light: pickRamp(neutral.light, fallback.neutral.light),
+      dark: pickRamp(neutral.dark, fallback.neutral.dark),
+    },
     accent: pickPair(src.accent, fallback.accent),
     green: pickPair(src.green, fallback.green),
     amber: pickPair(src.amber, fallback.amber),
@@ -262,13 +312,18 @@ export function parseEnvelope(raw: string | null): CustomEnvelope | null {
 /**
  * Turn seeds into a full `PresetDef` using the presets' own helpers.
  *
- * The neutral ramp is built once and shared by both appearances, exactly as
- * 30 of the 34 shipped presets do.
+ * Unlike the presets (which ship one ramp for both appearances), the ramp is
+ * built once per appearance, so the light text and the dark text are no longer
+ * the two ends of the same colour axis.
  */
 export function buildCustomPreset(v: CustomTheme): PresetDef {
-  const neutral: StaticMap = {
-    ...buildScale('--dsw-static-neutral-bluish', v.neutralLightest, v.neutralDarkest, BLUISH_STEPS),
-    ...buildScale('--dsw-static-neutral', v.neutralLightest, v.neutralDarkest, NEUTRAL_STEPS),
+  /** One appearance's ramp, published under both prefixes DSH reads from. */
+  const ramp = (mode: Mode): StaticMap => {
+    const { lightest, darkest } = v.neutral[mode]
+    return {
+      ...buildScale('--dsw-static-neutral-bluish', lightest, darkest, BLUISH_STEPS),
+      ...buildScale('--dsw-static-neutral', lightest, darkest, NEUTRAL_STEPS),
+    }
   }
 
   const semantic = (mode: Mode): StaticMap =>
@@ -288,8 +343,8 @@ export function buildCustomPreset(v: CustomTheme): PresetDef {
 
   return {
     label: 'Custom',
-    light: { ...neutral, ...semantic('light'), ...shiki('light') },
-    dark: { ...neutral, ...semantic('dark'), ...shiki('dark') },
+    light: { ...ramp('light'), ...semantic('light'), ...shiki('light') },
+    dark: { ...ramp('dark'), ...semantic('dark'), ...shiki('dark') },
   }
 }
 
@@ -332,7 +387,8 @@ export function decodeList(
   if (!raw) return []
   try {
     const parsed = JSON.parse(raw) as { v?: number; items?: unknown }
-    if (!parsed || parsed.v !== CUSTOM_SCHEMA_VERSION || !Array.isArray(parsed.items)) return []
+    const known = parsed?.v === CUSTOM_SCHEMA_VERSION || parsed?.v === CUSTOM_SCHEMA_VERSION_LEGACY
+    if (!parsed || !known || !Array.isArray(parsed.items)) return []
     const out: SavedTheme[] = []
     for (const item of parsed.items) {
       const e = item as Partial<SavedTheme>
