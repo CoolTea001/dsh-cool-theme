@@ -7,7 +7,7 @@ import {
   CUSTOM_ACTIVE_STORAGE_KEY,
   CUSTOM_MIGRATED_STORAGE_KEY,
 } from '../contract.js'
-import { PRESETS, type PresetId, type PresetDef } from './presets.js'
+import { PRESETS, NOOP_PRESET_IDS, type PresetId, type PresetDef } from './presets.js'
 import { buildBaseCss, buildOverrides, buildFullCssFallback } from './tokens.js'
 import { createStyleInjector } from './style-injector.js'
 import { ThemePanel, CUSTOM_SELECTION, type Selection, type CustomState } from './components.js'
@@ -157,10 +157,8 @@ const BASE_CSS = [
   '@media (prefers-reduced-motion: reduce){.ct-toast{animation:ct-toast-fade 1s ease 3s forwards;}}',
 ].join('\n')
 
-const NOOP = new Set<PresetId>(['native', 'dsh'])
-
 function isValidSelection(v: string | null): v is Selection {
-  return !!v && (v === CUSTOM_SELECTION || NOOP.has(v as PresetId) || v in PRESETS)
+  return !!v && (v === CUSTOM_SELECTION || NOOP_PRESET_IDS.has(v as PresetId) || v in PRESETS)
 }
 
 function isPresetId(v: unknown): v is PresetId {
@@ -206,53 +204,52 @@ export function registerTheme(ctx: any) {
     }
   }
 
+  /** Raw localStorage access; an absent or blocked store reads as empty, writes are dropped. */
+  function readRaw(key: string): string | null {
+    try {
+      return localStorage.getItem(key)
+    } catch {
+      return null
+    }
+  }
+
+  function writeRaw(key: string, value: string | null) {
+    try {
+      if (value === null) localStorage.removeItem(key)
+      else localStorage.setItem(key, value)
+    } catch {}
+  }
+
   function getSelection(): Selection {
     for (const key of [THEME_STORAGE_KEY, THEME_STORAGE_KEY_LEGACY] as const) {
-      try {
-        const cur = localStorage.getItem(key)
-        if (!isValidSelection(cur)) continue
-        const normalized = cur === 'native' ? 'dsh' : (cur as Selection)
-        if (cur !== normalized) {
-          try {
-            localStorage.setItem(THEME_STORAGE_KEY, normalized)
-          } catch {}
-        } else if (key === THEME_STORAGE_KEY_LEGACY) {
-          try {
-            localStorage.setItem(THEME_STORAGE_KEY, cur!)
-          } catch {}
-        }
-        return normalized
-      } catch {}
+      const cur = readRaw(key)
+      if (!isValidSelection(cur)) continue
+      const normalized = cur === 'native' ? 'dsh' : cur
+      // Migrate a legacy key, or the `native` alias, onto the current key.
+      if (cur !== normalized || key === THEME_STORAGE_KEY_LEGACY) {
+        writeRaw(THEME_STORAGE_KEY, normalized)
+      }
+      return normalized
     }
     return 'dsh'
   }
 
   /** The preset the custom seeds derive from, restored from the stored blob. */
   function customBase(): PresetId {
-    const env = parseEnvelope(readCustomRaw())
+    const env = parseEnvelope(readRaw(CUSTOM_THEME_STORAGE_KEY))
     if (env && isPresetId(env.base)) return env.base
     return lastPreset
-  }
-
-  function readCustomRaw(): string | null {
-    try {
-      return localStorage.getItem(CUSTOM_THEME_STORAGE_KEY)
-    } catch {
-      return null
-    }
   }
 
   function loadCustom(): CustomState {
     const base = customBase()
     const fallback = extractSeeds(presetDef(base))
-    const env = parseEnvelope(readCustomRaw())
+    const env = parseEnvelope(readRaw(CUSTOM_THEME_STORAGE_KEY))
     return { base, theme: normalizeCustom(env?.theme, fallback) }
   }
 
   function persistCustom(theme: CustomTheme) {
-    try {
-      localStorage.setItem(CUSTOM_THEME_STORAGE_KEY, encodeCustom(customBase(), theme))
-    } catch {}
+    writeRaw(CUSTOM_THEME_STORAGE_KEY, encodeCustom(customBase(), theme))
   }
 
   /**
@@ -262,9 +259,7 @@ export function registerTheme(ctx: any) {
    */
   function setCustomBase(base: PresetId) {
     lastPreset = base
-    try {
-      localStorage.setItem(CUSTOM_THEME_STORAGE_KEY, encodeCustom(base, loadCustom().theme))
-    } catch {}
+    writeRaw(CUSTOM_THEME_STORAGE_KEY, encodeCustom(base, loadCustom().theme))
   }
 
   function apply(src: Selection | PresetDef) {
@@ -273,7 +268,7 @@ export function registerTheme(ctx: any) {
 
     const target: PresetId | PresetDef = src === CUSTOM_SELECTION ? buildCustomPreset(loadCustom().theme) : src
 
-    if (typeof target === 'string' && NOOP.has(target)) {
+    if (typeof target === 'string' && NOOP_PRESET_IDS.has(target)) {
       ensureBaseline(false)
       return
     }
@@ -289,9 +284,7 @@ export function registerTheme(ctx: any) {
   }
 
   function setSelection(id: Selection) {
-    try {
-      localStorage.setItem(THEME_STORAGE_KEY, id)
-    } catch {}
+    writeRaw(THEME_STORAGE_KEY, id)
     if (id !== CUSTOM_SELECTION) lastPreset = id as PresetId
     apply(id)
   }
@@ -310,21 +303,6 @@ export function registerTheme(ctx: any) {
   }
 
   // --- saved custom themes -------------------------------------------------
-
-  function readRaw(key: string): string | null {
-    try {
-      return localStorage.getItem(key)
-    } catch {
-      return null
-    }
-  }
-
-  function writeRaw(key: string, value: string | null) {
-    try {
-      if (value === null) localStorage.removeItem(key)
-      else localStorage.setItem(key, value)
-    } catch {}
-  }
 
   const fallbackForBase = (base: string): CustomTheme =>
     extractSeeds(presetDef(isPresetId(base) ? base : lastPreset))
@@ -433,7 +411,7 @@ export function registerTheme(ctx: any) {
   // initialised here (reading it would hit the temporal dead zone).
   let lastPreset: PresetId = initialSelection === CUSTOM_SELECTION ? 'dsh' : initialSelection
   if (initialSelection === CUSTOM_SELECTION) {
-    const env = parseEnvelope(readCustomRaw())
+    const env = parseEnvelope(readRaw(CUSTOM_THEME_STORAGE_KEY))
     if (env && isPresetId(env.base)) lastPreset = env.base
   }
 
@@ -496,22 +474,19 @@ export function registerTheme(ctx: any) {
     try {
       currentLabel = t('nav')
     } catch {}
-    const candidates = new Set<string>([currentLabel, zh.nav, en.nav].filter(Boolean) as string[])
-    // Settings nav cells: hashed class is zOa2rq_navCell but match broadly for forward-compat
-    const cells = document.querySelectorAll(
-      '[class*="navCell"], button[class*="navCell"]',
-    )
-    const toPatch: Element[] = []
-    if (cells.length > 0) {
-      cells.forEach((c) => toPatch.push(c))
-    } else {
-      // Fallback: any button inside the settings nav
-      document.querySelectorAll('[class*="nav"] button').forEach((b) => toPatch.push(b))
-    }
+    const candidates = [currentLabel, zh.nav, en.nav].filter(Boolean) as string[]
+    // Settings nav cells: the hashed class is zOa2rq_navCell, but match broadly
+    // for forward-compat and fall back to any button inside the nav when the
+    // hash rotates and the class selector no longer matches.
+    const cells = document.querySelectorAll('[class*="navCell"], button[class*="navCell"]')
+    const toPatch =
+      cells.length > 0
+        ? Array.from(cells)
+        : Array.from(document.querySelectorAll('[class*="nav"] button'))
     for (const cell of toPatch) {
       const labelEl = cell.querySelector('[class*="navLabel"]') || cell
       const text = (labelEl?.textContent || cell.textContent || '').trim()
-      const isThemeCell = Array.from(candidates).some((lbl) => text === lbl || text.includes(lbl))
+      const isThemeCell = candidates.some((lbl) => text === lbl || text.includes(lbl))
       if (!isThemeCell) continue
       // Already patched?
       if (cell.querySelector('[data-palette-icon]')) continue

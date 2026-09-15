@@ -73,11 +73,16 @@ async function callApi(path: string, init?: RequestInit): Promise<Record<string,
   return isRecord(payload) ? payload : {}
 }
 
-/** Every stored theme, in the Host's creation-time order (oldest first). */
-export async function fetchThemes(
+/**
+ * The documents in one roster response, repaired into `SavedTheme` records.
+ * Every call on this route answers with the same `{ themes: [...] }` body, so
+ * both reads share this one parser: an entry missing an id or a name is skipped
+ * rather than failing the whole roster.
+ */
+function payloadThemes(
+  payload: Record<string, unknown>,
   fallbackFor: (base: string) => CustomTheme,
-): Promise<SavedTheme[]> {
-  const payload = await callApi(THEME_API_PATH_THEMES)
+): SavedTheme[] {
   const documents = Array.isArray(payload.themes) ? payload.themes : []
   const out: SavedTheme[] = []
   for (const doc of documents) {
@@ -101,6 +106,13 @@ export async function fetchThemes(
   return out
 }
 
+/** Every stored theme, in the Host's creation-time order (oldest first). */
+export async function fetchThemes(
+  fallbackFor: (base: string) => CustomTheme,
+): Promise<SavedTheme[]> {
+  return payloadThemes(await callApi(THEME_API_PATH_THEMES), fallbackFor)
+}
+
 /** Insert or replace the given entries; resolves with what the Host stored. */
 export async function pushThemes(
   entries: SavedTheme[],
@@ -110,27 +122,7 @@ export async function pushThemes(
     method: 'POST',
     body: JSON.stringify({ themes: entries.map(savedToDocument) }),
   })
-  const documents = Array.isArray(payload.themes) ? payload.themes : []
-  const out: SavedTheme[] = []
-  for (const doc of documents) {
-    if (!isRecord(doc) || typeof doc.id !== 'string' || typeof doc.name !== 'string') continue
-    out.push(
-      documentToSaved(
-        {
-          v: THEME_FILE_VERSION,
-          id: doc.id,
-          name: doc.name,
-          base: typeof doc.base === 'string' ? doc.base : '',
-          theme: doc.theme,
-          assets: Array.isArray(doc.assets) ? (doc.assets as ThemeAsset[]) : [],
-          createdAt: '',
-          updatedAt: '',
-        },
-        fallbackFor,
-      ),
-    )
-  }
-  return out
+  return payloadThemes(payload, fallbackFor)
 }
 
 /** Remove one theme's directory. */
