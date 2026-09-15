@@ -38,6 +38,12 @@ type Editing = {
   originName: string
   /** Committed seeds of the entry being edited, for the dirty comparison. */
   originTheme: CustomTheme
+  /**
+   * Appearance preference in force when editing began. The mode toggle previews
+   * the other appearance on the whole page, so leaving the editor has to put
+   * this preference back rather than keeping the preview.
+   */
+  originScheme: string
 }
 
 /** Structural equality of the two seeds in one pair. */
@@ -494,6 +500,10 @@ export function ThemePanel(props: {
   const editingRef = React.useRef<Editing | null>(null)
   editingRef.current = editing
   const savingRef = React.useRef(false)
+  // The appearance on screen, readable from callbacks that outlive one render
+  // (the unmount cleanup, and a save that resolved after an await).
+  const schemeRef = React.useRef(scheme)
+  schemeRef.current = scheme
   // The close guard runs from document listeners that outlive a single render,
   // so every fact it consults is mirrored into a ref.
   const dirtyRef = React.useRef(false)
@@ -565,7 +575,38 @@ export function ThemePanel(props: {
       originDraft: getCustom().theme,
       originName,
       originTheme,
+      originScheme: schemeRef.current,
     }
+  }
+
+  /** Commit an appearance preference, through the Theme service when it is there. */
+  function applyAppearance(id: string) {
+    setScheme(id)
+    try {
+      theme?.setTheme(id)
+    } catch {}
+  }
+
+  /**
+   * Preview an appearance on the whole page while its colours are edited: a
+   * custom theme carries both variants, so the other one's seeds are only
+   * visible once the page actually wears that appearance. A no-op when the page
+   * already resolves to `mode` — clicking the active half of the toggle must not
+   * quietly turn a `system` preference into a pinned one.
+   */
+  function previewAppearance(mode: Mode) {
+    if (effectiveMode(schemeRef.current) === mode) return
+    applyAppearance(mode)
+  }
+
+  /**
+   * End a preview: put the appearance the editor opened on back. The preference
+   * is a global setting the mode toggle only borrows, so it must not survive the
+   * editor — not even on save, which commits the colours alone.
+   */
+  function restoreAppearance(open: Editing) {
+    if (schemeRef.current === open.originScheme) return
+    applyAppearance(open.originScheme)
   }
 
   /**
@@ -573,6 +614,7 @@ export function ThemePanel(props: {
    * change, so abandoning the card has to write the pre-edit theme back.
    */
   function revertEditing(open: Editing) {
+    restoreAppearance(open)
     if (open.originId) onLoadSaved(open.originId)
     else {
       setCustom(open.originDraft)
@@ -590,6 +632,13 @@ export function ThemePanel(props: {
     () => () => {
       const open = editingRef.current
       if (!open || savingRef.current) return
+      // The mode toggle borrowed the appearance preference; a panel that goes
+      // away with a draft gives it back here, where setState is no longer safe.
+      if (schemeRef.current !== open.originScheme) {
+        try {
+          theme?.setTheme(open.originScheme)
+        } catch {}
+      }
       if (open.originId) saved.load(open.originId)
       else {
         setCustom(open.originDraft)
@@ -728,6 +777,8 @@ export function ThemePanel(props: {
     savingRef.current = false
     if (next === null) return
     setEditing(null)
+    // Saving commits the colours, not the appearance the preview borrowed.
+    restoreAppearance(editing)
     syncSaved()
     setCustomState(getCustom().theme)
     showToast(t('custom.toast.saved'))
@@ -761,10 +812,11 @@ export function ThemePanel(props: {
   }
 
   function pickScheme(id: string) {
-    setScheme(id)
-    try {
-      theme?.setTheme(id)
-    } catch {}
+    applyAppearance(id)
+    // A deliberate pick while the editor is open becomes the edit's own
+    // baseline: leaving the editor must restore this, not the value from before
+    // it opened — the user just asked for this appearance.
+    setEditing((cur) => (cur ? { ...cur, originScheme: id } : cur))
   }
 
   /**
@@ -954,6 +1006,10 @@ export function ThemePanel(props: {
     }))
 
     /** The light/dark segmented control above the dots. */
+    // Picking a half switches which seeds the dots edit and previews that
+    // appearance on the page, so the colours being edited are the ones on
+    // screen. The preview is temporary: leaving the editor restores the
+    // preference it borrowed.
     const modeButton = (id: Mode, label: string) =>
       React.createElement(
         'button',
@@ -962,7 +1018,10 @@ export function ThemePanel(props: {
           type: 'button',
           className: seedMode === id ? 'ct-mode-btn ct-mode-btn-on' : 'ct-mode-btn',
           'aria-pressed': seedMode === id,
-          onClick: () => setSeedMode(id),
+          onClick: () => {
+            setSeedMode(id)
+            previewAppearance(id)
+          },
         },
         label,
       )
