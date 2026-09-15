@@ -49,6 +49,10 @@ export const zh = {
   'custom.toast.unavailable': '主题文件接口未就绪，请重启 DSH 服务',
   'custom.delete.title': '删除该自定义主题？',
   'custom.delete.desc': '将删除「{0}」，且无法恢复。',
+  'custom.unsaved.title': '放弃未保存的修改？',
+  'custom.unsaved.desc': '「{0}」的修改尚未保存，关闭设置后将丢失。',
+  'custom.unsaved.confirm': '放弃并关闭',
+  'custom.unsaved.cancel': '继续编辑',
 
   'shiki.constant': '常量',
   'shiki.string': '字符串',
@@ -109,6 +113,10 @@ export const en = {
   'custom.toast.unavailable': 'Theme file API not ready — restart the DSH service',
   'custom.delete.title': 'Delete this custom theme?',
   'custom.delete.desc': '"{0}" will be removed. This cannot be undone.',
+  'custom.unsaved.title': 'Discard unsaved changes?',
+  'custom.unsaved.desc': 'Changes to "{0}" have not been saved and will be lost when settings close.',
+  'custom.unsaved.confirm': 'Discard and close',
+  'custom.unsaved.cancel': 'Keep editing',
 
   'shiki.constant': 'Constant',
   'shiki.string': 'String',

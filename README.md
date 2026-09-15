@@ -16,7 +16,7 @@ Theme management (sidebar gear → Settings → Theme), supports `light` / `dark
 
 Custom colors: build your own scheme from 28 seeds — neutral, accent, success, warning, error, and the 9 syntax-highlighting tokens — each with separate light and dark values. The scales use exactly the same maths as the presets, so a custom theme is simply a preset computed at runtime. The editor previews what each appearance actually renders.
 
-Custom themes are off by default. Turning the switch on reveals the saved-theme cards plus an **Add custom theme** button: clicking it opens an editable card above the button with a name field and the colour rows, and the card is committed with **Save** or discarded with **Cancel**. Every saved card can be reopened with its **Edit** button.
+Custom themes are off by default. Turning the switch on reveals the saved-theme cards plus an **Add custom theme** button: clicking it opens an editable card above the button with a name field and the colour rows, and the card is committed with **Save** or discarded with **Cancel**. Every saved card can be reopened with its **Edit** button. An open card with unsaved edits guards the settings dialog: closing it (the close button, the mask, or Escape) asks first, and discarding puts the pre-edit theme back.
 
 The preset picker is locked while the custom theme is on. Preset and custom are independent selections: a new custom theme seeds its colours from whichever preset is currently selected, and nothing else ties the two together. Each colour row shows one round swatch per seed, and the light/dark toggle above them switches which appearance's values the swatches edit.
 

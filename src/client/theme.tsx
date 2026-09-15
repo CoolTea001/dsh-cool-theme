@@ -476,6 +476,10 @@ export function registerTheme(ctx: any) {
         resetCustom,
         saved,
         getHostToast: () => sharedToast,
+        // The shell's close seat. Absent on a host that does not offer it, which
+        // also disables the unsaved-draft guard: without a way to leave, blocking
+        // the close would strand the user.
+        onRequestClose: typeof props?.close === 'function' ? props.close : null,
       }),
     )
   })

@@ -11,6 +11,7 @@ import {
   type CustomTheme,
   type Mode,
   type SavedTheme,
+  type SeedPair,
   SHIKI_KEYS,
   nextThemeName,
 } from './custom.js'
@@ -32,6 +33,33 @@ type Editing = {
   /** Active entry before editing began; null when none was active. */
   originId: string | null
   originDraft: CustomTheme
+  /** Committed name of the entry being edited; '' for a brand-new theme. */
+  originName: string
+  /** Committed seeds of the entry being edited, for the dirty comparison. */
+  originTheme: CustomTheme
+}
+
+/** Structural equality of the two seeds in one pair. */
+function samePair(a: SeedPair | undefined, b: SeedPair | undefined): boolean {
+  return a?.light === b?.light && a?.dark === b?.dark
+}
+
+/** Structural equality over all 28 seeds, ignoring key order. */
+function sameSeeds(a: CustomTheme, b: CustomTheme): boolean {
+  if (a.neutralLightest !== b.neutralLightest || a.neutralDarkest !== b.neutralDarkest) return false
+  if (!samePair(a.accent, b.accent) || !samePair(a.green, b.green)) return false
+  if (!samePair(a.amber, b.amber) || !samePair(a.red, b.red)) return false
+  return SHIKI_KEYS.every((k) => samePair(a.shiki?.[k], b.shiki?.[k]))
+}
+
+/**
+ * Whether the open editor holds work a close would throw away. A brand-new
+ * theme has never been committed, so it always counts as unsaved; a reopened
+ * entry is dirty only once its name or one of its seeds actually moved.
+ */
+function isDirty(open: Editing, current: CustomTheme): boolean {
+  if (open.id === null) return true
+  return open.name.trim() !== open.originName.trim() || !sameSeeds(current, open.originTheme)
 }
 
 function IconChevron() {
@@ -399,8 +427,14 @@ export function ThemePanel(props: {
    */
   getHostToast: () => ((props: any) => any) | null
   t: (key: ThemeKey) => string
+  /**
+   * The shell's own close seat, or null on a host that does not offer it. The
+   * settings modal is shell-owned, so this is both the only way to leave after
+   * a confirmed discard and the gate on whether guarding a close is worthwhile.
+   */
+  onRequestClose: (() => void) | null
 }) {
-  const { theme, getSelection, setSelection, getCustom, setCustom, setCustomBase, resetCustom, saved, getHostToast, t } = props
+  const { theme, getSelection, setSelection, getCustom, setCustom, setCustomBase, resetCustom, saved, getHostToast, t, onRequestClose } = props
   let initScheme = 'system'
   try {
     const snap = theme?.getTheme()
@@ -428,12 +462,22 @@ export function ThemePanel(props: {
   // The card open in the editor. Null means every card is collapsed and only the
   // "add" button is showing, which is the state the panel opens in.
   const [editing, setEditing] = React.useState<Editing | null>(null)
+  // The question raised when a shell close would throw an unsaved draft away.
+  const [confirmClose, setConfirmClose] = React.useState(false)
   // Read by the unmount cleanup, which must not depend on a re-render to see the
   // current draft, and by `saveEdit` so a save in flight is not mistaken for an
   // abandoned edit.
   const editingRef = React.useRef<Editing | null>(null)
   editingRef.current = editing
   const savingRef = React.useRef(false)
+  // The close guard runs from document listeners that outlive a single render,
+  // so every fact it consults is mirrored into a ref.
+  const dirtyRef = React.useRef(false)
+  dirtyRef.current = editing !== null && isDirty(editing, custom)
+  const confirmCloseRef = React.useRef(false)
+  confirmCloseRef.current = confirmClose
+  const pendingDeleteRef = React.useRef<SavedTheme | null>(null)
+  pendingDeleteRef.current = pendingDelete
   // `seq` keys the banner so an identical repeated message restarts its cycle
   // instead of reusing the mounted one, whose timer has already run out.
   const [toast, setToast] = React.useState<{ seq: number; text: string } | null>(null)
@@ -487,8 +531,15 @@ export function ThemePanel(props: {
   }
 
   /** Snapshot the state an edit must return to when it is cancelled. */
-  function beginEditing(id: string | null, name: string): Editing {
-    return { id, name, originId: saved.activeId(), originDraft: getCustom().theme }
+  function beginEditing(id: string | null, name: string, originName: string, originTheme: CustomTheme): Editing {
+    return {
+      id,
+      name,
+      originId: saved.activeId(),
+      originDraft: getCustom().theme,
+      originName,
+      originTheme,
+    }
   }
 
   /**
@@ -523,12 +574,79 @@ export function ThemePanel(props: {
     [],
   )
 
+  // The settings modal is shell-owned: its close button, its mask and Escape all
+  // call the shell's own `close`, and an unmount throws the draft above away.
+  // The shell offers no veto, so while a draft is dirty those three close
+  // affordances are intercepted in the capture phase — the event never reaches
+  // the shell — and our own dialog asks first. Its "discard" answer calls the
+  // section's `close` seat, the documented way for a section to leave settings.
+  React.useEffect(() => {
+    if (!onRequestClose) return
+
+    /** The header button carrying the `settings.close` seat, if `node` is in it. */
+    function isCloseButton(node: Element): boolean {
+      const seat = node.ownerDocument.querySelector('[data-slot="settings.close"]')
+      const button = node.closest('button')
+      return !!seat && !!button && button.contains(seat)
+    }
+
+    /** The settings panel itself; the close seat is unique to it. */
+    function settingsPanel(): Element | null {
+      const seat = document.querySelector('[data-slot="settings.close"]')
+      return seat?.closest('[role="dialog"]') ?? null
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      // Our own question owns Escape while it is up: dismiss the question only.
+      if (confirmCloseRef.current) {
+        e.preventDefault()
+        e.stopPropagation()
+        setConfirmClose(false)
+        return
+      }
+      if (!dirtyRef.current) return
+      e.preventDefault()
+      e.stopPropagation()
+      setConfirmClose(true)
+    }
+
+    function onClick(e: MouseEvent) {
+      // A delete question already holding the screen keeps its own event flow.
+      if (!dirtyRef.current || confirmCloseRef.current || pendingDeleteRef.current) return
+      const target = e.target instanceof Element ? e.target : null
+      if (!target) return
+      const panel = settingsPanel()
+      // A click outside the panel is the mask; inside it, only the header button
+      // closes. Everything else in the panel (nav, editor, cards) is left alone.
+      const isMask = !!panel && !panel.contains(target)
+      if (!isMask && !isCloseButton(target)) return
+      e.preventDefault()
+      e.stopPropagation()
+      setConfirmClose(true)
+    }
+
+    document.addEventListener('keydown', onKeyDown, true)
+    document.addEventListener('click', onClick, true)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true)
+      document.removeEventListener('click', onClick, true)
+    }
+    // Mount-only: the handlers read live state through refs, and the close seat
+    // is stable for the life of the panel.
+  }, [onRequestClose])
+
   /** Open a fresh, unsaved theme seeded from the currently selected preset. */
   function startAdd() {
     // Snapshot the previous draft before `resetCustom` overwrites it, so cancel
     // can put the user back on the theme they had. The preset is only the seed
     // for a brand-new theme, so it is stamped as the new theme's base here.
-    const origin = beginEditing(null, nextThemeName(t('custom.defaultName'), list.map((e) => e.name)))
+    const origin = beginEditing(
+      null,
+      nextThemeName(t('custom.defaultName'), list.map((e) => e.name)),
+      '',
+      getCustom().theme,
+    )
     setCustomBase(shownPreset)
     const draft = resetCustom()
     setEditing(origin)
@@ -537,7 +655,7 @@ export function ThemePanel(props: {
 
   /** Open an existing card for editing; it also becomes the previewed theme. */
   function startEdit(entry: SavedTheme) {
-    const next = beginEditing(entry.id, entry.name)
+    const next = beginEditing(entry.id, entry.name, entry.name, entry.theme)
     setEditing(next)
     onLoadSaved(entry.id)
   }
@@ -875,6 +993,29 @@ export function ThemePanel(props: {
         cancelLabel: t('custom.cancel'),
         onConfirm: onConfirmDelete,
         onCancel: () => setPendingDelete(null),
+      }),
+    )
+  }
+
+  // The unsaved-draft question. Confirming discards: the panel unmounts on the
+  // shell's close and the unmount cleanup writes the pre-edit theme back, so
+  // nothing is reverted here.
+  if (confirmClose && editing && onRequestClose) {
+    children.push(
+      React.createElement(ConfirmDialog, {
+        key: 'confirm-close',
+        title: t('custom.unsaved.title'),
+        description: t('custom.unsaved.desc').replace(
+          '{0}',
+          editing.name.trim() || t('custom.defaultName'),
+        ),
+        confirmLabel: t('custom.unsaved.confirm'),
+        cancelLabel: t('custom.unsaved.cancel'),
+        onConfirm: () => {
+          setConfirmClose(false)
+          onRequestClose()
+        },
+        onCancel: () => setConfirmClose(false),
       }),
     )
   }

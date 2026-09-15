@@ -47,6 +47,10 @@ export declare const zh: {
     'custom.toast.unavailable': string;
     'custom.delete.title': string;
     'custom.delete.desc': string;
+    'custom.unsaved.title': string;
+    'custom.unsaved.desc': string;
+    'custom.unsaved.confirm': string;
+    'custom.unsaved.cancel': string;
     'shiki.constant': string;
     'shiki.string': string;
     'shiki.comment': string;
@@ -103,6 +107,10 @@ export declare const en: {
     'custom.toast.unavailable': string;
     'custom.delete.title': string;
     'custom.delete.desc': string;
+    'custom.unsaved.title': string;
+    'custom.unsaved.desc': string;
+    'custom.unsaved.confirm': string;
+    'custom.unsaved.cancel': string;
     'shiki.constant': string;
     'shiki.string': string;
     'shiki.comment': string;

@@ -43,6 +43,12 @@ export declare function ThemePanel(props: {
      */
     getHostToast: () => ((props: any) => any) | null;
     t: (key: ThemeKey) => string;
+    /**
+     * The shell's own close seat, or null on a host that does not offer it. The
+     * settings modal is shell-owned, so this is both the only way to leave after
+     * a confirmed discard and the gate on whether guarding a close is worthwhile.
+     */
+    onRequestClose: (() => void) | null;
 }): React.DetailedReactHTMLElement<{
     style: {
         display: "flex";
