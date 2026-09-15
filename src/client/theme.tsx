@@ -33,6 +33,8 @@ import { zh, en, type ThemeKey } from './locales.js'
 const BASE_CSS = [
   '.ct-select{box-sizing:border-box;display:inline-flex;align-items:center;gap:12px;height:36px;padding:0 14px;border:none;border-radius:18px;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:14px;line-height:22px;white-space:nowrap;width:auto;min-width:0;max-width:100%;}',
   '.ct-select:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);}',
+  // Locked while the custom theme owns the colours: dimmed and not clickable.
+  '.ct-select:disabled{opacity:.5;cursor:not-allowed;}',
   '.ct-select:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
   '.ct-select-label{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;}',
   '.ct-select-chevron{flex:none;color:var(--dsw-alias-label-tertiary);display:inline-flex;transition:transform 120ms ease;}',
@@ -85,10 +87,10 @@ const BASE_CSS = [
   // only cue — an underline on top of it would read as a link, not a surface.
   '.ct-list-name{min-width:0;text-align:left;border:none;background:transparent;cursor:pointer;font:inherit;font-size:14px;line-height:22px;font-weight:500;color:var(--dsw-alias-label-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0;}',
   '.ct-list-name:disabled{cursor:default;}',
-  // DSH's configured-credential dot: an 8px success circle that annotates the
-  // name rather than competing with it.
-  '.ct-list-dot{box-sizing:border-box;display:inline-block;flex:none;width:8px;height:8px;border-radius:50%;corner-shape:round;background:var(--dsw-alias-state-success-primary);}',
   '.ct-list-actions{display:inline-flex;align-items:center;gap:4px;flex:none;margin-left:auto;}',
+  // Status chip for the active card. Filled rather than outlined, so it never
+  // reads as a fourth action button.
+  '.ct-list-badge{display:inline-flex;align-items:center;height:28px;padding:0 10px;border-radius:14px;background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-2));color:var(--dsw-alias-label-secondary,var(--dsw-alias-label-tertiary));font-size:12px;line-height:18px;white-space:nowrap;}',
   // The dense capsule (DSH Button `.sm`) every row action wears.
   '.ct-list-btn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:28px;padding:0 10px;border:.5px solid var(--dsw-alias-border-l3);border-radius:14px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:12px;line-height:18px;}',
   '.ct-list-btn:hover{background:var(--dsw-alias-interactive-bg-hover);}',
@@ -412,21 +414,6 @@ export function registerTheme(ctx: any) {
       const draft = loadCustom()
       await pushThemes([{ ...entry, name, theme: draft.theme }], fallbackForBase)
       return refreshSaved()
-    },
-    /** Copy an entry so the copy can be tweaked independently; the copy becomes active. */
-    async duplicate(id: string): Promise<CustomTheme | null> {
-      const src = readList().find((e) => e.id === id)
-      if (!src) return null
-      const entry: SavedTheme = {
-        id: newThemeId(),
-        name: `${src.name} ${t('custom.copySuffix')}`,
-        base: src.base,
-        theme: src.theme,
-        assets: src.assets,
-      }
-      await pushThemes([entry], fallbackForBase)
-      await refreshSaved()
-      return loadSaved(entry.id)
     },
     async remove(id: string): Promise<SavedTheme[]> {
       if (readRaw(CUSTOM_ACTIVE_STORAGE_KEY) === id) writeRaw(CUSTOM_ACTIVE_STORAGE_KEY, null)

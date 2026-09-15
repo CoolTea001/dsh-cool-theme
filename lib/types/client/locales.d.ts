@@ -10,7 +10,7 @@ export declare const zh: {
     'appearance.desc': string;
     'presets.title': string;
     'presets.desc': string;
-    'presets.base': string;
+    'presets.disabled': string;
     'scheme.light': string;
     'scheme.dark': string;
     'scheme.system': string;
@@ -39,13 +39,10 @@ export declare const zh: {
     'custom.edit': string;
     'custom.name.placeholder': string;
     'custom.defaultName': string;
-    'custom.copySuffix': string;
     'custom.inUse': string;
-    'custom.duplicate': string;
     'custom.delete': string;
     'custom.cancel': string;
     'custom.toast.saved': string;
-    'custom.toast.duplicated': string;
     'custom.toast.failed': string;
     'custom.toast.unavailable': string;
     'custom.delete.title': string;
@@ -69,7 +66,7 @@ export declare const en: {
     'appearance.desc': string;
     'presets.title': string;
     'presets.desc': string;
-    'presets.base': string;
+    'presets.disabled': string;
     'scheme.light': string;
     'scheme.dark': string;
     'scheme.system': string;
@@ -98,13 +95,10 @@ export declare const en: {
     'custom.edit': string;
     'custom.name.placeholder': string;
     'custom.defaultName': string;
-    'custom.copySuffix': string;
     'custom.inUse': string;
-    'custom.duplicate': string;
     'custom.delete': string;
     'custom.cancel': string;
     'custom.toast.saved': string;
-    'custom.toast.duplicated': string;
     'custom.toast.failed': string;
     'custom.toast.unavailable': string;
     'custom.delete.title': string;

@@ -34,7 +34,6 @@ export declare function ThemePanel(props: {
         create: (name: string) => Promise<SavedTheme[]>;
         /** Write the current draft (and name) back to an existing entry. */
         update: (id: string, name: string) => Promise<SavedTheme[]>;
-        duplicate: (id: string) => Promise<CustomTheme | null>;
         remove: (id: string) => Promise<SavedTheme[]>;
     };
     /**

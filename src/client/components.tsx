@@ -69,8 +69,14 @@ function SchemeMenu(props: {
   value: string
   options: { value: string; label: string }[]
   onSelect: (v: string) => void
+  /**
+   * Locked while the custom theme owns the colours. The custom editor is the
+   * live source of colours then, and new custom themes inherit whatever preset
+   * was chosen before the switch was turned on.
+   */
+  disabled?: boolean
 }) {
-  const { value, options, onSelect } = props
+  const { value, options, onSelect, disabled } = props
   const [open, setOpen] = React.useState(false)
   const rootRef = React.useRef<HTMLSpanElement>(null)
   const listRef = React.useRef<HTMLDivElement>(null)
@@ -103,14 +109,15 @@ function SchemeMenu(props: {
       {
         type: 'button',
         className: 'ct-select',
+        disabled,
         'aria-haspopup': 'menu',
-        'aria-expanded': open,
+        'aria-expanded': open && !disabled,
         onClick: () => setOpen(!open),
       },
       React.createElement('span', { className: 'ct-select-label' }, selected?.label ?? ''),
       React.createElement('span', { className: 'ct-select-chevron' }, React.createElement(IconChevron, null)),
     ),
-    open
+    open && !disabled
       ? React.createElement(
           'div',
           {
@@ -278,9 +285,9 @@ function IconPlus(props: { size?: number }) {
 }
 
 /**
- * One collapsed saved-theme card: the name activates the theme, the trailing
- * controls rename (by opening the editor), duplicate and delete it. The card as
- * a whole is a click target too, but its controls own their clicks.
+ * One collapsed saved-theme card: the name activates the theme, and the trailing
+ * controls open the editor or delete it. The card as a whole is a click target
+ * too, but its controls own their clicks.
  */
 function ThemeCard(props: {
   entry: SavedTheme
@@ -290,10 +297,9 @@ function ThemeCard(props: {
   t: (key: ThemeKey) => string
   onActivate: () => void
   onEdit: () => void
-  onDuplicate: () => void
   onDelete: () => void
 }) {
-  const { entry, active, disabled, t, onActivate, onEdit, onDuplicate, onDelete } = props
+  const { entry, active, disabled, t, onActivate, onEdit, onDelete } = props
 
   /** One dense capsule action; `danger` is the borderless delete variant. */
   const action = (label: string, onClick: () => void, danger?: boolean) =>
@@ -331,27 +337,18 @@ function ThemeCard(props: {
         },
         entry.name,
       ),
-      // The in-use marker: DSH's configured dot, annotating the name rather
-      // than adding a badge that competes with it.
-      active
-        ? React.createElement('span', {
-            className: 'ct-list-dot',
-            role: 'img',
-            'aria-label': t('custom.inUse'),
-            title: t('custom.inUse'),
-          })
-        : null,
     ),
     React.createElement(
       'div',
       {
         className: 'ct-list-actions',
         // The actions own their clicks: without this the card would also load
-        // the theme on every edit, duplicate or delete.
+        // the theme on every edit or delete.
         onClick: (e: React.MouseEvent) => e.stopPropagation(),
       },
+      // The active card is tagged on the trailing edge, beside its actions.
+      active ? React.createElement('span', { className: 'ct-list-badge' }, t('custom.inUse')) : null,
       action(t('custom.edit'), onEdit),
-      action(t('custom.duplicate'), onDuplicate),
       action(t('custom.delete'), onDelete, true),
     ),
   )
@@ -393,7 +390,6 @@ export function ThemePanel(props: {
     create: (name: string) => Promise<SavedTheme[]>
     /** Write the current draft (and name) back to an existing entry. */
     update: (id: string, name: string) => Promise<SavedTheme[]>
-    duplicate: (id: string) => Promise<CustomTheme | null>
     remove: (id: string) => Promise<SavedTheme[]>
   }
   /**
@@ -432,6 +428,12 @@ export function ThemePanel(props: {
   // The card open in the editor. Null means every card is collapsed and only the
   // "add" button is showing, which is the state the panel opens in.
   const [editing, setEditing] = React.useState<Editing | null>(null)
+  // Read by the unmount cleanup, which must not depend on a re-render to see the
+  // current draft, and by `saveEdit` so a save in flight is not mistaken for an
+  // abandoned edit.
+  const editingRef = React.useRef<Editing | null>(null)
+  editingRef.current = editing
+  const savingRef = React.useRef(false)
   // `seq` keys the banner so an identical repeated message restarts its cycle
   // instead of reusing the mounted one, whose timer has already run out.
   const [toast, setToast] = React.useState<{ seq: number; text: string } | null>(null)
@@ -481,9 +483,6 @@ export function ThemePanel(props: {
   function onLoadSaved(id: string) {
     const next = saved.load(id)
     if (next) setCustomState(next)
-    // Loading an entry can change the base preset its seeds came from, and the
-    // (locked) preset row shows that base while custom mode is on.
-    setShownPreset(getCustom().base)
     syncSaved()
   }
 
@@ -492,11 +491,45 @@ export function ThemePanel(props: {
     return { id, name, originId: saved.activeId(), originDraft: getCustom().theme }
   }
 
-  /** Open a fresh, unsaved theme seeded from the current preset. */
+  /**
+   * Undo an open (unsaved) edit: editing previews live and persists on every
+   * change, so abandoning the card has to write the pre-edit theme back.
+   */
+  function revertEditing(open: Editing) {
+    if (open.originId) onLoadSaved(open.originId)
+    else {
+      setCustom(open.originDraft)
+      setCustomState(open.originDraft)
+      // Previewing the edited entry moved the active pointer; put it back.
+      saved.setActive(null)
+    }
+  }
+
+  // Closing the settings panel is not a save. Without this an abandoned draft
+  // would stay applied, and reopening the panel would show the edits as if they
+  // had been committed. Unmount-safe: it only calls storage/theme side effects,
+  // never setState.
+  React.useEffect(
+    () => () => {
+      const open = editingRef.current
+      if (!open || savingRef.current) return
+      if (open.originId) saved.load(open.originId)
+      else {
+        setCustom(open.originDraft)
+        saved.setActive(null)
+      }
+    },
+    // Store handles are stable for the life of the plugin.
+    [],
+  )
+
+  /** Open a fresh, unsaved theme seeded from the currently selected preset. */
   function startAdd() {
     // Snapshot the previous draft before `resetCustom` overwrites it, so cancel
-    // can put the user back on the theme they had.
+    // can put the user back on the theme they had. The preset is only the seed
+    // for a brand-new theme, so it is stamped as the new theme's base here.
     const origin = beginEditing(null, nextThemeName(t('custom.defaultName'), list.map((e) => e.name)))
+    setCustomBase(shownPreset)
     const draft = resetCustom()
     setEditing(origin)
     setCustomState(draft)
@@ -512,13 +545,7 @@ export function ThemePanel(props: {
   /** Discard the open editor and put the previously applied theme back. */
   function cancelEdit() {
     if (!editing) return
-    if (editing.originId) onLoadSaved(editing.originId)
-    else {
-      setCustom(editing.originDraft)
-      setCustomState(editing.originDraft)
-      // Previewing the edited entry moved the active pointer; put it back.
-      saved.setActive(null)
-    }
+    revertEditing(editing)
     setEditing(null)
     syncSaved()
   }
@@ -528,23 +555,14 @@ export function ThemePanel(props: {
     if (!editing) return
     const name = editing.name.trim() || t('custom.defaultName')
     const id = editing.id
+    savingRef.current = true
     const next = await mutate(() => (id === null ? saved.create(name) : saved.update(id, name)))
+    savingRef.current = false
     if (next === null) return
     setEditing(null)
     syncSaved()
     setCustomState(getCustom().theme)
-    setShownPreset(getCustom().base)
     showToast(t('custom.toast.saved'))
-  }
-
-  async function onDuplicate(id: string) {
-    const next = await mutate(() => saved.duplicate(id))
-    if (next) {
-      setCustomState(next)
-      setShownPreset(getCustom().base)
-    }
-    syncSaved()
-    if (next) showToast(t('custom.toast.duplicated'))
   }
 
   async function onConfirmDelete() {
@@ -558,7 +576,6 @@ export function ThemePanel(props: {
     // Removing the active entry re-seats the first remaining one, so the draft
     // has to follow it rather than keeping the deleted theme's seeds on screen.
     setCustomState(getCustom().theme)
-    setShownPreset(getCustom().base)
     setList(saved.list())
   }
 
@@ -570,43 +587,35 @@ export function ThemePanel(props: {
   }
 
   /**
-   * The preset picker. While custom mode is on the choice is only a template:
-   * it re-points the base preset that the next added custom theme inherits,
-   * leaving the live custom colours alone. Otherwise it applies the preset.
+   * The preset picker. Unreachable while custom mode is on — the picker is
+   * disabled then — so this only ever applies the chosen preset.
    */
   function pickPreset(id: PresetId) {
-    setShownPreset(id)
-    if (customOn) {
-      setCustomBase(id)
-      // With an editor open the template is also the starting point: re-seed
-      // the draft so the swatches on screen are the preset the card records.
-      if (editing) setCustomState(resetCustom())
-      return
-    }
     setSelectionState(id)
     setSelection(id)
+    setShownPreset(id)
   }
 
-  /** The custom switch. Turning it off returns to the preset seeds came from. */
+  /**
+   * The custom switch. Preset and custom are independent selections: turning
+   * custom on leaves the preset row untouched, and turning it off goes back to
+   * the preset the user had chosen, not to the custom theme's own base.
+   */
   function toggleCustom(on: boolean) {
     if (on) {
-      // The preset the user was just on becomes the template the next added
-      // custom theme inherits, so the dropdown and the draft cannot disagree.
-      const base = selection as PresetId
-      setCustomBase(base)
-      setShownPreset(base)
       setSelectionState(CUSTOM_SELECTION)
       setSelection(CUSTOM_SELECTION)
       // Entering custom mode may have just seeded a fresh palette.
       setCustomState(getCustom().theme)
       return
     }
-    // The editor only exists inside custom mode, so leaving closes any draft.
+    // The editor only exists inside custom mode, so leaving closes any draft —
+    // and an unsaved one has to be rolled back rather than left applied.
+    if (editing) revertEditing(editing)
     setEditing(null)
-    const target = getCustom().base
-    setSelectionState(target)
-    setSelection(target)
-    setShownPreset(target)
+    setSelectionState(shownPreset)
+    setSelection(shownPreset)
+    setShownPreset(shownPreset)
   }
 
   function editCustom(next: CustomTheme) {
@@ -641,14 +650,15 @@ export function ThemePanel(props: {
         'div',
         { className: 'ct-row-main' },
         React.createElement('div', { className: 'ct-row-title' }, t('presets.title')),
-        // While custom mode is on this row picks the template for the next
-        // added theme rather than applying a preset, and says so.
-        React.createElement('div', { className: 'ct-row-desc' }, t(customOn ? 'presets.base' : 'presets.desc')),
+        React.createElement('div', { className: 'ct-row-desc' }, t(customOn ? 'presets.disabled' : 'presets.desc')),
       ),
       React.createElement(SchemeMenu, {
         value: customOn ? shownPreset : selection,
         options: presetOptions,
         onSelect: (v) => pickPreset(v as PresetId),
+        // Custom mode owns the colours, and the preset it inherited is fixed
+        // for as long as it stays on.
+        disabled: customOn,
       }),
     ),
     React.createElement(
@@ -830,7 +840,6 @@ export function ThemePanel(props: {
             t,
             onActivate: () => onLoadSaved(entry.id),
             onEdit: () => startEdit(entry),
-            onDuplicate: () => void onDuplicate(entry.id),
             onDelete: () => setPendingDelete(entry),
           }),
     )
