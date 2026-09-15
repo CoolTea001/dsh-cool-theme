@@ -1,4 +1,4 @@
-![dsh-cool-theme cover](https://cdn.cooltea.top/dsh-cool-theme/readme-cover-v0.4.0.png)
+![dsh-cool-theme cover](https://cdn.cooltea.top/dsh-cool-theme/readme-cover-v0.5.0.png)
 
 # dsh-cool-theme
 
@@ -8,25 +8,24 @@
 
 ## 描述
 
-DeepSeek Harness 主题插件 — 支持 浅色 / 深色 / 跟随系统 外观切换，并提供 34 款预设主题。
+DeepSeek Harness 主题插件 —— 支持「深色」「浅色」「跟随系统」外观切换，提供 34 款预设主题，支持自定义主题配色。
 
 ## 功能介绍
 
-主题管理（侧边栏底部齿轮 → 设置 → 主题），支持 `浅色` / `深色` / `跟随系统` 外观切换，并提供 34 款预设：Aura、Ayu、Catppuccin、Catppuccin Frappe、Catppuccin Macchiato、Cobalt2、Cursor、DSH、Dracula、Everforest、Flexoki、GitHub、Gruvbox、Kanagawa、Lucent Orng、Material、Matrix、Mercury、Monokai、Night Owl、Nord、One Dark、OpenCode、Orng、Osaka Jade、Palenight、Rosé Pine、Solarized、Synthwave 84、System、Tokyo Night、Vercel、Vesper、Zenburn，所有主题均已适配浅色模式和深色模式。
+1. **外观切换：** 将通用设置中的外观切换功能移至主题设置中管理，你可以在设置弹窗/主题标签中设置外观：深色、浅色、跟随系统
+2. **34款预设主题：** 内置 34 款预设主题，每一款主题都适配了深色/浅色外观：Aura、Ayu、Catppuccin、Catppuccin Frappe、Catppuccin Macchiato、Cobalt2、Cursor、DSH、Dracula、Everforest、Flexoki、GitHub、Gruvbox、Kanagawa、Lucent Orng、Material、Matrix、Mercury、Monokai、Night Owl、Nord、One Dark、OpenCode、Orng、Osaka Jade、Palenight、Rosé Pine、Solarized、Synthwave 84、System、Tokyo Night、Vercel、Vesper、Zenburn。
+3. **自定义主题：** 开启自定义主题后，可以创建自定义主题（配色继承当前预设主题），用户可以自由更改主题配色。
 
 ## 安装教程
 
-一种最简单的方式是让你的 DSH 帮你安装，如果你想手动安装，请参考：
-
-```
-# 安装
-dsh plugin --profile <your-profile> add dsh-cool-theme
+```bash
+# 安装：dsh plugin --profile <your-profile> add dsh-cool-theme
+dsh plugin --profile web add dsh-cool-theme # web 端
+dsh plugin --profile desktop add dsh-cool-theme # 桌面端
 
 # 卸载
 dsh plugin --profile <your-profile> remove dsh-cool-theme
 ```
-
-> <your-profile> 替换成你的 DSH 使用的 profile，例如 web 端通常替换成 `web`，dsh-desktop 端通常替换成 `desktop`。
 
 ## 参与贡献
 

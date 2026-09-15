@@ -1,4 +1,4 @@
-![dsh-cool-theme cover](https://cdn.cooltea.top/dsh-cool-theme/readme-cover-v0.4.0.png)
+![dsh-cool-theme cover](https://cdn.cooltea.top/dsh-cool-theme/readme-cover-v0.5.0.png)
 
 # dsh-cool-theme
 
@@ -8,25 +8,24 @@ English · [中文](./README.zh.md)
 
 ## Description
 
-DeepSeek Harness theme plugin — supports light / dark / system appearance switching with 34 preset themes.
+DeepSeek Harness theme plugin — supports Dark / Light / System appearance switching, ships 34 preset themes, and supports custom theme colors.
 
 ## Features
 
-Theme management (sidebar gear → Settings → Theme), supports `light` / `dark` / `system` appearance switching and provides 34 presets: Aura, Ayu, Catppuccin, Catppuccin Frappe, Catppuccin Macchiato, Cobalt2, Cursor, DSH, Dracula, Everforest, Flexoki, GitHub, Gruvbox, Kanagawa, Lucent Orng, Material, Matrix, Mercury, Monokai, Night Owl, Nord, One Dark, OpenCode, Orng, Osaka Jade, Palenight, Rosé Pine, Solarized, Synthwave 84, System, Tokyo Night, Vercel, Vesper, Zenburn. All presets support both light and dark modes.
+1. **Appearance switching:** The appearance switch from General settings is now managed in Theme settings. You can set the appearance (dark, light, or system) in the Settings dialog → Theme tab.
+2. **34 preset themes:** 34 built-in presets, each adapted to both dark and light appearance: Aura, Ayu, Catppuccin, Catppuccin Frappe, Catppuccin Macchiato, Cobalt2, Cursor, DSH, Dracula, Everforest, Flexoki, GitHub, Gruvbox, Kanagawa, Lucent Orng, Material, Matrix, Mercury, Monokai, Night Owl, Nord, One Dark, OpenCode, Orng, Osaka Jade, Palenight, Rosé Pine, Solarized, Synthwave 84, System, Tokyo Night, Vercel, Vesper, Zenburn.
+3. **Custom themes:** Turn on custom themes to create your own (colors inherit from the currently selected preset), and freely change the theme colors.
 
 ## Installation
 
-The easiest way is to let DSH install it for you. For manual installation, see:
-
-```
-# Install
-dsh plugin --profile <your-profile> add dsh-cool-theme
+```bash
+# Install: dsh plugin --profile <your-profile> add dsh-cool-theme
+dsh plugin --profile web add dsh-cool-theme # Web
+dsh plugin --profile desktop add dsh-cool-theme # Desktop
 
 # Uninstall
 dsh plugin --profile <your-profile> remove dsh-cool-theme
 ```
-
-> Replace `<your-profile>` with your DSH profile, e.g. `web` for DSH Web and `desktop` for DSH Desktop.
 
 ## Contributing
 

@@ -35,7 +35,8 @@ import { vercel } from './presets/vercel.js'
 import { vesper } from './presets/vesper.js'
 import { zenburn } from './presets/zenburn.js'
 
-type PresetDef = { label: string; light: StaticMap; dark: StaticMap }
+/** A fully resolved theme: one primitive map per appearance. */
+export type PresetDef = { label: string; light: StaticMap; dark: StaticMap }
 
 export const PRESETS = {
   aura,
@@ -76,6 +77,12 @@ export const PRESETS = {
 
 /** `native` is a legacy storage alias for `dsh` — both mean "system default, no overrides". */
 export type PresetId = keyof typeof PRESETS | 'native'
+
+/**
+ * Presets that override nothing: the shell keeps its own colours. The single
+ * source of this set, so the token layer and the panel cannot drift on it.
+ */
+export const NOOP_PRESET_IDS: ReadonlySet<PresetId> = new Set<PresetId>(['native', 'dsh'])
 
 export const presetOptions: { value: PresetId; label: string }[] = [
   { value: 'dsh', label: PRESETS.dsh.label },
