@@ -54,6 +54,8 @@ export const zh = {
   'custom.unsaved.title': '放弃未保存的修改？',
   'custom.unsaved.desc': '「{0}」的修改尚未保存，关闭设置后将丢失。',
   'custom.unsaved.confirm': '放弃并关闭',
+  'custom.unsaved.leaveDesc': '「{0}」的修改尚未保存，是否确认放弃？',
+  'custom.unsaved.leaveConfirm': '放弃修改',
   'custom.unsaved.cancel': '继续编辑',
 
   'shiki.constant': '常量',
@@ -120,6 +122,8 @@ export const en = {
   'custom.unsaved.title': 'Discard unsaved changes?',
   'custom.unsaved.desc': 'Changes to "{0}" have not been saved and will be lost when settings close.',
   'custom.unsaved.confirm': 'Discard and close',
+  'custom.unsaved.leaveDesc': 'Changes to "{0}" have not been saved. Discard them?',
+  'custom.unsaved.leaveConfirm': 'Discard changes',
   'custom.unsaved.cancel': 'Keep editing',
 
   'shiki.constant': 'Constant',

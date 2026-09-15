@@ -486,6 +486,8 @@ export function ThemePanel(props: {
   const [editing, setEditing] = React.useState<Editing | null>(null)
   // The question raised when a shell close would throw an unsaved draft away.
   const [confirmClose, setConfirmClose] = React.useState(false)
+  // The question raised when a click outside the open card would abandon it.
+  const [confirmLeave, setConfirmLeave] = React.useState(false)
   // Read by the unmount cleanup, which must not depend on a re-render to see the
   // current draft, and by `saveEdit` so a save in flight is not mistaken for an
   // abandoned edit.
@@ -498,6 +500,8 @@ export function ThemePanel(props: {
   dirtyRef.current = editing !== null && isDirty(editing, custom)
   const confirmCloseRef = React.useRef(false)
   confirmCloseRef.current = confirmClose
+  const confirmLeaveRef = React.useRef(false)
+  confirmLeaveRef.current = confirmLeave
   const pendingDeleteRef = React.useRef<SavedTheme | null>(null)
   pendingDeleteRef.current = pendingDelete
   // `seq` keys the banner so an identical repeated message restarts its cycle
@@ -602,9 +606,13 @@ export function ThemePanel(props: {
   // affordances are intercepted in the capture phase — the event never reaches
   // the shell — and our own dialog asks first. Its "discard" answer calls the
   // section's `close` seat, the documented way for a section to leave settings.
+  //
+  // Every other click that lands outside the open card abandons the draft just
+  // as surely: it would collapse the editor through the settings nav, another
+  // card's edit button or the custom switch, or is simply a click the user meant
+  // for somewhere else. Those are intercepted too and asked about with a second
+  // question, whose "discard" answer only closes the editor; the panel stays.
   React.useEffect(() => {
-    if (!onRequestClose) return
-
     /** The header button carrying the `settings.close` seat, if `node` is in it. */
     function isCloseButton(node: Element): boolean {
       const seat = node.ownerDocument.querySelector('[data-slot="settings.close"]')
@@ -620,32 +628,52 @@ export function ThemePanel(props: {
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
-      // Our own question owns Escape while it is up: dismiss the question only.
-      if (confirmCloseRef.current) {
+      // Our own questions own Escape while one is up: dismiss the question only.
+      if (confirmCloseRef.current || confirmLeaveRef.current) {
         e.preventDefault()
         e.stopPropagation()
         setConfirmClose(false)
+        setConfirmLeave(false)
         return
       }
-      if (!dirtyRef.current) return
+      if (!dirtyRef.current || !onRequestClose) return
       e.preventDefault()
       e.stopPropagation()
       setConfirmClose(true)
     }
 
     function onClick(e: MouseEvent) {
-      // A delete question already holding the screen keeps its own event flow.
-      if (!dirtyRef.current || confirmCloseRef.current || pendingDeleteRef.current) return
+      // A question already holding the screen keeps its own event flow.
+      if (
+        !dirtyRef.current ||
+        confirmCloseRef.current ||
+        confirmLeaveRef.current ||
+        pendingDeleteRef.current
+      ) {
+        return
+      }
       const target = e.target instanceof Element ? e.target : null
       if (!target) return
+      // Clicks inside the open card — the name field, a dot, cancel/save — are
+      // the edit itself, not a way out of it.
+      if (target.closest('[data-ct-editor]')) return
       const panel = settingsPanel()
       // A click outside the panel is the mask; inside it, only the header button
-      // closes. Everything else in the panel (nav, editor, cards) is left alone.
+      // closes. Everything else in the panel falls to the second question below.
       const isMask = !!panel && !panel.contains(target)
-      if (!isMask && !isCloseButton(target)) return
+      if (isMask || isCloseButton(target)) {
+        // Without a close seat there is no way to honour a confirmed discard, so
+        // the close gestures are left to the shell rather than trapped.
+        if (!onRequestClose) return
+        e.preventDefault()
+        e.stopPropagation()
+        setConfirmClose(true)
+        return
+      }
+      if (!panel || !panel.contains(target)) return
       e.preventDefault()
       e.stopPropagation()
-      setConfirmClose(true)
+      setConfirmLeave(true)
     }
 
     document.addEventListener('keydown', onKeyDown, true)
@@ -964,7 +992,9 @@ export function ThemePanel(props: {
     const editorCard = (key: string) =>
       React.createElement(
         'div',
-        { className: 'ct-editor', key },
+        // `data-ct-editor` marks the one region the click-away guard lets through:
+        // everything the user does to the draft happens inside this node.
+        { className: 'ct-editor', key, 'data-ct-editor': 'true' },
         React.createElement(
           'div',
           { className: 'ct-editor-head' },
@@ -1047,6 +1077,29 @@ export function ThemePanel(props: {
           onRequestClose()
         },
         onCancel: () => setConfirmClose(false),
+      }),
+    )
+  }
+
+  // The click-away question. Confirming only collapses the open card through the
+  // same path as Cancel — `cancelEdit` writes the pre-edit theme back — so the
+  // settings panel itself stays open and nothing else here has to be reverted.
+  if (confirmLeave && editing) {
+    children.push(
+      React.createElement(ConfirmDialog, {
+        key: 'confirm-leave',
+        title: t('custom.unsaved.title'),
+        description: t('custom.unsaved.leaveDesc').replace(
+          '{0}',
+          editing.name.trim() || t('custom.defaultName'),
+        ),
+        confirmLabel: t('custom.unsaved.leaveConfirm'),
+        cancelLabel: t('custom.unsaved.cancel'),
+        onConfirm: () => {
+          setConfirmLeave(false)
+          cancelEdit()
+        },
+        onCancel: () => setConfirmLeave(false),
       }),
     )
   }

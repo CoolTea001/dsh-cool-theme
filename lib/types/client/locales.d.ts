@@ -52,6 +52,8 @@ export declare const zh: {
     'custom.unsaved.title': string;
     'custom.unsaved.desc': string;
     'custom.unsaved.confirm': string;
+    'custom.unsaved.leaveDesc': string;
+    'custom.unsaved.leaveConfirm': string;
     'custom.unsaved.cancel': string;
     'shiki.constant': string;
     'shiki.string': string;
@@ -114,6 +116,8 @@ export declare const en: {
     'custom.unsaved.title': string;
     'custom.unsaved.desc': string;
     'custom.unsaved.confirm': string;
+    'custom.unsaved.leaveDesc': string;
+    'custom.unsaved.leaveConfirm': string;
     'custom.unsaved.cancel': string;
     'shiki.constant': string;
     'shiki.string': string;
