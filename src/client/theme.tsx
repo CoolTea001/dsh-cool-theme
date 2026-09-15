@@ -62,7 +62,7 @@ const BASE_CSS = [
   // round swatch on the right. The swatch IS the native picker, so a click
   // opens the platform colour chooser directly.
   '.ct-seed-row{display:flex;align-items:center;gap:16px;padding:12px 0;}',
-  '.ct-seed-label{flex:0 0 auto;min-width:96px;padding-left:2px;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);}',
+  '.ct-seed-label{flex:0 0 auto;min-width:96px;padding-left:3px;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);}',
   '.ct-seed-dots{flex:1 1 auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:10px;}',
   // The visible swatch is the wrapper, not the native colour input: its shape
   // and its border therefore come from one `border-radius` and cannot disagree
