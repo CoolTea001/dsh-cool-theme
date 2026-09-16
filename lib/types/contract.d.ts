@@ -46,4 +46,39 @@ export type ThemeDocument = {
  */
 export declare const THEME_API_PREFIX = "/cool-theme/api";
 export declare const THEME_API_PATH_THEMES = "/cool-theme/api/themes";
+/**
+ * Share archive: one theme directory zipped. The document keeps the name it has
+ * on disk, so an archive is a copy of the directory rather than a new format,
+ * and media added later travels with it under {@link THEME_ARCHIVE_ASSETS_DIR}.
+ */
+export declare const THEME_ARCHIVE_DOCUMENT = "theme.json";
+export declare const THEME_ARCHIVE_ASSETS_DIR = "assets";
+/** Content type of an exported archive, and the extension a name gets. */
+export declare const THEME_ARCHIVE_MIME = "application/zip";
+export declare const THEME_ARCHIVE_EXTENSION = ".zip";
+/**
+ * Import bounds. A theme is a small JSON document, so anything past these caps
+ * is refused before it is parsed rather than after it has been held in memory.
+ */
+export declare const THEME_ARCHIVE_MAX_BYTES: number;
+export declare const THEME_ARCHIVE_MAX_ENTRIES = 256;
+/** Cap on one uncompressed entry, so a zip bomb cannot expand without bound. */
+export declare const THEME_ARCHIVE_MAX_ENTRY_BYTES: number;
+/** Route segments below {@link THEME_API_PATH_THEMES}: `/<id>/export`, `/import`. */
+export declare const THEME_API_SEGMENT_EXPORT = "export";
+export declare const THEME_API_PATH_IMPORT = "/cool-theme/api/themes/import";
+/**
+ * Name the Host suggests for a downloaded archive. The archive keeps the
+ * theme's name so a user can tell two exports apart, with the characters a
+ * filesystem refuses folded to spaces; the id is the fallback for a name that
+ * folds away to nothing.
+ */
+export declare function archiveFileName(name: string, id: string): string;
+/**
+ * `base`, else `${base} 2`, `${base} 3`, … An imported theme keeps the name it
+ * was shared under — that name is the point of the share — so a clash is
+ * resolved by numbering rather than by renaming the incoming theme. The Host
+ * owns this because it owns the roster the names have to be free in.
+ */
+export declare function freeThemeName(base: string, taken: readonly string[]): string;
 //# sourceMappingURL=contract.d.ts.map

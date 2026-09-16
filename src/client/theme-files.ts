@@ -6,7 +6,14 @@
  * records. Every call is same-origin against the Host's own prefix route.
  */
 
-import { THEME_API_PATH_THEMES, THEME_FILE_VERSION } from '../contract.js'
+import {
+  THEME_API_PATH_IMPORT,
+  THEME_API_PATH_THEMES,
+  THEME_API_SEGMENT_EXPORT,
+  THEME_ARCHIVE_EXTENSION,
+  THEME_ARCHIVE_MAX_BYTES,
+  THEME_FILE_VERSION,
+} from '../contract.js'
 import type { ThemeAsset, ThemeDocument } from '../contract.js'
 import { normalizeCustom, type CustomTheme, type SavedTheme } from './custom.js'
 
@@ -128,6 +135,86 @@ export async function pushThemes(
 /** Remove one theme's directory. */
 export async function removeTheme(id: string): Promise<void> {
   await callApi(`${THEME_API_PATH_THEMES}/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+/** One theme the Host stored on the client's behalf, as a stored document. */
+function storedTheme(payload: Record<string, unknown>): { id: string; name: string } {
+  const doc = isRecord(payload.theme) ? payload.theme : {}
+  if (typeof doc.id !== 'string' || typeof doc.name !== 'string') {
+    throw new Error('the Host did not report a stored theme')
+  }
+  return { id: doc.id, name: doc.name }
+}
+
+/**
+ * Download one theme as an archive. The response is the archive itself rather
+ * than JSON, so this is the one call that does not go through {@link callApi}.
+ */
+export async function exportTheme(id: string, name: string): Promise<void> {
+  const response = await fetch(
+    `${THEME_API_PATH_THEMES}/${encodeURIComponent(id)}/${THEME_API_SEGMENT_EXPORT}`,
+  )
+  if (response.status === 404 || response.status === 405) {
+    throw new ThemeApiUnavailableError(`${String(response.status)} ${response.statusText}`)
+  }
+  if (!response.ok) throw new Error(`${String(response.status)} ${response.statusText}`)
+  const blob = await response.blob()
+  saveBlob(blob, suggestedName(response.headers.get('content-disposition'), name))
+}
+
+/**
+ * The archive's own filename when the Host sent one, else the theme's name. The
+ * Host is the authority because only it knows the theme id behind a bad name.
+ */
+function suggestedName(disposition: string | null, fallback: string): string {
+  const encoded = disposition?.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
+  if (encoded !== undefined) {
+    try {
+      return decodeURIComponent(encoded)
+    } catch {
+      // A malformed escape is not worth failing a download over.
+    }
+  }
+  const plain = disposition?.match(/filename="?([^";]+)"?/i)?.[1]
+  if (plain !== undefined && plain !== '') return plain
+  const name = fallback.trim() === '' ? 'theme' : fallback.trim()
+  return name.endsWith(THEME_ARCHIVE_EXTENSION) ? name : `${name}${THEME_ARCHIVE_EXTENSION}`
+}
+
+/** Hand one blob to the browser's own download machinery. */
+function saveBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob)
+  try {
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = fileName
+    anchor.rel = 'noopener'
+    document.body.append(anchor)
+    anchor.click()
+    anchor.remove()
+  } finally {
+    // Revoked on the next task: an immediate revoke can cancel a download the
+    // browser has not started reading yet.
+    setTimeout(() => { URL.revokeObjectURL(url) }, 0)
+  }
+}
+
+/**
+ * Upload one archive. The Host validates it, names the theme and stores it, so
+ * a success means the roster already has the theme — the answer carries what to
+ * report, not what the client still has to write.
+ */
+export async function importTheme(file: File): Promise<{ id: string; name: string }> {
+  if (file.size > THEME_ARCHIVE_MAX_BYTES) {
+    throw new Error(`archive is larger than ${String(Math.round(THEME_ARCHIVE_MAX_BYTES / (1024 * 1024)))} MB`)
+  }
+  return storedTheme(
+    await callApi(THEME_API_PATH_IMPORT, {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream' },
+      body: file,
+    }),
+  )
 }
 
 /**

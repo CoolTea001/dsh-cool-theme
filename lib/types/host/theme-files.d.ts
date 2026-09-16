@@ -33,6 +33,12 @@ export declare function putTheme(input: {
 }): Promise<ThemeDocument>;
 /** Remove one theme directory. A missing directory is already the goal. */
 export declare function deleteTheme(id: string): Promise<void>;
+/**
+ * A fresh theme id. The same shape the client mints (`ct_` + time + noise), so
+ * an id never says which half created it, and `isThemeId` is the only rule both
+ * halves apply.
+ */
+export declare function newThemeId(): string;
 /** Absolute path of a theme's media directory; used once themes carry media. */
 export declare function assetsDir(id: string): string;
 //# sourceMappingURL=theme-files.d.ts.map

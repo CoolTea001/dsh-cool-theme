@@ -26,6 +26,20 @@ export declare function pushThemes(entries: SavedTheme[], fallbackFor: (base: st
 /** Remove one theme's directory. */
 export declare function removeTheme(id: string): Promise<void>;
 /**
+ * Download one theme as an archive. The response is the archive itself rather
+ * than JSON, so this is the one call that does not go through {@link callApi}.
+ */
+export declare function exportTheme(id: string, name: string): Promise<void>;
+/**
+ * Upload one archive. The Host validates it, names the theme and stores it, so
+ * a success means the roster already has the theme — the answer carries what to
+ * report, not what the client still has to write.
+ */
+export declare function importTheme(file: File): Promise<{
+    id: string;
+    name: string;
+}>;
+/**
  * The themes a browser saved before files became the store, minus those the
  * Host already has.
  *

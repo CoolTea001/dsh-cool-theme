@@ -3,10 +3,10 @@
  */
 
 import * as React from 'react'
-import { CUSTOM_PRESET_ID } from '../contract.js'
+import { CUSTOM_PRESET_ID, THEME_ARCHIVE_EXTENSION } from '../contract.js'
 import { type PresetId, presetOptions } from './presets.js'
 import { type ThemeKey } from './locales.js'
-import { ThemeApiUnavailableError } from './theme-files.js'
+import { ThemeApiUnavailableError, exportTheme, importTheme } from './theme-files.js'
 import {
   type CustomTheme,
   type Mode,
@@ -22,6 +22,30 @@ export const CUSTOM_SELECTION = CUSTOM_PRESET_ID
 export type Selection = PresetId | typeof CUSTOM_SELECTION
 
 export type CustomState = { base: PresetId; theme: CustomTheme }
+
+/**
+ * Which message an import failure deserves. The Host answers with its own
+ * reason, so the shape of that reason is what selects the localized text; an
+ * unrecognised failure keeps the Host's own words rather than hiding them.
+ */
+function importFailureMessage(t: (key: ThemeKey) => string, error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  if (error instanceof ThemeApiUnavailableError) return t('custom.toast.unavailable')
+  const key: ThemeKey = /not a zip archive|zip central directory|zip local header|zip64|unsupported zip compression/i.test(message)
+    ? 'custom.importFailed.notArchive'
+    : /missing theme\.json/i.test(message)
+      ? 'custom.importFailed.noDocument'
+      : /newer than this plugin/i.test(message)
+        ? 'custom.importFailed.tooNew'
+        : /carries media|unsupported media type|unusable media path/i.test(message)
+          ? 'custom.importFailed.media'
+          : /larger than|too large|too many files/i.test(message)
+            ? 'custom.importFailed.tooLarge'
+            : /not valid JSON|must be|unusable theme|did not report/i.test(message)
+              ? 'custom.importFailed.badDocument'
+              : 'custom.importFailed.other'
+  return t(key).replace('{0}', message)
+}
 
 /**
  * The card currently open in the editor, plus the state to restore if the user
@@ -341,9 +365,110 @@ function IconPlus(props: { size?: number }) {
 }
 
 /**
+ * Lucide `edit` (the pencil in a square), path data verbatim. Row actions are
+ * icon-only, so the glyph has to read as the label the accessible name still
+ * carries.
+ */
+function IconEdit(props: { size?: number }) {
+  const { size = 14 } = props
+  return React.createElement(
+    'svg',
+    {
+      width: size,
+      height: size,
+      viewBox: '0 0 24 24',
+      fill: 'none',
+      stroke: 'currentColor',
+      strokeWidth: 2,
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      xmlns: 'http://www.w3.org/2000/svg',
+      'aria-hidden': true,
+      focusable: false,
+    },
+    React.createElement('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
+    React.createElement('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
+  )
+}
+
+/** Lucide `trash`, path data verbatim; the row's danger action. */
+function IconTrash(props: { size?: number }) {
+  const { size = 14 } = props
+  return React.createElement(
+    'svg',
+    {
+      width: size,
+      height: size,
+      viewBox: '0 0 24 24',
+      fill: 'none',
+      stroke: 'currentColor',
+      strokeWidth: 2,
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      xmlns: 'http://www.w3.org/2000/svg',
+      'aria-hidden': true,
+      focusable: false,
+    },
+    React.createElement('path', { d: 'M3 6h18' }),
+    React.createElement('path', { d: 'M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6' }),
+    React.createElement('path', { d: 'M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2' }),
+    React.createElement('line', { x1: 10, y1: 11, x2: 10, y2: 17 }),
+    React.createElement('line', { x1: 14, y1: 11, x2: 14, y2: 17 }),
+  )
+}
+
+/** Lucide `share`, path data verbatim; sends one theme out as an archive. */
+function IconShare(props: { size?: number }) {
+  const { size = 14 } = props
+  return React.createElement(
+    'svg',
+    {
+      width: size,
+      height: size,
+      viewBox: '0 0 24 24',
+      fill: 'none',
+      stroke: 'currentColor',
+      strokeWidth: 2,
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      xmlns: 'http://www.w3.org/2000/svg',
+      'aria-hidden': true,
+      focusable: false,
+    },
+    React.createElement('path', { d: 'M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8' }),
+    React.createElement('polyline', { points: '16 6 12 2 8 6' }),
+    React.createElement('line', { x1: 12, y1: 2, x2: 12, y2: 15 }),
+  )
+}
+
+/** Lucide `download`, path data verbatim; takes one archive in. */
+function IconDownload(props: { size?: number }) {
+  const { size = 14 } = props
+  return React.createElement(
+    'svg',
+    {
+      width: size,
+      height: size,
+      viewBox: '0 0 24 24',
+      fill: 'none',
+      stroke: 'currentColor',
+      strokeWidth: 2,
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      xmlns: 'http://www.w3.org/2000/svg',
+      'aria-hidden': true,
+      focusable: false,
+    },
+    React.createElement('path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' }),
+    React.createElement('polyline', { points: '7 10 12 15 17 10' }),
+    React.createElement('line', { x1: 12, y1: 15, x2: 12, y2: 3 }),
+  )
+}
+
+/**
  * One collapsed saved-theme card: the name activates the theme, and the trailing
- * controls open the editor or delete it. The card as a whole is a click target
- * too, but its controls own their clicks.
+ * controls export it, open the editor or delete it. The card as a whole is a
+ * click target too, but its controls own their clicks.
  */
 function ThemeCard(props: {
   entry: SavedTheme
@@ -352,27 +477,50 @@ function ThemeCard(props: {
   disabled: boolean
   t: (key: ThemeKey) => string
   onActivate: () => void
+  /** Download this card as an archive. */
+  onExport: () => void
   onEdit: () => void
   onDelete: () => void
 }) {
-  const { entry, active, disabled, t, onActivate, onEdit, onDelete } = props
+  const { entry, active, disabled, t, onActivate, onExport, onEdit, onDelete } = props
 
-  /** One dense capsule action; `danger` is the borderless delete variant. */
-  const action = (label: string, onClick: () => void, danger?: boolean) =>
+  /**
+   * One square icon action; `danger` is the tinted delete variant. The glyph is
+   * decorative, so the label travels as the accessible name instead of as text,
+   * and as `data-tip` for the hover tooltip. `leave` marks the button on the
+   * markup the outside-click guard watches (see the guard's own comment).
+   */
+  const action = (
+    label: string,
+    icon: React.ReactNode,
+    onClick: () => void,
+    variant?: 'danger' | 'leave',
+  ) =>
     React.createElement(
       'button',
       {
         type: 'button',
-        className: danger ? 'ct-list-btn ct-list-btn-danger' : 'ct-list-btn',
+        className: variant === 'danger'
+          ? 'ct-list-btn ct-list-btn-danger ct-tip'
+          : 'ct-list-btn ct-tip',
+        'aria-label': label,
+        'data-tip': label,
+        ...(variant === 'leave' ? { 'data-ct-leave': 'true', 'data-ct-entry': entry.id } : {}),
         onClick,
       },
-      label,
+      icon,
     )
 
   return React.createElement(
     'div',
     {
       className: 'ct-list-row',
+      // Marks the gestures that would abandon an open draft — loading this card
+      // and opening it in the editor — so the outside-click guard asks about
+      // exactly those and nothing else. Export and delete are excluded: neither
+      // disturbs the open card, and delete raises its own confirmation.
+      'data-ct-leave': 'true',
+      'data-ct-entry': entry.id,
       onClick: disabled ? undefined : onActivate,
     },
     React.createElement(
@@ -399,13 +547,14 @@ function ThemeCard(props: {
       {
         className: 'ct-list-actions',
         // The actions own their clicks: without this the card would also load
-        // the theme on every edit or delete.
+        // the theme on every edit, export or delete.
         onClick: (e: React.MouseEvent) => e.stopPropagation(),
       },
       // The active card is tagged on the trailing edge, beside its actions.
       active ? React.createElement('span', { className: 'ct-list-badge' }, t('custom.inUse')) : null,
-      action(t('custom.edit'), onEdit),
-      action(t('custom.delete'), onDelete, true),
+      action(t('custom.edit'), React.createElement(IconEdit, { size: 14 }), onEdit, 'leave'),
+      action(t('custom.export'), React.createElement(IconShare, { size: 14 }), onExport),
+      action(t('custom.delete'), React.createElement(IconTrash, { size: 14 }), onDelete, 'danger'),
     ),
   )
 }
@@ -487,13 +636,24 @@ export function ThemePanel(props: {
   const [list, setList] = React.useState<SavedTheme[]>(() => saved.list())
   const [activeId, setActiveId] = React.useState<string | null>(() => saved.activeId())
   const [pendingDelete, setPendingDelete] = React.useState<SavedTheme | null>(null)
+  // An archive being read. The picker is the browser's, so this only gates the
+  // import button and the second picker opening while the first is still in
+  // flight.
+  const [importing, setImporting] = React.useState(false)
+  /** The hidden picker the import button opens. */
+  const importInputRef = React.useRef<HTMLInputElement | null>(null)
   // The card open in the editor. Null means every card is collapsed and only the
   // "add" button is showing, which is the state the panel opens in.
   const [editing, setEditing] = React.useState<Editing | null>(null)
   // The question raised when a shell close would throw an unsaved draft away.
   const [confirmClose, setConfirmClose] = React.useState(false)
-  // The question raised when a click outside the open card would abandon it.
-  const [confirmLeave, setConfirmLeave] = React.useState(false)
+  // The question raised when a gesture outside the open card would abandon it.
+  // The entry records a gesture that was already resolved to another card, so a
+  // confirmed discard can carry on into it instead of dropping the user's click.
+  const [pendingLeave, setPendingLeave] = React.useState<{
+    entry: SavedTheme | null
+    edit: boolean
+  } | null>(null)
   // Read by the unmount cleanup, which must not depend on a re-render to see the
   // current draft, and by `saveEdit` so a save in flight is not mistaken for an
   // abandoned edit.
@@ -510,8 +670,12 @@ export function ThemePanel(props: {
   dirtyRef.current = editing !== null && isDirty(editing, custom)
   const confirmCloseRef = React.useRef(false)
   confirmCloseRef.current = confirmClose
-  const confirmLeaveRef = React.useRef(false)
-  confirmLeaveRef.current = confirmLeave
+  const pendingLeaveRef = React.useRef<{ entry: SavedTheme | null; edit: boolean } | null>(null)
+  pendingLeaveRef.current = pendingLeave
+  // The guard's click handler outlives one render, so the roster it searches for
+  // the clicked card is mirrored the same way.
+  const listRef = React.useRef<SavedTheme[]>(list)
+  listRef.current = list
   const pendingDeleteRef = React.useRef<SavedTheme | null>(null)
   pendingDeleteRef.current = pendingDelete
   // `seq` keys the banner so an identical repeated message restarts its cycle
@@ -560,6 +724,8 @@ export function ThemePanel(props: {
     }
   }
 
+  /** Load a card: the store moves the active pointer itself, so `syncSaved`
+   * re-reads the badge rather than a separate `setActive` call. */
   function onLoadSaved(id: string) {
     const next = saved.load(id)
     if (next) setCustomState(next)
@@ -656,11 +822,15 @@ export function ThemePanel(props: {
   // the shell — and our own dialog asks first. Its "discard" answer calls the
   // section's `close` seat, the documented way for a section to leave settings.
   //
-  // Every other click that lands outside the open card abandons the draft just
-  // as surely: it would collapse the editor through the settings nav, another
-  // card's edit button or the custom switch, or is simply a click the user meant
-  // for somewhere else. Those are intercepted too and asked about with a second
-  // question, whose "discard" answer only closes the editor; the panel stays.
+  // Exactly two other gestures would abandon a dirty draft, and both are asked
+  // about: switching sections (a click on a nav cell, not merely somewhere in
+  // the rail) and moving to another custom card (loading it, or opening it in
+  // the editor). Both are marked in the markup — `data-ct-leave` for cards,
+  // `isNavCell` for the rail — rather than inferred from "the click was
+  // somewhere outside the card", because plenty of clicks inside the panel are
+  // not a way out at all: naming the draft, changing its appearance or picking a
+  // scheme preset all belong to the edit itself, and bubbling them up as a
+  // "discard?" question only interrupted the user.
   React.useEffect(() => {
     /** The header button carrying the `settings.close` seat, if `node` is in it. */
     function isCloseButton(node: Element): boolean {
@@ -675,14 +845,27 @@ export function ThemePanel(props: {
       return seat?.closest('[role="dialog"]') ?? null
     }
 
+    /**
+     * Whether `node` sits on a nav *cell* — the buttons that switch sections —
+     * rather than anywhere else in the rail. Cells are the only buttons in the
+     * nav, and the shell marks the active one with `aria-current`; taking that
+     * button's parent gives the cell list itself, which still matches once the
+     * active cell moves to whatever was just clicked.
+     */
+    function isNavCell(panel: Element | null, node: Element): boolean {
+      const list = panel?.querySelector('nav button[aria-current]')?.parentElement
+      const button = node.closest('button')
+      return !!list && !!button && list.contains(button)
+    }
+
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
       // Our own questions own Escape while one is up: dismiss the question only.
-      if (confirmCloseRef.current || confirmLeaveRef.current) {
+      if (confirmCloseRef.current || pendingLeaveRef.current) {
         e.preventDefault()
         e.stopPropagation()
         setConfirmClose(false)
-        setConfirmLeave(false)
+        setPendingLeave(null)
         return
       }
       if (!dirtyRef.current || !onRequestClose) return
@@ -696,7 +879,7 @@ export function ThemePanel(props: {
       if (
         !dirtyRef.current ||
         confirmCloseRef.current ||
-        confirmLeaveRef.current ||
+        pendingLeaveRef.current ||
         pendingDeleteRef.current
       ) {
         return
@@ -708,7 +891,7 @@ export function ThemePanel(props: {
       if (target.closest('[data-ct-editor]')) return
       const panel = settingsPanel()
       // A click outside the panel is the mask; inside it, only the header button
-      // closes. Everything else in the panel falls to the second question below.
+      // closes. Each raises the same leave-the-panel question.
       const isMask = !!panel && !panel.contains(target)
       if (isMask || isCloseButton(target)) {
         // Without a close seat there is no way to honour a confirmed discard, so
@@ -720,9 +903,25 @@ export function ThemePanel(props: {
         return
       }
       if (!panel || !panel.contains(target)) return
+      // Switching sections abandons the draft exactly as closing does, so it
+      // takes the same question and the same answer: leave settings. Only a
+      // click on a nav cell counts; the rail's own chrome is not a tab switch.
+      if (isNavCell(panel, target)) {
+        if (!onRequestClose) return
+        e.preventDefault()
+        e.stopPropagation()
+        setConfirmClose(true)
+        return
+      }
+      // A gesture that moves to another card. The editor's own card is not in
+      // the list while it is open, so any marked card here is a different one.
+      const leave = target.closest('[data-ct-leave]')
+      if (!leave) return
+      const entry = listRef.current.find((item) => item.id === leave.getAttribute('data-ct-entry'))
+      if (!entry) return
       e.preventDefault()
       e.stopPropagation()
-      setConfirmLeave(true)
+      setPendingLeave({ entry, edit: !!target.closest('button[data-ct-leave]') })
     }
 
     document.addEventListener('keydown', onKeyDown, true)
@@ -765,6 +964,68 @@ export function ThemePanel(props: {
     revertEditing(editing)
     setEditing(null)
     syncSaved()
+  }
+
+  /**
+   * Send one card out as an archive. Export never touches the draft or the
+   * roster, so it stays available while an editor is open and needs no guard.
+   */
+  async function exportCard(entry: SavedTheme) {
+    try {
+      await exportTheme(entry.id, entry.name)
+      showToast(t('custom.toast.exported').replace('{0}', entry.name))
+    } catch (error) {
+      showToast(t(error instanceof ThemeApiUnavailableError ? 'custom.toast.unavailable' : 'custom.toast.failed'))
+    }
+  }
+
+  /**
+   * Take one archive in. The Host validates the archive and writes the theme it
+   * carried — a theme is a document, so an import stores exactly what an export
+   * packed, with the Host choosing the id and a free name. The draft is never
+   * involved, so importing leaves an open editor exactly as it was.
+   */
+  async function importArchive(file: File) {
+    setImporting(true)
+    try {
+      const imported = await importTheme(file)
+      await reloadRoster()
+      showToast(t('custom.toast.imported').replace('{0}', imported.name))
+    } catch (error) {
+      showToast(importFailureMessage(t, error))
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  /**
+   * Re-read the roster after a write the store did not make. The import route is
+   * the Host's own: the cached list still holds the pre-import roster, so without
+   * this the new card only appears once some later mutation refreshes the cache.
+   * A failed re-read is not a failed import — the theme is stored either way — so
+   * the card is left to the next roster mutation rather than reported as an error.
+   */
+  async function reloadRoster() {
+    try {
+      await saved.refresh()
+      syncSaved()
+    } catch {
+      // Deliberately silent: see above.
+    }
+  }
+
+  /** Open the picker, clearing the previous choice so the same file can be re-picked. */
+  function startImport() {
+    const input = importInputRef.current
+    if (!input) return
+    input.value = ''
+    input.click()
+  }
+
+  function onImportPicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (file) void importArchive(file)
   }
 
   /** Commit the open editor: create a new entry, or update the one being edited. */
@@ -938,12 +1199,12 @@ export function ThemePanel(props: {
               'label',
               {
                 key: d.key,
-                className: 'ct-seed-dot',
+                className: 'ct-seed-dot ct-tip',
                 // The wrapper paints the colour; the input inside is invisible.
                 style: { background: d.value },
                 // Names the token this swatch edits; rendered as the styled
-                // bubble by `.ct-seed-dot::after` (the invisible input on top is
-                // the real hover target, so a native `title` would never fire).
+                // bubble by the shared `.ct-tip` rule (the invisible input on top
+                // is the real hover target, so a native `title` would never fire).
                 'data-tip': d.name,
               },
               React.createElement('input', {
@@ -1090,6 +1351,7 @@ export function ThemePanel(props: {
             disabled: editing !== null,
             t,
             onActivate: () => onLoadSaved(entry.id),
+            onExport: () => void exportCard(entry),
             onEdit: () => startEdit(entry),
             onDelete: () => setPendingDelete(entry),
           }),
@@ -1102,16 +1364,47 @@ export function ThemePanel(props: {
     children.push(
       React.createElement('div', { className: 'ct-list', key: 'saved-list' }, ...cards),
       React.createElement(
-        'button',
-        {
-          key: 'add',
-          type: 'button',
-          className: 'ct-add-btn',
-          disabled: editing !== null,
-          onClick: startAdd,
-        },
-        React.createElement(IconPlus, null),
-        t('custom.add'),
+        'div',
+        // The row is a marker the click-away guard ignores; only its two buttons
+        // matter, and neither disturbs an open draft.
+        { className: 'ct-add-row', key: 'add-row' },
+        React.createElement(
+          'button',
+          {
+            key: 'import',
+            type: 'button',
+            // The same dashed face as add: importing is the other way to get a
+            // card, so the two split the row rather than one dominating it.
+            className: 'ct-add-btn',
+            disabled: importing,
+            onClick: startImport,
+          },
+          React.createElement(IconDownload, null),
+          t('custom.import'),
+        ),
+        React.createElement(
+          'button',
+          {
+            key: 'add',
+            type: 'button',
+            className: 'ct-add-btn',
+            disabled: editing !== null,
+            onClick: startAdd,
+          },
+          React.createElement(IconPlus, null),
+          t('custom.add'),
+        ),
+        // The browser's own picker, kept out of the layout but inside this
+        // subtree: it belongs to the button that opens it, so the two travel
+        // together when the custom-mode branch unmounts.
+        React.createElement('input', {
+          key: 'import-input',
+          ref: importInputRef,
+          type: 'file',
+          accept: `${THEME_ARCHIVE_EXTENSION},application/zip`,
+          style: { display: 'none' },
+          onChange: onImportPicked,
+        }),
       ),
     )
   }
@@ -1153,10 +1446,11 @@ export function ThemePanel(props: {
     )
   }
 
-  // The click-away question. Confirming only collapses the open card through the
-  // same path as Cancel — `cancelEdit` writes the pre-edit theme back — so the
-  // settings panel itself stays open and nothing else here has to be reverted.
-  if (confirmLeave && editing) {
+  // The unsaved-draft question raised by moving to another card. Confirming
+  // discards through the same path as Cancel — `cancelEdit` writes the pre-edit
+  // theme back — and then carries the interrupted gesture through, so the click
+  // the guard swallowed still does what it said. The panel stays open.
+  if (pendingLeave && editing) {
     children.push(
       React.createElement(ConfirmDialog, {
         key: 'confirm-leave',
@@ -1168,10 +1462,15 @@ export function ThemePanel(props: {
         confirmLabel: t('custom.unsaved.leaveConfirm'),
         cancelLabel: t('custom.unsaved.cancel'),
         onConfirm: () => {
-          setConfirmLeave(false)
+          const next = pendingLeave
+          setPendingLeave(null)
           cancelEdit()
+          if (next.entry) {
+            if (next.edit) startEdit(next.entry)
+            else onLoadSaved(next.entry.id)
+          }
         },
-        onCancel: () => setConfirmLeave(false),
+        onCancel: () => setPendingLeave(null),
       }),
     )
   }

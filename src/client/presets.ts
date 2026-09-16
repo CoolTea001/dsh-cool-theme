@@ -1,4 +1,5 @@
 import type { StaticMap } from './css/primitives.js'
+import { PRESET_IDS, type BuiltinPresetId } from '../presets-ids.js'
 
 import { aura } from './presets/aura.js'
 import { ayu } from './presets/ayu.js'
@@ -38,7 +39,13 @@ import { zenburn } from './presets/zenburn.js'
 /** A fully resolved theme: one primitive map per appearance. */
 export type PresetDef = { label: string; light: StaticMap; dark: StaticMap }
 
-export const PRESETS = {
+/**
+ * Every shipped preset, one entry per {@link PRESET_IDS} name. The mapped type
+ * makes the two lists agree at compile time: a preset without a colour map, or a
+ * name with no entry here, is a type error rather than a theme that goes missing
+ * from the picker (or from an import's validation).
+ */
+export const PRESETS: Record<BuiltinPresetId, PresetDef> = {
   aura,
   ayu,
   catppuccin,
@@ -73,7 +80,7 @@ export const PRESETS = {
   vercel,
   vesper,
   zenburn,
-} as const satisfies Record<string, PresetDef>
+}
 
 /** `native` is a legacy storage alias for `dsh` — both mean "system default, no overrides". */
 export type PresetId = keyof typeof PRESETS | 'native'
@@ -86,7 +93,10 @@ export const NOOP_PRESET_IDS: ReadonlySet<PresetId> = new Set<PresetId>(['native
 
 export const presetOptions: { value: PresetId; label: string }[] = [
   { value: 'dsh', label: PRESETS.dsh.label },
-  ...(Object.keys(PRESETS) as (keyof typeof PRESETS)[])
-    .filter((id) => id !== 'dsh')
-    .map((id) => ({ value: id as PresetId, label: PRESETS[id].label })),
+  // The shipped order comes from the id list, not from the map's insertion
+  // order, so the picker cannot reorder itself when the map is edited.
+  ...PRESET_IDS.filter((id) => id !== 'dsh').map((id) => ({
+    value: id as PresetId,
+    label: PRESETS[id].label,
+  })),
 ]

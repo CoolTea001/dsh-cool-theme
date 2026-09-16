@@ -72,9 +72,22 @@ const BASE_CSS = [
   '.ct-seed-dot{position:relative;box-sizing:border-box;display:inline-block;flex:none;width:26px;height:26px;border:1px solid var(--dsw-alias-border-l2);border-radius:50%;cursor:pointer;}',
   '.ct-seed-input{position:absolute;inset:0;box-sizing:border-box;width:100%;height:100%;padding:0;border:none;background:transparent;opacity:0;cursor:pointer;}',
   '.ct-seed-dot:focus-within{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
-  // Hover tooltip naming the token, matching DSH's own `data-tip` bubble.
-  '.ct-seed-dot::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 7px);left:50%;z-index:20;transform:translateX(-50%);padding:3px 8px;border-radius:6px;background:var(--dsw-alias-label-primary,#151517);color:var(--dsw-alias-bg-layer-3,#fff);font-size:11px;font-weight:400;line-height:17px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .12s;}',
-  '.ct-seed-dot:hover::after,.ct-seed-dot:focus-within::after{opacity:1;}',
+  // One hover bubble for every `data-tip` anchor in the panel, so the token
+  // swatches and the icon-only row actions cannot drift apart. The look is DSH's
+  // own Tooltip (primitives) verbatim: `--dsw-alias-tooltip-bg` on static
+  // bluish-00, 8px radius, 3/7 padding, 13px over a 20px line. The bubble is
+  // drawn by the anchor's `::after`, so naming a glyph or a swatch costs no
+  // extra node, portalling or JS state.
+  '.ct-tip::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);z-index:100;box-sizing:border-box;width:max-content;max-width:220px;padding:3px 7px;border-radius:8px;background:var(--dsw-alias-tooltip-bg);color:var(--dsw-static-neutral-bluish-00);font-size:13px;font-weight:400;line-height:20px;white-space:pre-line;overflow-wrap:break-word;text-align:left;pointer-events:none;opacity:0;visibility:hidden;transition:opacity 120ms ease;}',
+  // Centering is part of the shared rule, not an anchor choice: a bubble that
+  // hangs off one edge reads as misaligned with the control it names. At the
+  // panel's trailing edge the bubble simply overhangs the panel instead, which
+  // is what DSH's own Tooltip does for a right-edge anchor.
+  // Each anchor names its own show trigger — a button hovers/focuses itself, a
+  // swatch is a label whose focus lands on the invisible input inside it.
+  '.ct-seed-dot:hover::after,.ct-seed-dot:focus-within::after{opacity:1;visibility:visible;}',
+  '.ct-list-btn:hover::after,.ct-list-btn:focus-visible::after{opacity:1;visibility:visible;}',
+  '@media (prefers-reduced-motion: reduce){.ct-tip::after{transition:none;}}',
   // Saved-theme cards, matching DSH's own provider rows: an outlined card with
   // the name and its "in use" dot on the left, and the row's actions on the
   // right. The active entry is marked by the dot alone, so selection never
@@ -91,13 +104,30 @@ const BASE_CSS = [
   // Status chip for the active card. Filled rather than outlined, so it never
   // reads as a fourth action button.
   '.ct-list-badge{display:inline-flex;align-items:center;height:28px;padding:0 10px;border-radius:14px;background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-2));color:var(--dsw-alias-label-secondary,var(--dsw-alias-label-tertiary));font-size:12px;line-height:18px;white-space:nowrap;}',
-  // The dense capsule (DSH Button `.sm`) every row action wears.
-  '.ct-list-btn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:28px;padding:0 10px;border:.5px solid var(--dsw-alias-border-l3);border-radius:14px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:12px;line-height:18px;}',
+  // The chip keeps breathing room from the edit button it sits beside: the
+  // actions' own 4px gap is right between the two icon buttons, but reads as
+  // cramped against a filled chip, so the badge earns the extra 8px.
+  '.ct-list-badge + .ct-list-btn{margin-left:8px;}',
+  // The square icon action every row wears: DSH's ghost button (`Button`
+  // variant `ghost`, 28x28 icon-only), so a borderless icon face sized around a
+  // 14px glyph stays as large a target as the old text capsules. The fill only
+  // appears on hover/active, which is what keeps the row itself the surface.
+  // `position:relative` is the anchor the shared `.ct-tip` bubble hangs off.
+  '.ct-list-btn{position:relative;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:28px;width:28px;padding:0;border:none;border-radius:14px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;line-height:0;}',
   '.ct-list-btn:hover{background:var(--dsw-alias-interactive-bg-hover);}',
+  '.ct-list-btn:active{background:var(--dsw-alias-interactive-bg-active);}',
+  // The settings rows' focus ring, reused verbatim: a 2px `border-l3` halo, so
+  // the ghost face stays invisible until it is focused or hovered.
   '.ct-list-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
-  // Delete is the borderless danger variant, exactly as DSH styles row removal.
-  '.ct-list-btn-danger{border:none;color:var(--dsw-alias-state-error-primary);}',
+  // DSH's ghost dimming, so a locked row action reads as unavailable if the row
+  // ever hands it `disabled`.
+  '.ct-list-btn:disabled{opacity:.4;cursor:not-allowed;}',
+  '.ct-list-btn:disabled:hover{background:transparent;}',
+  // Tint and press fill only: same ghost face, so the pair keeps one rhythm and
+  // the colour alone carries the danger.
+  '.ct-list-btn-danger{color:var(--dsw-alias-state-error-primary);}',
   '.ct-list-btn-danger:hover{background:var(--dsw-alias-interactive-bg-hover-danger);}',
+  '.ct-list-btn-danger:active{background:var(--dsw-alias-interactive-bg-hover-danger);}',
   // Expanded editor card: the same 16px face as a collapsed row, opened up.
   // Spacing is carried entirely by the children's own padding (no flex `gap`),
   // so the head, the colour rows and the footer all sit on one 24px rhythm.
@@ -115,13 +145,18 @@ const BASE_CSS = [
   '.ct-mode-btn-on{background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);}',
   '.ct-mode-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
   '.ct-editor-actions{display:flex;justify-content:flex-end;gap:12px;padding-top:12px;}',
-  // The large, full-width call to action that appends a new theme card. Dashed
-  // like DSH's own "add" affordances on the model settings page, so it reads as
-  // a place rather than a command: same 44px height, 16px radius and plus glyph.
+  // The large calls to action that append or import a theme card. Dashed like
+  // DSH's own "add" affordances on the model settings page, so they read as a
+  // place rather than a command: 44px height, 16px radius, one glyph each.
   '.ct-add-btn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;height:44px;margin-top:8px;padding:0 14px;border:1px dashed var(--dsw-alias-border-l3);border-radius:16px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:14px;line-height:22px;}',
   '.ct-add-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);}',
   '.ct-add-btn:disabled{opacity:.4;cursor:default;}',
   '.ct-add-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
+  // The add row: import and add are the same affordance, so they wear the same
+  // dashed face and split the row evenly. Nesting one inside the other would put
+  // two buttons in one focus stop, so they are siblings here instead.
+  '.ct-add-row{display:flex;align-items:stretch;gap:8px;margin-top:8px;}',
+  '.ct-add-row .ct-add-btn{flex:1 1 0;width:auto;margin-top:0;min-width:0;}',
   // Confirm dialog, matching DSH's own Modal metrics.
   '.ct-modal-root{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;}',
   '.ct-modal-mask{position:absolute;inset:0;background:var(--dsw-alias-bg-mask-1,rgba(0,0,0,.24));backdrop-filter:var(--dsw-mask-blur,blur(2px));}',

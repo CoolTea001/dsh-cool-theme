@@ -164,6 +164,15 @@ export async function deleteTheme(id: string): Promise<void> {
   await rm(themeDir(id), { recursive: true, force: true })
 }
 
+/**
+ * A fresh theme id. The same shape the client mints (`ct_` + time + noise), so
+ * an id never says which half created it, and `isThemeId` is the only rule both
+ * halves apply.
+ */
+export function newThemeId(): string {
+  return `ct_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
+}
+
 /** Absolute path of a theme's media directory; used once themes carry media. */
 export function assetsDir(id: string): string {
   return join(themeDir(id), ASSETS_DIR)
