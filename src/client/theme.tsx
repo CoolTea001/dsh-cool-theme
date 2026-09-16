@@ -262,13 +262,22 @@ export function registerTheme(ctx: any) {
     writeRaw(CUSTOM_THEME_STORAGE_KEY, encodeCustom(base, loadCustom().theme))
   }
 
+  /**
+   * Install a palette. The override layer for our source is replaced in place
+   * rather than torn down first: `theme.overrideTokens` restacks the same source
+   * atomically, while disposing the old layer emits an extra `theme/change` with
+   * our variables missing. The shell's presenter answers that by removing every
+   * token from `body`, so the whole page falls back to the base palette and
+   * repaints before the new layer lands — twice the DOM work and a visible
+   * flash per change, which is exactly what a dragged colour slider produces.
+   */
   function apply(src: Selection | PresetDef) {
-    overrideDispose = release(overrideDispose)
-    fallbackDispose = release(fallbackDispose)
-
     const target: PresetId | PresetDef = src === CUSTOM_SELECTION ? buildCustomPreset(loadCustom().theme) : src
 
     if (typeof target === 'string' && NOOP_PRESET_IDS.has(target)) {
+      // The base stylesheets are the theme again, so the layer has to go.
+      overrideDispose = release(overrideDispose)
+      fallbackDispose = release(fallbackDispose)
       ensureBaseline(false)
       return
     }
@@ -277,28 +286,93 @@ export function registerTheme(ctx: any) {
     if (theme?.overrideTokens) {
       try {
         overrideDispose = theme.overrideTokens('dsh-cool-theme', overrides)
+        // The token layer owns the palette now; a previous CSS fallback is inert.
+        fallbackDispose = release(fallbackDispose)
         return
       } catch {}
     }
+    overrideDispose = release(overrideDispose)
+    fallbackDispose = release(fallbackDispose)
     fallbackDispose = injector.insert(buildFullCssFallback(target))
+  }
+
+  /**
+   * Coalesce a burst of palette applications into one.
+   *
+   * A native colour input fires `change` on every pointer move while its slider
+   * is dragged. Each application rebuilds both ramps, rewrites every token on
+   * `body` and forces a style flush in the shell's presenter, so applying once
+   * per event is what makes the colour editor stutter. The first change lands
+   * immediately and the rest are throttled to one per interval, newest request
+   * winning: the palette the pointer is released on is always the one applied.
+   */
+  const APPLY_INTERVAL_MS = 80
+  let pendingApply: (() => void) | null = null
+  let applyTimer: ReturnType<typeof setTimeout> | null = null
+  let lastApplyAt = 0
+  // Set by the fiber cleanup. A slot teardown can still reach `setCustom` after
+  // it (the settings panel keeps its own unmount handler), and a palette applied
+  // then would install a layer with nothing left to release it.
+  let disposed = false
+
+  /** Run the newest pending application now, if any. */
+  function flushApply() {
+    if (applyTimer !== null) {
+      clearTimeout(applyTimer)
+      applyTimer = null
+    }
+    const run = pendingApply
+    pendingApply = null
+    if (!run) return
+    lastApplyAt = Date.now()
+    run()
+  }
+
+  /** Drop a coalesced application, for a fiber that is going away. */
+  function cancelApply() {
+    if (applyTimer !== null) {
+      clearTimeout(applyTimer)
+      applyTimer = null
+    }
+    pendingApply = null
+  }
+
+  /**
+   * Apply a palette, at most once per interval while a burst of edits is
+   * running. The callback is deferred whole, so a dropped intermediate edit
+   * never even rebuilds its ramps; only the newest one is executed.
+   */
+  function scheduleApply(run: () => void) {
+    if (disposed) return
+    pendingApply = run
+    const elapsed = Date.now() - lastApplyAt
+    if (elapsed >= APPLY_INTERVAL_MS) {
+      flushApply()
+      return
+    }
+    if (applyTimer === null) applyTimer = setTimeout(flushApply, APPLY_INTERVAL_MS - elapsed)
   }
 
   function setSelection(id: Selection) {
     writeRaw(THEME_STORAGE_KEY, id)
     if (id !== CUSTOM_SELECTION) lastPreset = id as PresetId
-    apply(id)
+    // CUSTOM_SELECTION is resolved when it runs, so a burst ends on the newest
+    // seeds in storage rather than a snapshot taken at schedule time.
+    scheduleApply(() => apply(id))
   }
 
   function setCustom(next: CustomTheme) {
+    // Persist synchronously: the roster reads the draft back from storage, so it
+    // must never observe a coalesced edit. Only the visual application is lazy.
     persistCustom(next)
-    apply(buildCustomPreset(next))
+    scheduleApply(() => apply(buildCustomPreset(next)))
   }
 
   function resetCustom(): CustomTheme {
     const base = customBase()
     const theme = extractSeeds(presetDef(base))
     persistCustom(theme)
-    apply(buildCustomPreset(theme))
+    scheduleApply(() => apply(buildCustomPreset(theme)))
     return theme
   }
 
@@ -357,7 +431,7 @@ export function registerTheme(ctx: any) {
     if (isPresetId(entry.base)) lastPreset = entry.base
     writeRaw(CUSTOM_ACTIVE_STORAGE_KEY, entry.id)
     writeRaw(CUSTOM_THEME_STORAGE_KEY, encodeCustom(entry.base, entry.theme))
-    apply(buildCustomPreset(entry.theme))
+    scheduleApply(() => apply(buildCustomPreset(entry.theme)))
     return entry.theme
   }
 
@@ -432,6 +506,10 @@ export function registerTheme(ctx: any) {
   } catch {}
 
   ctx.effect(() => () => {
+    // A coalesced application must not outlive the fiber: firing after this
+    // cleanup would install a token layer nothing is left to release.
+    disposed = true
+    cancelApply()
     release(pluginCssDisposer)
     baselineDisposer = release(baselineDisposer)
     overrideDispose = release(overrideDispose)
