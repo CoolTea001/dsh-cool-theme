@@ -1,7 +1,7 @@
 {
   "name": "dsh-cool-theme",
-  "version": "0.6.0",
-  "description": "A plugin for changing themes for DSH, with a number of popular default themes built in.",
+  "version": "0.6.1",
+  "description": "DeepSeek Harness theme plugin — supports Dark / Light / System appearance switching, ships 34 preset themes, and supports creating, sharing, and importing custom themes.",
   "type": "module",
   "license": "MIT",
   "author": "CoolTea",
