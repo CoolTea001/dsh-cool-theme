@@ -59,19 +59,28 @@ const BASE_CSS = [
   '.ct-row-title{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:400;line-height:22px;}',
   '.ct-row-desc{color:var(--dsw-alias-label-tertiary);font-size:12px;font-weight:400;line-height:18px;}',
   // Colour editor: one row per group, its name on the left and every seed's
-  // round swatch on the right. The swatch IS the native picker, so a click
-  // opens the platform colour chooser directly.
+  // round swatch on the right. A swatch is a plain button — it paints the seed
+  // and opens the react-colorful popover anchored to it.
   '.ct-seed-row{display:flex;align-items:center;gap:16px;padding:12px 0;}',
   '.ct-seed-label{flex:0 0 auto;min-width:96px;padding-left:3px;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);}',
   '.ct-seed-dots{flex:1 1 auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:10px;}',
-  // The visible swatch is the wrapper, not the native colour input: its shape
-  // and its border therefore come from one `border-radius` and cannot disagree
-  // with the engine's own swatch rendering. The input sits on top, invisible,
-  // and is the hit target that opens the platform picker. No `overflow:hidden`:
-  // the input never paints, and the tooltip below has to escape the circle.
-  '.ct-seed-dot{position:relative;box-sizing:border-box;display:inline-block;flex:none;width:26px;height:26px;border:1px solid var(--dsw-alias-border-l2);border-radius:50%;cursor:pointer;}',
-  '.ct-seed-input{position:absolute;inset:0;box-sizing:border-box;width:100%;height:100%;padding:0;border:none;background:transparent;opacity:0;cursor:pointer;}',
-  '.ct-seed-dot:focus-within{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
+  // The swatch button: its shape and its border come from one `border-radius`
+  // and cannot disagree with the colour fill. It is `position:relative` so the
+  // popover's opening rectangle can be measured from it, and the shared hover
+  // bubble below has an anchor. No `overflow:hidden`: the tooltip has to escape
+  // the circle.
+  '.ct-seed-dot{position:relative;box-sizing:border-box;display:inline-block;flex:none;width:26px;height:26px;padding:0;border:1px solid var(--dsw-alias-border-l2);border-radius:50%;cursor:pointer;font:inherit;}',
+  '.ct-seed-dot:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
+  // The react-colorful popover, pinned viewport-fixed beside its swatch (fixed
+  // is what keeps it out of the settings dialog's `overflow:hidden` card). The
+  // frame matches the editor card's own: layer-2 fill, 16px radius, `.5px`
+  // border-l4, the prominent shadow.
+  '.ct-color-pop{position:fixed;z-index:1200;box-sizing:border-box;width:224px;padding:12px;border:1px solid var(--dsw-alias-border-l4);border-radius:16px;background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-shadow-lv3);display:flex;flex-direction:column;gap:10px;}',
+  '.ct-color-pop .react-colorful{width:198px;height:170px;}',
+  // The hex field under the gradient: the editor name field's metrics, centered
+  // so a colour reads as a value rather than a sentence.
+  '.ct-color-pop .ct-hex-input{box-sizing:border-box;width:100%;height:34px;padding:0 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:20px;text-align:center;outline:none;}',
+  '.ct-color-pop .ct-hex-input:focus{border-color:var(--dsw-alias-border-l3);}',
   // One hover bubble for every `data-tip` anchor in the panel, so the token
   // swatches and the icon-only row actions cannot drift apart. The look is DSH's
   // own Tooltip (primitives) verbatim: `--dsw-alias-tooltip-bg` on static
@@ -83,9 +92,9 @@ const BASE_CSS = [
   // hangs off one edge reads as misaligned with the control it names. At the
   // panel's trailing edge the bubble simply overhangs the panel instead, which
   // is what DSH's own Tooltip does for a right-edge anchor.
-  // Each anchor names its own show trigger — a button hovers/focuses itself, a
-  // swatch is a label whose focus lands on the invisible input inside it.
-  '.ct-seed-dot:hover::after,.ct-seed-dot:focus-within::after{opacity:1;visibility:visible;}',
+  // Each anchor names its own show trigger — a button hovers/focuses itself,
+  // and a swatch is a button like any other.
+  '.ct-seed-dot:hover::after,.ct-seed-dot:focus-visible::after{opacity:1;visibility:visible;}',
   '.ct-list-btn:hover::after,.ct-list-btn:focus-visible::after{opacity:1;visibility:visible;}',
   '@media (prefers-reduced-motion: reduce){.ct-tip::after{transition:none;}}',
   // Saved-theme cards, matching DSH's own provider rows: an outlined card with
@@ -334,8 +343,8 @@ export function registerTheme(ctx: any) {
   /**
    * Coalesce a burst of palette applications into one.
    *
-   * A native colour input fires `change` on every pointer move while its slider
-   * is dragged. Each application rebuilds both ramps, rewrites every token on
+   * A colour picker fires continuously while its slider is dragged. Each
+   * application rebuilds both ramps, rewrites every token on
    * `body` and forces a style flush in the shell's presenter, so applying once
    * per event is what makes the colour editor stutter. The first change lands
    * immediately and the rest are throttled to one per interval, newest request

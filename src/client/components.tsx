@@ -3,6 +3,7 @@
  */
 
 import * as React from 'react'
+import { HexColorInput, HexColorPicker } from 'react-colorful'
 import { CUSTOM_PRESET_ID, THEME_ARCHIVE_EXTENSION } from '../contract.js'
 import { type PresetId, presetOptions } from './presets.js'
 import { type ThemeKey } from './locales.js'
@@ -688,6 +689,98 @@ export function ThemePanel(props: {
     setToast({ seq: toastSeq.current, text })
   }
 
+  // --- colour picker popover ------------------------------------------------
+  //
+  // The seed dots open a react-colorful popover instead of the platform's own
+  // colour dialog. One popover is shared by all thirty dots: `pickerDotKey`
+  // names the seed being edited and `pickerPos` holds the viewport coordinates
+  // the popover is pinned at. It is rendered as a `position:fixed` child of the
+  // editor card — fixed keeps it outside every `overflow:hidden` ancestor (the
+  // settings dialog clips its card), while staying inside the card's subtree,
+  // which is what lets the dirty-draft click-away guard recognise its clicks as
+  // part of the edit.
+  const [pickerDotKey, setPickerDotKey] = React.useState<string | null>(null)
+  const [pickerPos, setPickerPos] = React.useState<{ left: number; top: number } | null>(null)
+  const pickerOpen = pickerDotKey !== null
+  // The Escape guard lives in a mount-only document listener, so it reads the
+  // open state through this ref rather than a stale closure.
+  const pickerOpenRef = React.useRef(false)
+  pickerOpenRef.current = pickerOpen
+  /** The swatch the popover is anchored to; re-read on every reposition. */
+  const pickerAnchorRef = React.useRef<HTMLElement | null>(null)
+  /** The popover node itself; outside-pointerdown detection needs its bounds. */
+  const pickerPopRef = React.useRef<HTMLDivElement | null>(null)
+
+  /** Viewport coordinates that put the popover beside its anchor swatch. */
+  function placePicker(anchor: HTMLElement): { left: number; top: number } {
+    const WIDTH = 224
+    const HEIGHT = 240
+    const GAP = 8
+    const MARGIN = 8
+    const rect = anchor.getBoundingClientRect()
+    const viewW = window.innerWidth
+    const viewH = window.innerHeight
+    // Right-align with the swatch: the dots hug the panel's trailing edge, so
+    // the popover grows leftward into the free column beside the labels.
+    const left = Math.min(Math.max(MARGIN, rect.right - WIDTH), Math.max(MARGIN, viewW - WIDTH - MARGIN))
+    // Drop below when there is room; otherwise hang above the swatch.
+    const below = rect.bottom + GAP + HEIGHT <= viewH - MARGIN
+    const top = below ? rect.bottom + GAP : Math.max(MARGIN, rect.top - GAP - HEIGHT)
+    return { left, top }
+  }
+
+  /** Toggle one seed's popover; `anchor` is the swatch that was clicked. */
+  function togglePicker(key: string, anchor: HTMLElement) {
+    if (pickerDotKey === key) {
+      closePicker()
+      return
+    }
+    pickerAnchorRef.current = anchor
+    setPickerDotKey(key)
+    setPickerPos(placePicker(anchor))
+  }
+
+  function closePicker() {
+    setPickerDotKey(null)
+    setPickerPos(null)
+  }
+
+  // A pointerdown anywhere outside the popover and its swatch dismisses it —
+  // capture phase, so it wins over the click handlers that would otherwise
+  // consume the gesture first.
+  React.useEffect(() => {
+    if (!pickerOpen) return
+    function onPointerDown(e: PointerEvent) {
+      const target = e.target instanceof Element ? e.target : null
+      if (!target) return
+      if (pickerPopRef.current?.contains(target)) return
+      if (pickerAnchorRef.current?.contains(target)) return
+      closePicker()
+    }
+    document.addEventListener('pointerdown', onPointerDown, true)
+    return () => document.removeEventListener('pointerdown', onPointerDown, true)
+  }, [pickerOpen])
+
+  // Fixed positioning is viewport-relative, so every scroll and resize would
+  // strand the popover away from its swatch: track the anchor while open.
+  React.useEffect(() => {
+    if (!pickerOpen) return
+    let raf = 0
+    const update = () => {
+      const anchor = pickerAnchorRef.current
+      if (!anchor) return
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => setPickerPos(placePicker(anchor)))
+    }
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
+      cancelAnimationFrame(raf)
+    }
+  }, [pickerOpen])
+
   /** Re-read both the list and the active pointer after any list mutation. */
   function syncSaved() {
     setList(saved.list())
@@ -860,6 +953,14 @@ export function ThemePanel(props: {
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
+      // The colour popover owns Escape while it is open: the first press puts
+      // it away, and only a later one reaches the draft's own questions.
+      if (pickerOpenRef.current) {
+        e.preventDefault()
+        e.stopPropagation()
+        closePicker()
+        return
+      }
       // Our own questions own Escape while one is up: dismiss the question only.
       if (confirmCloseRef.current || pendingLeaveRef.current) {
         e.preventDefault()
@@ -936,6 +1037,9 @@ export function ThemePanel(props: {
 
   /** Open a fresh, unsaved theme seeded from the currently selected preset. */
   function startAdd() {
+    // The popover belongs to the editor card; a stale key must not resurface it
+    // inside the next card the user opens.
+    closePicker()
     // Snapshot the previous draft before `resetCustom` overwrites it, so cancel
     // can put the user back on the theme they had. The preset is only the seed
     // for a brand-new theme, so it is stamped as the new theme's base here.
@@ -953,6 +1057,7 @@ export function ThemePanel(props: {
 
   /** Open an existing card for editing; it also becomes the previewed theme. */
   function startEdit(entry: SavedTheme) {
+    closePicker()
     const next = beginEditing(entry.id, entry.name, entry.name, entry.theme)
     setEditing(next)
     onLoadSaved(entry.id)
@@ -961,6 +1066,7 @@ export function ThemePanel(props: {
   /** Discard the open editor and put the previously applied theme back. */
   function cancelEdit() {
     if (!editing) return
+    closePicker()
     revertEditing(editing)
     setEditing(null)
     syncSaved()
@@ -1031,6 +1137,7 @@ export function ThemePanel(props: {
   /** Commit the open editor: create a new entry, or update the one being edited. */
   async function saveEdit() {
     if (!editing) return
+    closePicker()
     const name = editing.name.trim() || t('custom.defaultName')
     const id = editing.id
     savingRef.current = true
@@ -1105,6 +1212,7 @@ export function ThemePanel(props: {
     }
     // The editor only exists inside custom mode, so leaving closes any draft —
     // and an unsaved one has to be rolled back rather than left applied.
+    closePicker()
     if (editing) revertEditing(editing)
     setEditing(null)
     setSelectionState(shownPreset)
@@ -1195,28 +1303,23 @@ export function ThemePanel(props: {
           'div',
           { className: 'ct-seed-dots' },
           ...dots.map((d) =>
-            React.createElement(
-              'label',
-              {
-                key: d.key,
-                className: 'ct-seed-dot ct-tip',
-                // The wrapper paints the colour; the input inside is invisible.
-                style: { background: d.value },
-                // Names the token this swatch edits; rendered as the styled
-                // bubble by the shared `.ct-tip` rule (the invisible input on top
-                // is the real hover target, so a native `title` would never fire).
-                'data-tip': d.name,
-              },
-              React.createElement('input', {
-                className: 'ct-seed-input',
-                type: 'color',
-                value: d.value,
-                // The bubble above names the token; assistive tech also gets the
-                // fuller description, which the bubble is too small to carry.
-                'aria-label': `${d.name} — ${d.hint}`,
-                onChange: (e: React.ChangeEvent<HTMLInputElement>) => d.onChange(e.target.value.toUpperCase()),
-              }),
-            ),
+            React.createElement('button', {
+              key: d.key,
+              type: 'button',
+              className: 'ct-seed-dot ct-tip',
+              // The button itself paints the colour and opens the popover
+              // picker anchored to it.
+              style: { background: d.value },
+              // Names the token this swatch edits; rendered as the styled
+              // bubble by the shared `.ct-tip` rule.
+              'data-tip': d.name,
+              'aria-haspopup': 'dialog',
+              'aria-expanded': pickerDotKey === d.key,
+              // The bubble above names the token; assistive tech also gets the
+              // fuller description, which the bubble is too small to carry.
+              'aria-label': `${d.name} — ${d.hint}`,
+              onClick: (e: React.MouseEvent<HTMLButtonElement>) => togglePicker(d.key, e.currentTarget),
+            }),
           ),
         ),
       )
@@ -1322,6 +1425,35 @@ export function ThemePanel(props: {
       ),
     )
 
+    // The react-colorful popover for the seed whose dot is open, pinned to its
+    // swatch. Kept as a DOM child of the editor card (it is `position:fixed`,
+    // so the card's box does not clip or place it) — the dirty-draft guard
+    // passes clicks inside `[data-ct-editor]`, and every picker interaction is
+    // exactly such a click.
+    const pickerDot = pickerDotKey ? [...seedDots, ...shikiDots].find((d) => d.key === pickerDotKey) ?? null : null
+    const pickerPop =
+      pickerDot && pickerPos
+        ? React.createElement(
+            'div',
+            {
+              key: 'color-picker',
+              className: 'ct-color-pop',
+              ref: pickerPopRef,
+              style: { left: pickerPos.left, top: pickerPos.top },
+            },
+            React.createElement(HexColorPicker, {
+              color: pickerDot.value,
+              onChange: (v: string) => pickerDot.onChange(v.toUpperCase()),
+            }),
+            React.createElement(HexColorInput, {
+              className: 'ct-hex-input',
+              color: pickerDot.value,
+              'aria-label': pickerDot.name,
+              onChange: (v: string) => pickerDot.onChange(v.toUpperCase()),
+            }),
+          )
+        : null
+
     const editorCard = (key: string) =>
       React.createElement(
         'div',
@@ -1337,6 +1469,7 @@ export function ThemePanel(props: {
         dotRow('seeds', t('custom.group.seeds'), seedDots),
         dotRow('shiki', t('custom.group.shiki'), shikiDots),
         editorActions,
+        pickerPop,
       )
 
     const cards: any[] = list.map((entry) =>
