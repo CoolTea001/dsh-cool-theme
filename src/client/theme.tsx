@@ -31,6 +31,10 @@ import {
 import { zh, en, type ThemeKey } from './locales.js'
 
 const BASE_CSS = [
+  // The value pickers' trigger. Feature-owned, like DSH's own settings
+  // switcher, which styles its anchor the same way: the pill is the row's
+  // affordance, and everything it opens — list material, rows, scroll, focus —
+  // comes from the shell's `Menu`, so only the closed face is drawn here.
   '.ct-select{box-sizing:border-box;display:inline-flex;align-items:center;gap:12px;height:36px;padding:0 14px;border:none;border-radius:18px;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:14px;line-height:22px;white-space:nowrap;width:auto;min-width:0;max-width:100%;}',
   '.ct-select:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);}',
   // Locked while the custom theme owns the colours: dimmed and not clickable.
@@ -39,19 +43,6 @@ const BASE_CSS = [
   '.ct-select-label{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;}',
   '.ct-select-chevron{flex:none;color:var(--dsw-alias-label-tertiary);display:inline-flex;transition:transform 120ms ease;}',
   '.ct-select[aria-expanded="true"] .ct-select-chevron{transform:rotate(180deg);}',
-  '.ct-menu-list{box-sizing:border-box;padding:4px;display:flex;flex-direction:column;gap:0;border:1px solid var(--dsw-alias-border-inverted);border-radius:12px;background:var(--dsw-specific-menu);box-shadow:var(--dsw-shadow-lv3);min-width:218px;max-width:360px;max-height:min(320px,50vh);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:var(--dsw-alias-border-l2) transparent;scrollbar-gutter:stable;}',
-  '.ct-menu-list:not(:hover){scrollbar-color:transparent transparent;}',
-  '.ct-menu-list::-webkit-scrollbar{width:8px;height:8px;}',
-  '.ct-menu-list::-webkit-scrollbar-thumb{background:var(--dsw-alias-border-l2);border-radius:999px;border:2px solid var(--dsw-specific-menu);background-clip:content-box;transition:background 150ms ease, border-color 150ms ease;}',
-  '.ct-menu-list::-webkit-scrollbar-thumb:hover{background:var(--dsw-alias-label-tertiary);border:2px solid var(--dsw-specific-menu);background-clip:content-box;}',
-  '.ct-menu-list::-webkit-scrollbar-thumb:active{background:var(--dsw-alias-label-secondary, var(--dsw-alias-label-tertiary));border:2px solid var(--dsw-specific-menu);background-clip:content-box;}',
-  '.ct-menu-list:not(:hover)::-webkit-scrollbar-thumb{background:transparent;border-color:transparent;}',
-  '.ct-menu-list::-webkit-scrollbar-track{background:transparent;margin:4px 0;}',
-  '.ct-menu-list::-webkit-scrollbar-corner{background:transparent;}',
-  '.ct-menu-item{display:flex;align-items:center;gap:8px;width:100%;min-height:40px;padding:8px 10px;border:none;border-radius:10px;background:transparent;cursor:pointer;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);text-align:left;font-family:inherit;}',
-  '.ct-menu-item:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);}',
-  '.ct-menu-check{flex:none;color:var(--dsw-alias-label-primary);display:inline-flex;margin-left:auto;}',
-  '.ct-menu-item-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
   '.ct-row{border-bottom:1px solid var(--dsw-alias-border-l2);padding:16px 2px;display:flex;align-items:center;gap:16px;}',
   '.ct-row:last-child{border-bottom:none;}',
   '.ct-row-flush{border-bottom:none;}',
@@ -66,37 +57,20 @@ const BASE_CSS = [
   '.ct-seed-dots{flex:1 1 auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:10px;}',
   // The swatch button: its shape and its border come from one `border-radius`
   // and cannot disagree with the colour fill. It is `position:relative` so the
-  // popover's opening rectangle can be measured from it, and the shared hover
-  // bubble below has an anchor. No `overflow:hidden`: the tooltip has to escape
-  // the circle.
+  // popover's opening rectangle can be measured from it. No `overflow:hidden`:
+  // the shell's Tooltip bubble is viewport-fixed and has to escape the circle.
   '.ct-seed-dot{position:relative;box-sizing:border-box;display:inline-block;flex:none;width:26px;height:26px;padding:0;border:1px solid var(--dsw-alias-border-l2);border-radius:50%;cursor:pointer;font:inherit;}',
   '.ct-seed-dot:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
   // The react-colorful popover, pinned viewport-fixed beside its swatch (fixed
   // is what keeps it out of the settings dialog's `overflow:hidden` card). The
-  // frame matches the editor card's own: layer-2 fill, 16px radius, `.5px`
-  // border-l4, the prominent shadow.
-  '.ct-color-pop{position:fixed;z-index:1200;box-sizing:border-box;width:224px;padding:12px;border:1px solid var(--dsw-alias-border-l4);border-radius:16px;background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-shadow-lv3);display:flex;flex-direction:column;gap:10px;}',
+  // frame matches the editor card's own: layer-2 fill, `radius-lg` corner, a
+  // `border-l4` hairline and the prominent shadow.
+  '.ct-color-pop{position:fixed;z-index:1200;box-sizing:border-box;width:224px;padding:12px;border:1px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-shadow-lv3);display:flex;flex-direction:column;gap:10px;}',
   '.ct-color-pop .react-colorful{width:198px;height:170px;}',
   // The hex field under the gradient: the editor name field's metrics, centered
   // so a colour reads as a value rather than a sentence.
   '.ct-color-pop .ct-hex-input{box-sizing:border-box;width:100%;height:34px;padding:0 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:20px;text-align:center;outline:none;}',
   '.ct-color-pop .ct-hex-input:focus{border-color:var(--dsw-alias-border-l3);}',
-  // One hover bubble for every `data-tip` anchor in the panel, so the token
-  // swatches and the icon-only row actions cannot drift apart. The look is DSH's
-  // own Tooltip (primitives) verbatim: `--dsw-alias-tooltip-bg` on static
-  // bluish-00, 8px radius, 3/7 padding, 13px over a 20px line. The bubble is
-  // drawn by the anchor's `::after`, so naming a glyph or a swatch costs no
-  // extra node, portalling or JS state.
-  '.ct-tip::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);z-index:100;box-sizing:border-box;width:max-content;max-width:220px;padding:3px 7px;border-radius:8px;background:var(--dsw-alias-tooltip-bg);color:var(--dsw-static-neutral-bluish-00);font-size:13px;font-weight:400;line-height:20px;white-space:pre-line;overflow-wrap:break-word;text-align:left;pointer-events:none;opacity:0;visibility:hidden;transition:opacity 120ms ease;}',
-  // Centering is part of the shared rule, not an anchor choice: a bubble that
-  // hangs off one edge reads as misaligned with the control it names. At the
-  // panel's trailing edge the bubble simply overhangs the panel instead, which
-  // is what DSH's own Tooltip does for a right-edge anchor.
-  // Each anchor names its own show trigger — a button hovers/focuses itself,
-  // and a swatch is a button like any other.
-  '.ct-seed-dot:hover::after,.ct-seed-dot:focus-visible::after{opacity:1;visibility:visible;}',
-  '.ct-list-btn:hover::after,.ct-list-btn:focus-visible::after{opacity:1;visibility:visible;}',
-  '@media (prefers-reduced-motion: reduce){.ct-tip::after{transition:none;}}',
   // Saved-theme cards, matching DSH's own provider rows: an outlined card with
   // the name and its "in use" dot on the left, and the row's actions on the
   // right. The active entry is marked by the dot alone, so selection never
@@ -121,8 +95,9 @@ const BASE_CSS = [
   // variant `ghost`, 28x28 icon-only), so a borderless icon face sized around a
   // 14px glyph stays as large a target as the old text capsules. The fill only
   // appears on hover/active, which is what keeps the row itself the surface.
-  // `position:relative` is the anchor the shared `.ct-tip` bubble hangs off.
-  '.ct-list-btn{position:relative;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:28px;width:28px;padding:0;border:none;border-radius:14px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;line-height:0;}',
+  // Its name comes from the shell's `Tooltip`, which measures the button
+  // itself, so nothing here has to position an anchor for a bubble.
+  '.ct-list-btn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:28px;width:28px;padding:0;border:none;border-radius:14px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;line-height:0;}',
   '.ct-list-btn:hover{background:var(--dsw-alias-interactive-bg-hover);}',
   '.ct-list-btn:active{background:var(--dsw-alias-interactive-bg-active);}',
   // The settings rows' focus ring, reused verbatim: a 2px `border-l3` halo, so
@@ -137,27 +112,27 @@ const BASE_CSS = [
   '.ct-list-btn-danger{color:var(--dsw-alias-state-error-primary);}',
   '.ct-list-btn-danger:hover{background:var(--dsw-alias-interactive-bg-hover-danger);}',
   '.ct-list-btn-danger:active{background:var(--dsw-alias-interactive-bg-hover-danger);}',
-  // Expanded editor card: the same 16px face as a collapsed row, opened up.
-  // Spacing is carried entirely by the children's own padding (no flex `gap`),
-  // so the head, the colour rows and the footer all sit on one 24px rhythm.
-  '.ct-editor{padding:16px;border:.5px solid var(--dsw-alias-border-l4);border-radius:16px;background:transparent;display:flex;flex-direction:column;gap:0;}',
+  // Expanded editor card: the same `radius-lg` face as a collapsed row, opened
+  // up. Spacing is carried entirely by the children's own padding (no flex
+  // `gap`), so the head, the colour rows and the footer sit on one 24px rhythm.
+  // The radius is the token DSH's own settings editor takes, so a radius-scale
+  // change follows without touching this file.
+  '.ct-editor{padding:16px;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-lg);background:transparent;display:flex;flex-direction:column;gap:0;}',
   '.ct-editor-head{display:flex;align-items:center;gap:10px;padding-bottom:12px;}',
   '.ct-editor-name{flex:1 1 auto;min-width:0;box-sizing:border-box;height:36px;padding:0 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:14px;line-height:22px;}',
   '.ct-editor-name::placeholder{color:var(--dsw-alias-label-tertiary);}',
   '.ct-editor-name:hover{border-color:var(--dsw-alias-border-l3);}',
   '.ct-editor-name:focus{outline:none;border-color:var(--dsw-alias-border-l3);background:var(--dsw-alias-bg-base);}',
-  // Light/dark segmented control: which appearance the swatches below edit.
-  // Sized to the name field beside it so the two share one row height.
-  '.ct-mode{box-sizing:border-box;display:inline-flex;flex:none;height:36px;padding:2px;border-radius:10px;background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-2));}',
-  '.ct-mode-btn{box-sizing:border-box;height:32px;padding:0 10px;border:none;border-radius:8px;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;font:inherit;font-size:12px;line-height:18px;}',
-  '.ct-mode-btn:hover{color:var(--dsw-alias-label-primary);}',
-  '.ct-mode-btn-on{background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);}',
-  '.ct-mode-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
+  // Light/dark segmented control: which appearance the swatches below edit. The
+  // shell's `SegmentedControl` owns the track, the sliding indicator and the
+  // arrow-key walk; this class only stops it shrinking beside the name field.
+  '.ct-mode{flex:none;}',
   '.ct-editor-actions{display:flex;justify-content:flex-end;gap:12px;padding-top:12px;}',
   // The large calls to action that append or import a theme card. Dashed like
-  // DSH's own "add" affordances on the model settings page, so they read as a
-  // place rather than a command: 44px height, 16px radius, one glyph each.
-  '.ct-add-btn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;height:44px;margin-top:8px;padding:0 14px;border:1px dashed var(--dsw-alias-border-l3);border-radius:16px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:14px;line-height:22px;}',
+  // DSH's own "add" affordances on the model settings page — same 1px dashed
+  // `border-l3` stroke, 44px height, `radius-lg`, one glyph each — so they read
+  // as a place rather than a command.
+  '.ct-add-btn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;height:44px;margin-top:8px;padding:0 14px;border:1px dashed var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-lg);background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:14px;line-height:22px;}',
   '.ct-add-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);}',
   '.ct-add-btn:disabled{opacity:.4;cursor:default;}',
   '.ct-add-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
@@ -166,39 +141,30 @@ const BASE_CSS = [
   // two buttons in one focus stop, so they are siblings here instead.
   '.ct-add-row{display:flex;align-items:stretch;gap:8px;margin-top:8px;}',
   '.ct-add-row .ct-add-btn{flex:1 1 0;width:auto;margin-top:0;min-width:0;}',
-  // Confirm dialog, matching DSH's own Modal metrics.
+  // Confirm dialog, matching DSH's own Modal metrics: the same mask token and
+  // blur, the layer-2 card on the promoted elevation, and the shell's own
+  // `radius-panel` so the card's corner follows the panel scale.
   '.ct-modal-root{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;}',
   '.ct-modal-mask{position:absolute;inset:0;background:var(--dsw-alias-bg-mask-1,rgba(0,0,0,.24));backdrop-filter:var(--dsw-mask-blur,blur(2px));}',
-  '.ct-modal-card{position:relative;z-index:1;display:flex;flex-direction:column;gap:12px;width:min(380px,100%);padding:24px;border-radius:24px;background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-elevation-prominent);}',
+  '.ct-modal-card{position:relative;z-index:1;display:flex;flex-direction:column;gap:12px;width:min(380px,100%);padding:24px;border-radius:var(--dsw-radius-panel);background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-elevation-prominent);}',
   '.ct-modal-title{font-size:16px;line-height:24px;font-weight:600;color:var(--dsw-alias-label-primary);}',
   '.ct-modal-desc{font-size:13px;line-height:20px;color:var(--dsw-alias-label-tertiary);}',
   '.ct-modal-footer{display:flex;justify-content:flex-end;gap:12px;margin-top:12px;}',
-  '.ct-switch{position:relative;flex:none;width:40px;height:24px;padding:0;border:none;border-radius:12px;background:var(--dsw-alias-border-l2);cursor:pointer;transition:background 150ms ease;}',
-  '.ct-switch-on{background:var(--dsw-static-deepseek-500,rgb(65,118,230));}',
-  '.ct-switch-knob{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform 150ms ease;}',
-  '.ct-switch-on .ct-switch-knob{transform:translateX(16px);}',
-  '.ct-switch:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
-  '.ct-btn{box-sizing:border-box;display:inline-flex;align-items:center;height:34px;padding:0 16px;border:1px solid var(--dsw-alias-border-l2);border-radius:17px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:13px;line-height:20px;}',
-  '.ct-btn:hover{background:var(--dsw-alias-interactive-bg-hover);}',
-  '.ct-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
-  // Variants come after the base rule so equal-specificity overrides win.
-  '.ct-btn-primary{background:var(--dsw-static-deepseek-500,rgb(65,118,230));border-color:transparent;color:#fff;}',
-  '.ct-btn-primary:hover{background:var(--dsw-static-deepseek-450,var(--dsw-static-deepseek-500,rgb(86,134,254)));}',
-  '.ct-btn-danger{background:var(--dsw-static-red-500,rgb(239,68,68));border-color:transparent;color:#fff;}',
-  '.ct-btn-danger:hover{background:var(--dsw-static-red-600,var(--dsw-static-red-500,rgb(236,19,19)));}',
-  // Transient confirmation banner, matching DSH's own toast: a success badge
-  // plus the copy, top center, slide in, hold, fade out. The 3000ms/1000ms pair
-  // has to agree with TOAST_HOLD_MS and TOAST_FADE_MS in components.tsx, which
-  // own the unmount timer.
-  '.ct-toast{position:fixed;top:40px;left:50%;z-index:1100;pointer-events:none;display:flex;align-items:center;gap:10px;width:max-content;max-width:min(640px,calc(100vw - 48px));padding:12px 16px;border-radius:14px;background:var(--dsw-alias-button-contrast-fill);color:var(--dsw-alias-label-primary-inverted);font-size:14px;line-height:22px;box-shadow:var(--dsw-shadow-lv3);transform:translateX(-50%);animation:ct-toast-in 160ms ease-out,ct-toast-fade 1s ease 3s forwards;}',
-  // The badge DSH's confirmations wear: an 18px success ring around the check.
-  '.ct-toast-icon{display:grid;place-items:center;flex:none;width:18px;height:18px;border:1.5px solid var(--dsw-alias-state-success-primary);border-radius:50%;corner-shape:round;color:var(--dsw-alias-state-success-primary);}',
-  '.ct-toast-text{min-width:0;}',
-  '@keyframes ct-toast-in{from{opacity:0;transform:translate(-50%,-6px);}to{opacity:1;transform:translate(-50%,0);}}',
-  '@keyframes ct-toast-fade{to{opacity:0;}}',
-  // The delayed fade is an opacity change, not movement: keeping it under
-  // reduced motion still ends the banner before the timed unmount.
-  '@media (prefers-reduced-motion: reduce){.ct-toast{animation:ct-toast-fade 1s ease 3s forwards;}}',
+  // What this stylesheet no longer draws: the custom-theme switch, the
+  // confirmation banner and the action buttons are the shell's own `Switch`,
+  // `Toast` and `Button` — their track, thumb, material, hold/fade timing,
+  // geometry, fill tokens and focus ring belong to the primitives package.
+  //
+  // Only the two action widths and the destructive tint below are ours, and all
+  // three are lifted from DSH's own dialogs rather than invented here.
+  '.ct-action-cancel{min-width:72px}', // RiskConfirmation's `.modalAction`
+  '.ct-action-confirm{min-width:136px}', // RiskConfirmation's `.confirmAction`
+  // DSH draws a destructive action as an outlined face tinted with the error
+  // token — error stroke and label over an 8% error hover — never a solid red
+  // fill. The `element.class` selector keeps this ahead of the primitive's
+  // `.outline` rule whatever order the two stylesheets are inserted in, and
+  // rebinding the hover token on the element is DSH's own delete-button recipe.
+  'button.ct-danger{color:var(--dsw-alias-state-error-primary);border-color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent);--dsw-alias-interactive-bg-hover:color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent);}',
 ].join('\n')
 
 function isValidSelection(v: string | null): v is Selection {
@@ -535,20 +501,6 @@ export function registerTheme(ctx: any) {
 
   apply(initialSelection)
 
-  // The shell's own toast, when the host shares its primitives module with
-  // plugins. Resolved once at mount: the module table is static, so a miss is
-  // permanent and simply keeps the local fallback in components.tsx.
-  let sharedToast: ((props: any) => any) | null = null
-  const modules: any = ctx.get('modules')
-  try {
-    void modules
-      ?.import?.('@deepseek-ai/dsh-client-ui-primitives')
-      .then((mod: any) => {
-        if (typeof mod?.Toast === 'function') sharedToast = mod.Toast
-      })
-      .catch(() => {})
-  } catch {}
-
   ctx.effect(() => () => {
     // A coalesced application must not outlive the fiber: firing after this
     // cleanup would install a token layer nothing is left to release.
@@ -575,7 +527,6 @@ export function registerTheme(ctx: any) {
         setCustomBase,
         resetCustom,
         saved,
-        getHostToast: () => sharedToast,
         // The shell's close seat. Absent on a host that does not offer it, which
         // also disables the unsaved-draft guard: without a way to leave, blocking
         // the close would strand the user.

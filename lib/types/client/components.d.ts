@@ -36,12 +36,6 @@ export declare function ThemePanel(props: {
         update: (id: string, name: string) => Promise<SavedTheme[]>;
         remove: (id: string) => Promise<SavedTheme[]>;
     };
-    /**
-     * The shell's own Toast, or null when the host does not share its primitives
-     * module with plugins. Read at render time: the async resolution lands long
-     * before the first action a banner can report.
-     */
-    getHostToast: () => ((props: any) => any) | null;
     t: (key: ThemeKey) => string;
     /**
      * The shell's own close seat, or null on a host that does not offer it. The

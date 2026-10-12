@@ -17,12 +17,49 @@ import {
   SHIKI_KEYS,
   nextThemeName,
 } from './custom.js'
+// The shell's own controls, resolved at runtime from the frozen platform module
+// table (see ui-primitives.d.ts and tsdown's `deps.neverBundle`). Reusing them
+// rather than restyling a copy is the package's own rule, and it is what keeps
+// this panel tracking DSH's menu, switch, segmented, tooltip and glyph changes
+// without a plugin release.
+import {
+  Button,
+  IconChevronDownOutlineRegular,
+  IconDownloadOutlineRegular,
+  IconEditOutlineRegular,
+  IconPlusOutlineRegular,
+  IconShareOutlineRegular,
+  IconTrashOutlineRegular,
+  Menu,
+  SegmentedControl,
+  Switch,
+  Toast,
+  Tooltip,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 
 /** Reserved menu value that switches to the user-defined theme. */
 export const CUSTOM_SELECTION = CUSTOM_PRESET_ID
 export type Selection = PresetId | typeof CUSTOM_SELECTION
 
 export type CustomState = { base: PresetId; theme: CustomTheme }
+
+/**
+ * Base id of the light/dark control in the colour editor — and the only place
+ * that string is written. The shell's `SegmentedControl` derives both the tab
+ * ids (`<id>-<value>`) and the panel ids (`<id>-<value>-panel`) from it, so the
+ * tabpanel that answers them has to be built from the same value: a second
+ * literal would drift silently and leave `aria-controls` pointing at nothing.
+ */
+const SEED_MODE_CONTROL_ID = 'ct-seed-mode'
+
+/**
+ * The one glyph size this panel draws at. Every icon here is explicit about it
+ * because the shell's artwork does not default uniformly — the chevron falls
+ * back to 14, the edit/share/trash/add/import glyphs to 16 — so passing no size
+ * silently picks a different scale per icon. 14 is what the shell's own
+ * settings pages pass.
+ */
+const ICON_SIZE = 14
 
 /**
  * Which message an import failure deserves. The Host answers with its own
@@ -115,37 +152,13 @@ function isDirty(open: Editing, current: CustomTheme): boolean {
   return open.name.trim() !== open.originName.trim() || !sameSeeds(current, open.originTheme)
 }
 
-function IconChevron() {
-  return React.createElement(
-    'svg',
-    { width: 14, height: 14, viewBox: '0 0 14 14', fill: 'none', xmlns: 'http://www.w3.org/2000/svg' },
-    React.createElement('path', {
-      d: 'M11.8486 5.5L11.4238 5.92383L8.69727 8.65137C8.44157 8.90706 8.21562 9.13382 8.01172 9.29785C7.79912 9.46883 7.55595 9.61756 7.25 9.66602C7.08435 9.69222 6.91565 9.69222 6.75 9.66602C6.44405 9.61756 6.20088 9.46883 5.98828 9.29785C5.78438 9.13382 5.55843 8.90706 5.30273 8.65137L2.57617 5.92383L2.15137 5.5L3 4.65137L3.42383 5.07617L6.15137 7.80273C6.42595 8.07732 6.59876 8.24849 6.74023 8.3623C6.87291 8.46904 6.92272 8.47813 6.9375 8.48047C6.97895 8.48703 7.02105 8.48703 7.0625 8.48047C7.07728 8.47813 7.12709 8.46904 7.25977 8.3623C7.40124 8.24849 7.57405 8.07732 7.84863 7.80273L10.5762 5.07617L11 4.65137L11.8486 5.5Z',
-      fill: 'currentColor',
-    }),
-  )
-}
-
-/** The menu's selected-row tick: 16px, pushed to the trailing edge. */
-function IconCheck(props: { size?: number; className?: string }) {
-  const { size = 16, className } = props
-  return React.createElement(
-    'svg',
-    {
-      width: size,
-      height: size,
-      viewBox: '0 0 16 16',
-      fill: 'none',
-      xmlns: 'http://www.w3.org/2000/svg',
-      className,
-    },
-    React.createElement('path', {
-      d: 'M15.0498 3.92579L8.49512 12.3818C8.25774 12.6881 8.04517 12.9645 7.84668 13.1689C7.63957 13.3823 7.38732 13.5841 7.04492 13.6719C6.86373 13.7183 6.6757 13.7346 6.48926 13.7197C6.13666 13.6915 5.8528 13.5355 5.6123 13.3604C5.38201 13.1926 5.12573 12.9567 4.83984 12.6953L1.03125 9.21289L1.96875 8.1875L5.77734 11.6699C6.08684 11.9529 6.27773 12.1249 6.43066 12.2363C6.50183 12.2882 6.54699 12.3135 6.57324 12.3252C6.58525 12.3305 6.59269 12.3322 6.5957 12.333C6.59802 12.3336 6.59961 12.334 6.59961 12.334C6.63317 12.3367 6.66758 12.3335 6.7002 12.3252C6.7002 12.3252 6.70211 12.3251 6.7041 12.3242C6.70698 12.3229 6.71348 12.319 6.72461 12.3115C6.74849 12.2956 6.78843 12.2642 6.84961 12.2012C6.98138 12.0654 7.13957 11.8628 7.39648 11.5313L13.9502 3.07422L15.0498 3.92579Z',
-      fill: 'currentColor',
-    }),
-  )
-}
-
+/**
+ * The panel's value picker: a trigger in the row, the shell's `Menu` for the
+ * list. Everything the list needs — outside pointerdown, Escape, the arrow
+ * walk, the focus return to the trigger, the translucent material, the
+ * viewport-clamped portal — belongs to the primitive, so this owns `open` and
+ * which label the trigger shows, and nothing else.
+ */
 function SchemeMenu(props: {
   value: string
   options: { value: string; label: string }[]
@@ -159,109 +172,67 @@ function SchemeMenu(props: {
 }) {
   const { value, options, onSelect, disabled } = props
   const [open, setOpen] = React.useState(false)
-  const rootRef = React.useRef<HTMLSpanElement>(null)
-  const listRef = React.useRef<HTMLDivElement>(null)
-
-  React.useEffect(() => {
-    if (!open) return
-    function onDown(e: MouseEvent) {
-      if (!(e.target instanceof Node)) return
-      if (rootRef.current?.contains(e.target)) return
-      if (listRef.current?.contains(e.target)) return
-      setOpen(false)
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('pointerdown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('pointerdown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
-
   const selected = options.find((o) => o.value === value)
-  return React.createElement(
-    'span',
-    { ref: rootRef, style: { position: 'relative', display: 'inline-flex' } },
-    React.createElement(
+  const expanded = open && !disabled
+  return React.createElement(Menu, {
+    open: expanded,
+    align: 'end',
+    side: 'bottom',
+    // The settings card clips its own overflow, so the list leaves the card:
+    // portalled, exactly as DSH's own settings switcher portals its menu.
+    portal: true,
+    items: options.map((o) => ({ id: o.value, label: o.label })),
+    selectedId: value,
+    onSelect: (v: string) => {
+      setOpen(false)
+      onSelect(v)
+    },
+    onClose: () => setOpen(false),
+    anchor: React.createElement(
       'button',
       {
         type: 'button',
         className: 'ct-select',
         disabled,
         'aria-haspopup': 'menu',
-        'aria-expanded': open && !disabled,
+        'aria-expanded': expanded,
         onClick: () => setOpen(!open),
       },
       React.createElement('span', { className: 'ct-select-label' }, selected?.label ?? ''),
-      React.createElement('span', { className: 'ct-select-chevron' }, React.createElement(IconChevron, null)),
+      React.createElement(
+        'span',
+        { className: 'ct-select-chevron' },
+        React.createElement(IconChevronDownOutlineRegular, { size: ICON_SIZE }),
+      ),
     ),
-    open && !disabled
-      ? React.createElement(
-          'div',
-          {
-            ref: listRef,
-            className: 'ct-menu-list',
-            style: { position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 100 },
-            role: 'menu',
-            onClick: (e: React.MouseEvent) => e.stopPropagation(),
-          },
-          ...options.map((o) => {
-            const sel = o.value === value
-            return React.createElement(
-              'button',
-              {
-                key: o.value,
-                type: 'button',
-                role: 'menuitem',
-                className: 'ct-menu-item',
-                onClick: () => {
-                  setOpen(false)
-                  onSelect(o.value)
-                },
-              },
-              React.createElement('span', { className: 'ct-menu-item-label' }, o.label),
-              sel ? React.createElement(IconCheck, { className: 'ct-menu-check' }) : null,
-            )
-          }),
-        )
-      : null,
-  )
-}
-
-/** Accessible on/off switch used to enable the custom theme. */
-function Switch(props: { checked: boolean; label: string; onChange: (v: boolean) => void }) {
-  const { checked, label, onChange } = props
-  return React.createElement(
-    'button',
-    {
-      type: 'button',
-      role: 'switch',
-      'aria-checked': checked,
-      'aria-label': label,
-      className: checked ? 'ct-switch ct-switch-on' : 'ct-switch',
-      onClick: () => onChange(!checked),
-    },
-    React.createElement('span', { className: 'ct-switch-knob' }),
-  )
+  })
 }
 
 /**
  * Confirmation dialog for destructive actions, mirroring DSH's own Modal
- * (design-platform mask token + blur, r24 card on layer-2, prominent shadow).
- * Rendered inline rather than through a portal so it needs no react-dom import.
+ * (design-platform mask token + blur, `radius-panel` card on layer-2,
+ * prominent shadow) and the footer its `RiskConfirmation` lays out: an outline
+ * cancel beside the confirming action.
+ * Still rendered inline rather than through the shell's `Modal`: its Escape has
+ * to take part in the panel's own leave-the-draft questions, and a shell-owned
+ * modal layer would answer the key before this dialog could.
  */
 function ConfirmDialog(props: {
   title: string
   description: string
   confirmLabel: string
   cancelLabel: string
+  /**
+   * Tints the confirming action with the error token. DSH never fills a
+   * destructive button solid — its own delete affordance is an outlined face in
+   * the error colour — so the caller names which question is the destructive
+   * one and the pair switches to that recipe.
+   */
+  danger?: boolean
   onConfirm: () => void
   onCancel: () => void
 }) {
-  const { title, description, confirmLabel, cancelLabel, onConfirm, onCancel } = props
+  const { title, description, confirmLabel, cancelLabel, danger, onConfirm, onCancel } = props
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onCancel()
@@ -282,10 +253,21 @@ function ConfirmDialog(props: {
       React.createElement(
         'div',
         { className: 'ct-modal-footer' },
-        React.createElement('button', { type: 'button', className: 'ct-btn', onClick: onCancel }, cancelLabel),
+        // The shell's own action pair, in the order its `RiskConfirmation`
+        // modal footer uses: an outline cancel, then the confirming action.
+        // The min-widths are that component's own, so both dialogs line up.
         React.createElement(
-          'button',
-          { type: 'button', className: 'ct-btn ct-btn-danger', onClick: onConfirm },
+          Button,
+          { variant: 'outline', className: 'ct-action-cancel', onClick: onCancel },
+          cancelLabel,
+        ),
+        React.createElement(
+          Button,
+          {
+            variant: danger ? 'outline' : 'primary',
+            className: danger ? 'ct-action-confirm ct-danger' : 'ct-action-confirm',
+            onClick: onConfirm,
+          },
           confirmLabel,
         ),
       ),
@@ -296,174 +278,6 @@ function ConfirmDialog(props: {
 /** Which banner a failed roster call deserves. */
 function toastKeyFor(error: unknown): ThemeKey {
   return error instanceof ThemeApiUnavailableError ? 'custom.toast.unavailable' : 'custom.toast.failed'
-}
-
-/** Full-opacity hold before the fade starts. DSH's own default; mirrors the stylesheet's delay. */
-const TOAST_HOLD_MS = 3000
-/** Fade duration. Mirrors the stylesheet's fade animation. */
-const TOAST_FADE_MS = 1000
-
-/**
- * Transient confirmation banner: a leading result badge plus the copy, top
- * center, sliding in, holding, fading out, then reporting done so the owner can
- * unmount it. Metrics, tokens, badge and timing follow DSH's own toast — the
- * badge is the success circle its confirmations wear — but the component is
- * local: the plugin must keep answering a save on a host that does not share
- * the primitives module.
- *
- * TOAST_HOLD_MS and TOAST_FADE_MS have to agree with the `ct-toast` animation
- * in the injected stylesheet, which owns the visual timing.
- * @param props.text - resolved, already-localized copy.
- * @param props.onDone - called once the fade completes; unmount the toast here.
- */
-function Toast(props: { text: string; onDone: () => void }) {
-  const { text, onDone } = props
-  React.useEffect(() => {
-    const timer = setTimeout(onDone, TOAST_HOLD_MS + TOAST_FADE_MS)
-    return () => clearTimeout(timer)
-  }, [onDone])
-  // `status` rather than DSH's `alert`: these confirm an action the user just
-  // took, so they should not interrupt whatever the screen reader is saying.
-  return React.createElement(
-    'div',
-    { className: 'ct-toast', role: 'status' },
-    React.createElement(ToastBadge),
-    React.createElement('span', { className: 'ct-toast-text' }, text),
-  )
-}
-
-/** The leading badge every confirmation wears: a success ring around the check. */
-function ToastBadge() {
-  return React.createElement(
-    'span',
-    { className: 'ct-toast-icon', 'aria-hidden': true },
-    React.createElement(IconCheck, { size: 12 }),
-  )
-}
-
-/**
- * Plus glyph for the add button, path data taken verbatim from DSH's own
- * `IconPlusOutline16` so the two controls read as the same affordance.
- */
-function IconPlus(props: { size?: number }) {
-  const { size = 14 } = props
-  return React.createElement(
-    'svg',
-    {
-      width: size,
-      height: size,
-      viewBox: '0 0 16 16',
-      fill: 'none',
-      xmlns: 'http://www.w3.org/2000/svg',
-      'aria-hidden': true,
-      focusable: false,
-    },
-    React.createElement('path', {
-      d: 'M8.64453 1.5V7.34961H14.5V8.65039H8.64453V14.5H7.34473V8.65039H1.5V7.34961H7.34473V1.5H8.64453Z',
-      fill: 'currentColor',
-    }),
-  )
-}
-
-/**
- * Lucide `edit` (the pencil in a square), path data verbatim. Row actions are
- * icon-only, so the glyph has to read as the label the accessible name still
- * carries.
- */
-function IconEdit(props: { size?: number }) {
-  const { size = 14 } = props
-  return React.createElement(
-    'svg',
-    {
-      width: size,
-      height: size,
-      viewBox: '0 0 24 24',
-      fill: 'none',
-      stroke: 'currentColor',
-      strokeWidth: 2,
-      strokeLinecap: 'round',
-      strokeLinejoin: 'round',
-      xmlns: 'http://www.w3.org/2000/svg',
-      'aria-hidden': true,
-      focusable: false,
-    },
-    React.createElement('path', { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }),
-    React.createElement('path', { d: 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' }),
-  )
-}
-
-/** Lucide `trash`, path data verbatim; the row's danger action. */
-function IconTrash(props: { size?: number }) {
-  const { size = 14 } = props
-  return React.createElement(
-    'svg',
-    {
-      width: size,
-      height: size,
-      viewBox: '0 0 24 24',
-      fill: 'none',
-      stroke: 'currentColor',
-      strokeWidth: 2,
-      strokeLinecap: 'round',
-      strokeLinejoin: 'round',
-      xmlns: 'http://www.w3.org/2000/svg',
-      'aria-hidden': true,
-      focusable: false,
-    },
-    React.createElement('path', { d: 'M3 6h18' }),
-    React.createElement('path', { d: 'M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6' }),
-    React.createElement('path', { d: 'M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2' }),
-    React.createElement('line', { x1: 10, y1: 11, x2: 10, y2: 17 }),
-    React.createElement('line', { x1: 14, y1: 11, x2: 14, y2: 17 }),
-  )
-}
-
-/** Lucide `share`, path data verbatim; sends one theme out as an archive. */
-function IconShare(props: { size?: number }) {
-  const { size = 14 } = props
-  return React.createElement(
-    'svg',
-    {
-      width: size,
-      height: size,
-      viewBox: '0 0 24 24',
-      fill: 'none',
-      stroke: 'currentColor',
-      strokeWidth: 2,
-      strokeLinecap: 'round',
-      strokeLinejoin: 'round',
-      xmlns: 'http://www.w3.org/2000/svg',
-      'aria-hidden': true,
-      focusable: false,
-    },
-    React.createElement('path', { d: 'M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8' }),
-    React.createElement('polyline', { points: '16 6 12 2 8 6' }),
-    React.createElement('line', { x1: 12, y1: 2, x2: 12, y2: 15 }),
-  )
-}
-
-/** Lucide `download`, path data verbatim; takes one archive in. */
-function IconDownload(props: { size?: number }) {
-  const { size = 14 } = props
-  return React.createElement(
-    'svg',
-    {
-      width: size,
-      height: size,
-      viewBox: '0 0 24 24',
-      fill: 'none',
-      stroke: 'currentColor',
-      strokeWidth: 2,
-      strokeLinecap: 'round',
-      strokeLinejoin: 'round',
-      xmlns: 'http://www.w3.org/2000/svg',
-      'aria-hidden': true,
-      focusable: false,
-    },
-    React.createElement('path', { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' }),
-    React.createElement('polyline', { points: '7 10 12 15 17 10' }),
-    React.createElement('line', { x1: 12, y1: 15, x2: 12, y2: 3 }),
-  )
 }
 
 /**
@@ -486,31 +300,30 @@ function ThemeCard(props: {
   const { entry, active, disabled, t, onActivate, onExport, onEdit, onDelete } = props
 
   /**
-   * One square icon action; `danger` is the tinted delete variant. The glyph is
-   * decorative, so the label travels as the accessible name instead of as text,
-   * and as `data-tip` for the hover tooltip. `leave` marks the button on the
-   * markup the outside-click guard watches (see the guard's own comment).
+   * One square icon action. The glyph is decorative, so the label travels as
+   * the accessible name and as the shell's own `Tooltip` above the button.
+   * `danger` paints the error face; `leave` marks the button on the markup the
+   * outside-click guard watches (see that guard) — it is not a visual state.
    */
   const action = (
     label: string,
     icon: React.ReactNode,
     onClick: () => void,
-    variant?: 'danger' | 'leave',
-  ) =>
-    React.createElement(
+    marks?: { danger?: boolean; leave?: boolean },
+  ) => {
+    const button = React.createElement(
       'button',
       {
         type: 'button',
-        className: variant === 'danger'
-          ? 'ct-list-btn ct-list-btn-danger ct-tip'
-          : 'ct-list-btn ct-tip',
+        className: marks?.danger ? 'ct-list-btn ct-list-btn-danger' : 'ct-list-btn',
         'aria-label': label,
-        'data-tip': label,
-        ...(variant === 'leave' ? { 'data-ct-leave': 'true', 'data-ct-entry': entry.id } : {}),
+        ...(marks?.leave ? { 'data-ct-leave': 'true', 'data-ct-entry': entry.id } : {}),
         onClick,
       },
       icon,
     )
+    return React.createElement(Tooltip, { label, side: 'top', gap: 6, children: button })
+  }
 
   return React.createElement(
     'div',
@@ -553,9 +366,19 @@ function ThemeCard(props: {
       },
       // The active card is tagged on the trailing edge, beside its actions.
       active ? React.createElement('span', { className: 'ct-list-badge' }, t('custom.inUse')) : null,
-      action(t('custom.edit'), React.createElement(IconEdit, { size: 14 }), onEdit, 'leave'),
-      action(t('custom.export'), React.createElement(IconShare, { size: 14 }), onExport),
-      action(t('custom.delete'), React.createElement(IconTrash, { size: 14 }), onDelete, 'danger'),
+      action(
+        t('custom.edit'),
+        React.createElement(IconEditOutlineRegular, { size: ICON_SIZE }),
+        onEdit,
+        { leave: true },
+      ),
+      action(t('custom.export'), React.createElement(IconShareOutlineRegular, { size: ICON_SIZE }), onExport),
+      action(
+        t('custom.delete'),
+        React.createElement(IconTrashOutlineRegular, { size: ICON_SIZE }),
+        onDelete,
+        { danger: true },
+      ),
     ),
   )
 }
@@ -598,12 +421,6 @@ export function ThemePanel(props: {
     update: (id: string, name: string) => Promise<SavedTheme[]>
     remove: (id: string) => Promise<SavedTheme[]>
   }
-  /**
-   * The shell's own Toast, or null when the host does not share its primitives
-   * module with plugins. Read at render time: the async resolution lands long
-   * before the first action a banner can report.
-   */
-  getHostToast: () => ((props: any) => any) | null
   t: (key: ThemeKey) => string
   /**
    * The shell's own close seat, or null on a host that does not offer it. The
@@ -612,7 +429,7 @@ export function ThemePanel(props: {
    */
   onRequestClose: (() => void) | null
 }) {
-  const { theme, getSelection, setSelection, getCustom, setCustom, setCustomBase, resetCustom, saved, getHostToast, t, onRequestClose } = props
+  const { theme, getSelection, setSelection, getCustom, setCustom, setCustomBase, resetCustom, saved, t, onRequestClose } = props
   let initScheme = 'system'
   try {
     const snap = theme?.getTheme()
@@ -990,6 +807,12 @@ export function ThemePanel(props: {
       // Clicks inside the open card — the name field, a dot, cancel/save — are
       // the edit itself, not a way out of it.
       if (target.closest('[data-ct-editor]')) return
+      // Nor is a row of the shell's portalled `Menu`: its list is rendered on
+      // `document.body` so the settings card cannot clip it, which puts every
+      // row outside this panel's box. Picking an appearance from that list
+      // belongs to the edit (`pickScheme` even re-seats the edit's baseline on
+      // it), so the click is allowed through rather than read as the mask.
+      if (target.closest('[role="menu"]')) return
       const panel = settingsPanel()
       // A click outside the panel is the mask; inside it, only the header button
       // closes. Each raises the same leave-the-panel question.
@@ -1303,22 +1126,25 @@ export function ThemePanel(props: {
           'div',
           { className: 'ct-seed-dots' },
           ...dots.map((d) =>
-            React.createElement('button', {
+            React.createElement(Tooltip, {
               key: d.key,
-              type: 'button',
-              className: 'ct-seed-dot ct-tip',
-              // The button itself paints the colour and opens the popover
-              // picker anchored to it.
-              style: { background: d.value },
-              // Names the token this swatch edits; rendered as the styled
-              // bubble by the shared `.ct-tip` rule.
-              'data-tip': d.name,
-              'aria-haspopup': 'dialog',
-              'aria-expanded': pickerDotKey === d.key,
-              // The bubble above names the token; assistive tech also gets the
-              // fuller description, which the bubble is too small to carry.
-              'aria-label': `${d.name} — ${d.hint}`,
-              onClick: (e: React.MouseEvent<HTMLButtonElement>) => togglePicker(d.key, e.currentTarget),
+              // The bubble names the token; the swatch's own accessible name
+              // keeps the fuller description, which the bubble is too small to
+              // carry.
+              label: d.name,
+              side: 'top',
+              gap: 6,
+              children: React.createElement('button', {
+                type: 'button',
+                className: 'ct-seed-dot',
+                // The button itself paints the colour and opens the popover
+                // picker anchored to it.
+                style: { background: d.value },
+                'aria-haspopup': 'dialog',
+                'aria-expanded': pickerDotKey === d.key,
+                'aria-label': `${d.name} — ${d.hint}`,
+                onClick: (e: React.MouseEvent<HTMLButtonElement>) => togglePicker(d.key, e.currentTarget),
+              }),
             }),
           ),
         ),
@@ -1373,29 +1199,26 @@ export function ThemePanel(props: {
     // Picking a half switches which seeds the dots edit and previews that
     // appearance on the page, so the colours being edited are the ones on
     // screen. The preview is temporary: leaving the editor restores the
-    // preference it borrowed.
-    const modeButton = (id: Mode, label: string) =>
-      React.createElement(
-        'button',
-        {
-          key: id,
-          type: 'button',
-          className: seedMode === id ? 'ct-mode-btn ct-mode-btn-on' : 'ct-mode-btn',
-          'aria-pressed': seedMode === id,
-          onClick: () => {
-            setSeedMode(id)
-            previewAppearance(id)
-          },
-        },
-        label,
-      )
-
-    const modeToggle = React.createElement(
-      'div',
-      { className: 'ct-mode', role: 'group', 'aria-label': t('custom.mode.label') },
-      modeButton('light', t('custom.seed.light')),
-      modeButton('dark', t('custom.seed.dark')),
-    )
+    // preference it borrowed. The shell's `SegmentedControl` owns the tablist
+    // keyboard walk, the sliding indicator and the `<id>-<value>-panel` ids the
+    // colour rows below answer as that panel; `ct-mode` only pins its width
+    // beside the name field.
+    const modeToggle = React.createElement(SegmentedControl, {
+      id: SEED_MODE_CONTROL_ID,
+      value: seedMode,
+      options: [
+        { value: 'light', label: t('custom.seed.light') },
+        { value: 'dark', label: t('custom.seed.dark') },
+      ],
+      onChange: (next: string) => {
+        // The control offers only the two halves, so its value is one of them.
+        const mode = next as Mode
+        setSeedMode(mode)
+        previewAppearance(mode)
+      },
+      label: t('custom.mode.label'),
+      className: 'ct-mode',
+    })
 
     // The open editor: a name field, the two colour groups, then cancel/save.
     // Both a brand-new draft and a reopened saved entry share this body.
@@ -1414,15 +1237,13 @@ export function ThemePanel(props: {
       },
     })
 
+    // The shell's own action pair again, so the editor's footer and every
+    // dialog's footer read as one convention: outline cancel, primary save.
     const editorActions = React.createElement(
       'div',
       { className: 'ct-editor-actions' },
-      React.createElement('button', { type: 'button', className: 'ct-btn', onClick: cancelEdit }, t('custom.cancel')),
-      React.createElement(
-        'button',
-        { type: 'button', className: 'ct-btn ct-btn-primary', onClick: () => void saveEdit() },
-        t('custom.save'),
-      ),
+      React.createElement(Button, { variant: 'outline', onClick: cancelEdit }, t('custom.cancel')),
+      React.createElement(Button, { variant: 'primary', onClick: () => void saveEdit() }, t('custom.save')),
     )
 
     // The react-colorful popover for the seed whose dot is open, pinned to its
@@ -1466,8 +1287,21 @@ export function ThemePanel(props: {
           editorName,
           modeToggle,
         ),
-        dotRow('seeds', t('custom.group.seeds'), seedDots),
-        dotRow('shiki', t('custom.group.shiki'), shikiDots),
+        // The colour rows are the panel the segmented control's tabs control:
+        // the shell's control points `aria-controls` at `<id>-<value>-panel`,
+        // so both ids are built from `SEED_MODE_CONTROL_ID` and follow the half
+        // whose seeds are on show. A plain block wrapper changes no layout —
+        // the rows carry their own padding.
+        React.createElement(
+          'div',
+          {
+            role: 'tabpanel',
+            id: `${SEED_MODE_CONTROL_ID}-${seedMode}-panel`,
+            'aria-labelledby': `${SEED_MODE_CONTROL_ID}-${seedMode}`,
+          },
+          dotRow('seeds', t('custom.group.seeds'), seedDots),
+          dotRow('shiki', t('custom.group.shiki'), shikiDots),
+        ),
         editorActions,
         pickerPop,
       )
@@ -1512,7 +1346,7 @@ export function ThemePanel(props: {
             disabled: importing,
             onClick: startImport,
           },
-          React.createElement(IconDownload, null),
+          React.createElement(IconDownloadOutlineRegular, { size: ICON_SIZE }),
           t('custom.import'),
         ),
         React.createElement(
@@ -1524,7 +1358,7 @@ export function ThemePanel(props: {
             disabled: editing !== null,
             onClick: startAdd,
           },
-          React.createElement(IconPlus, null),
+          React.createElement(IconPlusOutlineRegular, { size: ICON_SIZE }),
           t('custom.add'),
         ),
         // The browser's own picker, kept out of the layout but inside this
@@ -1550,6 +1384,9 @@ export function ThemePanel(props: {
         description: t('custom.delete.desc').replace('{0}', pendingDelete.name),
         confirmLabel: t('custom.delete'),
         cancelLabel: t('custom.cancel'),
+        // Removing a saved theme is the destructive question; the two
+        // unsaved-draft questions below are not, and stay on the primary face.
+        danger: true,
         onConfirm: onConfirmDelete,
         onCancel: () => setPendingDelete(null),
       }),
@@ -1611,24 +1448,15 @@ export function ThemePanel(props: {
   // Outside the custom-mode branch: the banner reports the action, not the
   // editor state, so switching the editor off mid-toast must not kill it.
   if (toast) {
-    const onDone = () => setToast((cur) => (cur?.seq === toast.seq ? null : cur))
-    // The shell's toast when the host shares it — same banner the rest of DSH
-    // raises, portal included; the local one only covers a host without the
-    // primitives module.
-    const HostToast = getHostToast()
     children.push(
-      HostToast
-        ? React.createElement(HostToast, {
-            key: `toast-${String(toast.seq)}`,
-            text: toast.text,
-            icon: React.createElement(ToastBadge),
-            onDone,
-          })
-        : React.createElement(Toast, {
-            key: `toast-${String(toast.seq)}`,
-            text: toast.text,
-            onDone,
-          }),
+      React.createElement(Toast, {
+        // One key per report: a repeat action remounts the banner, so the
+        // shell's own hold and fade start again instead of continuing.
+        key: `toast-${String(toast.seq)}`,
+        text: toast.text,
+        tone: 'success',
+        onDone: () => setToast((cur) => (cur?.seq === toast.seq ? null : cur)),
+      }),
     )
   }
 
