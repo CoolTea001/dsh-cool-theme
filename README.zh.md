@@ -14,7 +14,7 @@ DeepSeek Harness 主题插件 —— 支持「深色」「浅色」「跟随系�
 
 1. **外观切换：** 将通用设置中的外观切换功能移至主题设置中管理，你可以在设置弹窗/主题标签中设置外观：深色、浅色、跟随系统
 2. **34款预设主题：** 内置 34 款预设主题，每一款主题都适配了深色/浅色外观：Aura、Ayu、Catppuccin、Catppuccin Frappe、Catppuccin Macchiato、Cobalt2、Cursor、DSH、Dracula、Everforest、Flexoki、GitHub、Gruvbox、Kanagawa、Lucent Orng、Material、Matrix、Mercury、Monokai、Night Owl、Nord、One Dark、OpenCode、Orng、Osaka Jade、Palenight、Rosé Pine、Solarized、Synthwave 84、System、Tokyo Night、Vercel、Vesper、Zenburn。
-3. **侧边栏透明：** 预设主题与自定义主题之间的开关控制 macOS 侧边栏面板透明效果，关闭后侧边栏为不透明。
+3. **侧边栏透明：** 预设主题与自定义主题之间的开关控制 macOS 侧边栏面板透明效果，默认关闭（侧边栏不透明）。
 4. **自定义主题：** 开启自定义主题后，可以创建自定义主题（配色继承当前预设主题），用户可以自由更改主题配色。
 5. **主题分享：** 分享自己创建的自定义主题，或者导入他人分享的自定义主题。
 

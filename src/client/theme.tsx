@@ -235,19 +235,23 @@ export function registerTheme(ctx: any) {
   //
   // DSH's darwin shell paints the sidebar column translucently (a gradient over
   // a 50%-alpha fill) so the window's native `vibrancy: "sidebar"` shows
-  // through. The switch opts out by painting the column with the same fill,
-  // fully opaque — the native material stays on, but nothing transparent is
-  // left to reveal it. The selector matches the CSS-module class by substring,
-  // because the hashed prefix (`_6Qf49G_sidebarCol`) rotates between builds;
-  // `sidebarCollapsed` contains the same substring, so it is excluded rather
-  // than painted opaque along with the column.
+  // through. The switch turns that back on; off — the default — paints the
+  // column with the same fill, fully opaque, so the native material stays on but
+  // nothing transparent is left to reveal it. The selector matches the
+  // CSS-module class by substring, because the hashed prefix
+  // (`_6Qf49G_sidebarCol`) rotates between builds; `sidebarCollapsed` contains
+  // the same substring, so it is excluded rather than painted opaque with the
+  // column.
   const SIDEBAR_OPAQUE_CSS =
     'html[data-platform="darwin"] [class*="sidebarCol"]:not([class*="sidebarCollapsed"]){background:var(--dsw-specific-sidebar-fill) !important;}'
   let sidebarOpaqueDisposer: (() => void) | null = null
 
-  /** Whether the sidebar keeps DSH's translucency; absent key means yes. */
+  /**
+   * Whether the sidebar keeps DSH's translucency. Only an explicit '1' turns it
+   * on: an absent key means opaque, which is the state a fresh install starts in.
+   */
   function sidebarTransparent(): boolean {
-    return readRaw(SIDEBAR_TRANSPARENT_STORAGE_KEY) !== '0'
+    return readRaw(SIDEBAR_TRANSPARENT_STORAGE_KEY) === '1'
   }
 
   /** Paint the sidebar column opaque (on), or hand it back to DSH (off). */
