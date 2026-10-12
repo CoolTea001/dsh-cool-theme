@@ -8,6 +8,7 @@ export declare const CUSTOM_THEME_STORAGE_KEY = "cool-theme-custom";
 export declare const CUSTOM_LIST_STORAGE_KEY = "cool-theme-custom-list";
 export declare const CUSTOM_ACTIVE_STORAGE_KEY = "cool-theme-custom-active";
 export declare const CUSTOM_MIGRATED_STORAGE_KEY = "cool-theme-custom-migrated";
+export declare const SIDEBAR_TRANSPARENT_STORAGE_KEY = "cool-theme-sidebar-transparent";
 /**
  * Documents are one directory each — `<root>/<id>/theme.json` — so a theme can
  * later carry media beside its seeds without changing this contract.

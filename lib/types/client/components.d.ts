@@ -21,6 +21,9 @@ export declare function ThemePanel(props: {
     /** Pick the preset future custom themes seed from, without applying it. */
     setCustomBase: (base: PresetId) => void;
     resetCustom: () => CustomTheme;
+    /** Whether the sidebar keeps DSH's native translucency (darwin only). */
+    getSidebarTransparent: () => boolean;
+    setSidebarTransparent: (on: boolean) => void;
     saved: {
         /** Cached roster; empty until `refresh` resolves. */
         list: () => SavedTheme[];

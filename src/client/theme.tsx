@@ -6,6 +6,7 @@ import {
   CUSTOM_LIST_STORAGE_KEY,
   CUSTOM_ACTIVE_STORAGE_KEY,
   CUSTOM_MIGRATED_STORAGE_KEY,
+  SIDEBAR_TRANSPARENT_STORAGE_KEY,
 } from '../contract.js'
 import { PRESETS, NOOP_PRESET_IDS, type PresetId, type PresetDef } from './presets.js'
 import { buildBaseCss, buildOverrides, buildFullCssFallback } from './tokens.js'
@@ -228,6 +229,37 @@ export function registerTheme(ctx: any) {
       if (value === null) localStorage.removeItem(key)
       else localStorage.setItem(key, value)
     } catch {}
+  }
+
+  // --- sidebar transparency ------------------------------------------------
+  //
+  // DSH's darwin shell paints the sidebar column translucently (a gradient over
+  // a 50%-alpha fill) so the window's native `vibrancy: "sidebar"` shows
+  // through. The switch opts out by painting the column with the same fill,
+  // fully opaque — the native material stays on, but nothing transparent is
+  // left to reveal it. The selector matches the CSS-module class by substring,
+  // because the hashed prefix (`_6Qf49G_sidebarCol`) rotates between builds.
+  const SIDEBAR_OPAQUE_CSS =
+    'html[data-platform="darwin"] [class*="sidebarCol"]{background:var(--dsw-specific-sidebar-fill) !important;}'
+  let sidebarOpaqueDisposer: (() => void) | null = null
+
+  /** Whether the sidebar keeps DSH's translucency; absent key means yes. */
+  function sidebarTransparent(): boolean {
+    return readRaw(SIDEBAR_TRANSPARENT_STORAGE_KEY) !== '0'
+  }
+
+  /** Paint the sidebar column opaque (on), or hand it back to DSH (off). */
+  function applySidebarOpaque(opaque: boolean) {
+    if (opaque) {
+      if (!sidebarOpaqueDisposer) sidebarOpaqueDisposer = injector.insert(SIDEBAR_OPAQUE_CSS)
+    } else if (sidebarOpaqueDisposer) {
+      sidebarOpaqueDisposer = release(sidebarOpaqueDisposer)
+    }
+  }
+
+  function setSidebarTransparent(on: boolean) {
+    writeRaw(SIDEBAR_TRANSPARENT_STORAGE_KEY, on ? '1' : '0')
+    applySidebarOpaque(!on)
   }
 
   function getSelection(): Selection {
@@ -500,6 +532,8 @@ export function registerTheme(ctx: any) {
   }
 
   apply(initialSelection)
+  // Restore the sidebar switch before the panel is ever opened.
+  applySidebarOpaque(!sidebarTransparent())
 
   ctx.effect(() => () => {
     // A coalesced application must not outlive the fiber: firing after this
@@ -510,6 +544,7 @@ export function registerTheme(ctx: any) {
     baselineDisposer = release(baselineDisposer)
     overrideDispose = release(overrideDispose)
     fallbackDispose = release(fallbackDispose)
+    sidebarOpaqueDisposer = release(sidebarOpaqueDisposer)
     injector.disposeAll()
   })
 
@@ -527,6 +562,8 @@ export function registerTheme(ctx: any) {
         setCustomBase,
         resetCustom,
         saved,
+        getSidebarTransparent: sidebarTransparent,
+        setSidebarTransparent,
         // The shell's close seat. Absent on a host that does not offer it, which
         // also disables the unsaved-draft guard: without a way to leave, blocking
         // the close would strand the user.

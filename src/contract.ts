@@ -26,6 +26,11 @@ export const CUSTOM_ACTIVE_STORAGE_KEY = 'cool-theme-custom-active'
 // Host owns, so a stale browser copy is never migrated twice.
 export const CUSTOM_MIGRATED_STORAGE_KEY = 'cool-theme-custom-migrated'
 
+// Sidebar transparency preference: '1' (or an absent key) keeps DSH's native
+// macOS translucency, '0' paints the sidebar column opaque. The value only
+// changes what darwin renders; other platforms read it but nothing consumes it.
+export const SIDEBAR_TRANSPARENT_STORAGE_KEY = 'cool-theme-sidebar-transparent'
+
 // ---------------------------------------------------------------------------
 // Theme files
 // ---------------------------------------------------------------------------

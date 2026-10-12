@@ -406,6 +406,9 @@ export function ThemePanel(props: {
   /** Pick the preset future custom themes seed from, without applying it. */
   setCustomBase: (base: PresetId) => void
   resetCustom: () => CustomTheme
+  /** Whether the sidebar keeps DSH's native translucency (darwin only). */
+  getSidebarTransparent: () => boolean
+  setSidebarTransparent: (on: boolean) => void
   saved: {
     /** Cached roster; empty until `refresh` resolves. */
     list: () => SavedTheme[]
@@ -429,7 +432,20 @@ export function ThemePanel(props: {
    */
   onRequestClose: (() => void) | null
 }) {
-  const { theme, getSelection, setSelection, getCustom, setCustom, setCustomBase, resetCustom, saved, t, onRequestClose } = props
+  const {
+    theme,
+    getSelection,
+    setSelection,
+    getCustom,
+    setCustom,
+    setCustomBase,
+    resetCustom,
+    saved,
+    getSidebarTransparent,
+    setSidebarTransparent,
+    t,
+    onRequestClose,
+  } = props
   let initScheme = 'system'
   try {
     const snap = theme?.getTheme()
@@ -453,6 +469,9 @@ export function ThemePanel(props: {
   })
   const [list, setList] = React.useState<SavedTheme[]>(() => saved.list())
   const [activeId, setActiveId] = React.useState<string | null>(() => saved.activeId())
+  // The sidebar-transparency switch mirrors the persisted preference. It is
+  // independent of the theme selection, so it holds its own local state.
+  const [sidebarTransparent, setSidebarTransparentState] = React.useState<boolean>(() => getSidebarTransparent())
   const [pendingDelete, setPendingDelete] = React.useState<SavedTheme | null>(null)
   // An archive being read. The picker is the browser's, so this only gates the
   // import button and the second picker opening while the first is still in
@@ -1084,6 +1103,24 @@ export function ThemePanel(props: {
         // Custom mode owns the colours, and the preset it inherited is fixed
         // for as long as it stays on.
         disabled: customOn,
+      }),
+    ),
+    React.createElement(
+      'div',
+      { className: 'ct-row', key: 'sidebar-transparency' },
+      React.createElement(
+        'div',
+        { className: 'ct-row-main' },
+        React.createElement('div', { className: 'ct-row-title' }, t('sidebar.title')),
+        React.createElement('div', { className: 'ct-row-desc' }, t('sidebar.desc')),
+      ),
+      React.createElement(Switch, {
+        checked: sidebarTransparent,
+        label: t('sidebar.title'),
+        onChange: (on: boolean) => {
+          setSidebarTransparentState(on)
+          setSidebarTransparent(on)
+        },
       }),
     ),
     React.createElement(

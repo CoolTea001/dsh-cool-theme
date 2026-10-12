@@ -11,6 +11,8 @@ export declare const zh: {
     'presets.title': string;
     'presets.desc': string;
     'presets.disabled': string;
+    'sidebar.title': string;
+    'sidebar.desc': string;
     'scheme.light': string;
     'scheme.dark': string;
     'scheme.system': string;
@@ -86,6 +88,8 @@ export declare const en: {
     'presets.title': string;
     'presets.desc': string;
     'presets.disabled': string;
+    'sidebar.title': string;
+    'sidebar.desc': string;
     'scheme.light': string;
     'scheme.dark': string;
     'scheme.system': string;
