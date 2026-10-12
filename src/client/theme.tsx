@@ -238,9 +238,11 @@ export function registerTheme(ctx: any) {
   // through. The switch opts out by painting the column with the same fill,
   // fully opaque — the native material stays on, but nothing transparent is
   // left to reveal it. The selector matches the CSS-module class by substring,
-  // because the hashed prefix (`_6Qf49G_sidebarCol`) rotates between builds.
+  // because the hashed prefix (`_6Qf49G_sidebarCol`) rotates between builds;
+  // `sidebarCollapsed` contains the same substring, so it is excluded rather
+  // than painted opaque along with the column.
   const SIDEBAR_OPAQUE_CSS =
-    'html[data-platform="darwin"] [class*="sidebarCol"]{background:var(--dsw-specific-sidebar-fill) !important;}'
+    'html[data-platform="darwin"] [class*="sidebarCol"]:not([class*="sidebarCollapsed"]){background:var(--dsw-specific-sidebar-fill) !important;}'
   let sidebarOpaqueDisposer: (() => void) | null = null
 
   /** Whether the sidebar keeps DSH's translucency; absent key means yes. */
