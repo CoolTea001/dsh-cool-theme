@@ -13,7 +13,7 @@
  *            one ramp PER appearance
  *   accent   merged `--dsw-static-deepseek-*` + `--dsw-static-blue-*`
  *   green / amber / red
- *   border   `--dsw-alias-border-l1`, with `-l2` derived from it
+ *   border   DSH's border ladder, derived from one seed (l1 is the seed)
  *   shiki    9 syntax tokens
  */
 
@@ -50,8 +50,9 @@ export type NeutralRamp = { lightest: string; darkest: string }
 /**
  * The border seed. Unlike every other seed it is an overlay rather than a solid
  * fill, so it carries an opaque base colour plus an opacity percentage (0–100).
- * It publishes two aliases: `--dsw-alias-border-l1` is exactly this seed, and
- * `-l2` is derived from it (see {@link borderTokens}).
+ * It publishes DSH's whole border ladder: `--dsw-alias-border-l1` is exactly
+ * this seed and the stronger levels are derived from it (see
+ * {@link borderTokens}).
  */
 export type BorderSeed = { color: string; alpha: number }
 
@@ -119,12 +120,24 @@ export const DEFAULT_BORDER: Record<Mode, BorderSeed> = {
 }
 
 /**
- * How much stronger `--dsw-alias-border-l2` reads than l1, in percentage points.
- * DSH's own pair runs 4% -> 10% in light and 6% -> 12% in dark — +6 in both — so
- * deriving l2 this way reproduces the shipped borders exactly at the default
- * seed and keeps the two aliases in the relationship the shell authored.
+ * The border levels a seed drives, in DSH's order of increasing strength. `thin`
+ * is not a fifth step: it is the level DSH thins in dark mode.
  */
-const BORDER_L2_ALPHA_STEP = 6
+type BorderLevel = 'l2' | 'l3' | 'l4' | 'thin'
+
+/**
+ * How far above the seed each derived level sits, in percentage points — DSH's
+ * own spacing. Its light ladder runs 4 / 10 / 12 / 16 and its dark one
+ * 6 / 12 / 16 / 20, so these offsets reproduce the shipped values exactly at the
+ * default seed while letting one picker move every level together.
+ *
+ * `thin` tracks l2 where DSH does not thin it (light) and collapses onto l1
+ * where it does (dark), which is exactly how the shell's pair is authored.
+ */
+const BORDER_ALPHA_STEPS: Record<Mode, Record<BorderLevel, number>> = {
+  light: { l2: 6, l3: 8, l4: 12, thin: 6 },
+  dark: { l2: 6, l3: 10, l4: 14, thin: 0 },
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -236,15 +249,32 @@ export function borderCss(seed: BorderSeed, alpha: number = seed.alpha): string 
 }
 
 /**
- * The two alias values one border seed publishes. l1 is the seed itself; l2 is
- * the same hue one step stronger, so a single picker drives both of DSH's
- * border aliases and the stronger one can never end up weaker than the subtle
- * one.
+ * Every border alias one seed publishes, under DSH's own names. Typed rather
+ * than a bare map so a level cannot go missing from the ladder unnoticed.
  */
-export function borderTokens(seed: BorderSeed): { l1: string; l2: string } {
+export type BorderTokens = {
+  '--dsw-alias-border-l1': string
+  '--dsw-alias-border-l2': string
+  '--dsw-alias-border-l3': string
+  '--dsw-alias-border-l4': string
+  '--dsw-alias-border-l2-darkmode-thin': string
+}
+
+/**
+ * The whole border ladder, from one seed. l1 is the seed itself and every
+ * stronger level is the same hue at DSH's own spacing above it, so a single
+ * picker moves sidebars, tab bars, cards and buttons together, and a stronger
+ * level can never end up weaker than a subtler one. The alpha is clamped, so a
+ * near-opaque seed flattens the top of the ladder instead of overflowing it.
+ */
+export function borderTokens(mode: Mode, seed: BorderSeed): BorderTokens {
+  const step = BORDER_ALPHA_STEPS[mode]
   return {
-    l1: borderCss(seed),
-    l2: borderCss(seed, seed.alpha + BORDER_L2_ALPHA_STEP),
+    '--dsw-alias-border-l1': borderCss(seed),
+    '--dsw-alias-border-l2': borderCss(seed, seed.alpha + step.l2),
+    '--dsw-alias-border-l3': borderCss(seed, seed.alpha + step.l3),
+    '--dsw-alias-border-l4': borderCss(seed, seed.alpha + step.l4),
+    '--dsw-alias-border-l2-darkmode-thin': borderCss(seed, seed.alpha + step.thin),
   }
 }
 
@@ -425,11 +455,8 @@ export function buildCustomPreset(v: CustomTheme): PresetDef {
     return out
   }
 
-  /** Both border aliases, derived from this appearance's one border seed. */
-  const border = (mode: Mode): StaticMap => {
-    const { l1, l2 } = borderTokens(v.border[mode])
-    return { '--dsw-alias-border-l1': l1, '--dsw-alias-border-l2': l2 }
-  }
+  /** Every border alias, derived from this appearance's one border seed. */
+  const border = (mode: Mode): StaticMap => borderTokens(mode, v.border[mode])
 
   return {
     label: 'Custom',

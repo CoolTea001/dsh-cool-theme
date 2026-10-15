@@ -15,7 +15,7 @@ DeepSeek Harness theme plugin — supports Dark / Light / System appearance swit
 1. **Appearance switching:** The appearance switch from General settings is now managed in Theme settings. You can set the appearance (dark, light, or system) in the Settings dialog → Theme tab.
 2. **34 preset themes:** 34 built-in presets, each adapted to both dark and light appearance: Aura, Ayu, Catppuccin, Catppuccin Frappe, Catppuccin Macchiato, Cobalt2, Cursor, DSH, Dracula, Everforest, Flexoki, GitHub, Gruvbox, Kanagawa, Lucent Orng, Material, Matrix, Mercury, Monokai, Night Owl, Nord, One Dark, OpenCode, Orng, Osaka Jade, Palenight, Rosé Pine, Solarized, Synthwave 84, System, Tokyo Night, Vercel, Vesper, Zenburn.
 3. **Sidebar transparency:** A switch between Preset themes and Custom theme controls the sidebar panel transparency on macOS; it is off (opaque sidebar) by default.
-4. **Custom themes:** Turn on custom themes to create your own (colors inherit from the currently selected preset). The editor covers the palette and the nine syntax tokens, plus a border swatch between Foreground and Success: pick the border color and its opacity, and the stronger border level is derived from it automatically.
+4. **Custom themes:** Turn on custom themes to create your own (colors inherit from the currently selected preset). The editor covers the palette and the nine syntax tokens, plus a border swatch between Foreground and Success: pick the border color and its opacity, and every border level the shell paints — sidebars, tab bars, cards, buttons — is derived from it automatically.
 5. **Sharing themes:** Share custom themes you have created, or import custom themes shared by others.
 
 ## Installation

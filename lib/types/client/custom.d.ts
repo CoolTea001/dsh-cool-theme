@@ -13,7 +13,7 @@
  *            one ramp PER appearance
  *   accent   merged `--dsw-static-deepseek-*` + `--dsw-static-blue-*`
  *   green / amber / red
- *   border   `--dsw-alias-border-l1`, with `-l2` derived from it
+ *   border   DSH's border ladder, derived from one seed (l1 is the seed)
  *   shiki    9 syntax tokens
  */
 import type { PresetDef } from './presets.js';
@@ -36,8 +36,9 @@ export type NeutralRamp = {
 /**
  * The border seed. Unlike every other seed it is an overlay rather than a solid
  * fill, so it carries an opaque base colour plus an opacity percentage (0–100).
- * It publishes two aliases: `--dsw-alias-border-l1` is exactly this seed, and
- * `-l2` is derived from it (see {@link borderTokens}).
+ * It publishes DSH's whole border ladder: `--dsw-alias-border-l1` is exactly
+ * this seed and the stronger levels are derived from it (see
+ * {@link borderTokens}).
  */
 export type BorderSeed = {
     color: string;
@@ -93,15 +94,24 @@ export declare function toHex(input: unknown): string;
  */
 export declare function borderCss(seed: BorderSeed, alpha?: number): string;
 /**
- * The two alias values one border seed publishes. l1 is the seed itself; l2 is
- * the same hue one step stronger, so a single picker drives both of DSH's
- * border aliases and the stronger one can never end up weaker than the subtle
- * one.
+ * Every border alias one seed publishes, under DSH's own names. Typed rather
+ * than a bare map so a level cannot go missing from the ladder unnoticed.
  */
-export declare function borderTokens(seed: BorderSeed): {
-    l1: string;
-    l2: string;
+export type BorderTokens = {
+    '--dsw-alias-border-l1': string;
+    '--dsw-alias-border-l2': string;
+    '--dsw-alias-border-l3': string;
+    '--dsw-alias-border-l4': string;
+    '--dsw-alias-border-l2-darkmode-thin': string;
 };
+/**
+ * The whole border ladder, from one seed. l1 is the seed itself and every
+ * stronger level is the same hue at DSH's own spacing above it, so a single
+ * picker moves sidebars, tab bars, cards and buttons together, and a stronger
+ * level can never end up weaker than a subtler one. The alpha is clamped, so a
+ * near-opaque seed flattens the top of the ladder instead of overflowing it.
+ */
+export declare function borderTokens(mode: Mode, seed: BorderSeed): BorderTokens;
 /**
  * Recover the seed inputs from an already-generated preset.
  *

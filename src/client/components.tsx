@@ -1306,8 +1306,8 @@ export function ThemePanel(props: {
      * The border swatch. It is the one seed that is an overlay rather than a
      * fill, so it is also the only one whose picker carries an opacity slider
      * (`SeedDot.alpha`) and whose swatch previews that opacity over a
-     * checkerboard. Both border aliases follow from it: l1 is the seed and l2 is
-     * derived while the palette is built.
+     * checkerboard. DSH's whole border ladder follows from it: l1 is the seed
+     * and every stronger level is derived while the palette is built.
      */
     const borderDot = (): SeedDot => {
       const seed = custom.border[seedMode]
