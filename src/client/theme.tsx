@@ -23,6 +23,7 @@ import {
   normalizeCustom,
   parseEnvelope,
 } from './custom.js'
+import { THEME_NAV_MARKUP } from './icons.js'
 import {
   fetchThemes,
   pushThemes,
@@ -588,10 +589,10 @@ export function registerTheme(ctx: any) {
     )
   })
 
-  // Fix nav icon: settings panel uses a gear for unknown section ids. Replace it with a palette for the Theme section.
-  const PALETTE_SVG =
-    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M0 0h24v24H0z" fill="none"/><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M12 22a1 1 0 0 1 0-20a10 9 0 0 1 10 9a5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></g></svg>'
-
+  // Fix nav icon: the settings panel draws a gear for an unknown section id. The
+  // Theme section gets a palette from `assets/theme.svg` instead — as markup
+  // rather than as a component, because the seat being rewritten is the shell's
+  // own DOM (see THEME_NAV_MARKUP in icons.tsx).
   let paletteObs: MutationObserver | null = null
   function patchThemeNavIcon() {
     if (typeof document === 'undefined') return
@@ -626,7 +627,7 @@ export function registerTheme(ctx: any) {
       holder.style.display = 'inline-flex'
       holder.style.flex = 'none'
       holder.setAttribute('aria-hidden', 'true')
-      holder.innerHTML = PALETTE_SVG
+      holder.innerHTML = THEME_NAV_MARKUP
       svg.parentNode?.insertBefore(holder, svg.nextSibling)
     }
   }

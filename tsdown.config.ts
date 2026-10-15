@@ -21,6 +21,10 @@ export default defineConfig([
     platform: 'browser',
     target: 'es2022',
     dts: false,
+    // Icons are read as their own source text (see src/client/icons.tsx), which
+    // keeps the published package JavaScript-only: `files` ships `lib`, and the
+    // artwork is already inside it by the time the bundle is written.
+    loader: { '.svg': 'text' },
     deps: {
       neverBundle: ['react', 'react-dom', '@deepseek-ai/dsh-client-ui-primitives'],
     },

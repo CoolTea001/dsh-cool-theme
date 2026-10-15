@@ -1,5 +1,6 @@
 import { PRESETS, NOOP_PRESET_IDS, type PresetId, type PresetDef } from './presets.js'
 import { PRIMITIVES_LIGHT, PRIMITIVES_DARK, buildPrimitivesCss, primitiveOverrides } from './css/primitives.js'
+import { accentOverrides, buildAccentCss } from './css/accents.js'
 import { SHIKI_CSS } from './css/shiki.js'
 
 export function buildBaseCss(): string {
@@ -26,14 +27,20 @@ export function resolvePreset(src: PresetId | PresetDef) {
   }
 }
 
+/**
+ * Every token a theme publishes, in one layer: the primitive ramps it retints,
+ * plus the alias tokens that move DSH's interactive components onto the theme's
+ * accent (see css/accents.ts). The accent goes last so it wins over any alias a
+ * custom theme's own map happens to carry.
+ */
 export function buildOverrides(src: PresetId | PresetDef): Record<string, { light: string; dark: string }> {
   const resolved = resolvePreset(src)
   if (!resolved) return {}
-  return primitiveOverrides(resolved.light, resolved.dark)
+  return { ...primitiveOverrides(resolved.light, resolved.dark), ...accentOverrides(resolved.light, resolved.dark) }
 }
 
 export function buildFullCssFallback(src: PresetId | PresetDef): string {
   const resolved = resolvePreset(src)
   if (!resolved) return ''
-  return buildPrimitivesCss(resolved.light, resolved.dark)
+  return `${buildPrimitivesCss(resolved.light, resolved.dark)}\n\n${buildAccentCss(resolved.light, resolved.dark)}`
 }

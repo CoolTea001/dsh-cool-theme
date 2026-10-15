@@ -1,13 +1,14 @@
 /**
  * Primitives layer: the ONLY place theme authors should edit to create a new theme.
  *
- * Architecture (user-selected strategy B):
+ * Architecture:
  *   :root                                                → light values for --dsw-static-*
  *   html[data-ds-dark-theme], body[data-ds-dark-theme]   → dark values for the SAME --dsw-static-* keys
- *   semantic layer (semantic.ts)                         → single `var(--dsw-static-*)` mapping, no light/dark fork
+ *   the shell's alias layer (design-platform.css)        → one `var(--dsw-static-*)` mapping per appearance
+ *   accents.ts                                           → the alias tokens that follow the accent, not the foreground
  *
- * Changing a theme = providing a new light + dark map for these 85 variables.
- * Semantic aliases automatically follow. No other file needs to change.
+ * Changing a theme = providing a new light + dark map for these variables.
+ * Semantic aliases — and the accent layer built on them — automatically follow.
  */
 
 export type StaticMap = Record<string, string>

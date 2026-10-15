@@ -19,19 +19,16 @@ import {
   borderCss,
   nextThemeName,
 } from './custom.js'
+import { IconDelete, IconEdit, IconExport, IconImport, IconPlus } from './icons.js'
 // The shell's own controls, resolved at runtime from the frozen platform module
 // table (see ui-primitives.d.ts and tsdown's `deps.neverBundle`). Reusing them
 // rather than restyling a copy is the package's own rule, and it is what keeps
-// this panel tracking DSH's menu, switch, segmented, tooltip and glyph changes
-// without a plugin release.
+// this panel tracking DSH's menu, switch, segmented and tooltip changes without
+// a plugin release. The one glyph still taken from the shell is the select's
+// chevron: every action icon is this plugin's own (see icons.tsx).
 import {
   Button,
   IconChevronDownOutlineRegular,
-  IconDownloadOutlineRegular,
-  IconEditOutlineRegular,
-  IconPlusOutlineRegular,
-  IconShareOutlineRegular,
-  IconTrashOutlineRegular,
   Menu,
   SegmentedControl,
   Switch,
@@ -115,11 +112,11 @@ function splitAlpha(value: string): BorderSeed {
 }
 
 /**
- * The one glyph size this panel draws at. Every icon here is explicit about it
- * because the shell's artwork does not default uniformly — the chevron falls
- * back to 14, the edit/share/trash/add/import glyphs to 16 — so passing no size
- * silently picks a different scale per icon. 14 is what the shell's own
- * settings pages pass.
+ * The one glyph size this panel draws at, passed explicitly by every call site.
+ * The two halves of a row disagree on their own: the shell's chevron falls back
+ * to 14 while this plugin's icons default to 16, so leaving it implicit would
+ * silently mix two scales in the same panel. 14 is what the shell's own settings
+ * pages pass.
  */
 const ICON_SIZE = 14
 
@@ -436,14 +433,14 @@ function ThemeCard(props: {
       active ? React.createElement('span', { className: 'ct-list-badge' }, t('custom.inUse')) : null,
       action(
         t('custom.edit'),
-        React.createElement(IconEditOutlineRegular, { size: ICON_SIZE }),
+        React.createElement(IconEdit, { size: ICON_SIZE }),
         onEdit,
         { leave: true },
       ),
-      action(t('custom.export'), React.createElement(IconShareOutlineRegular, { size: ICON_SIZE }), onExport),
+      action(t('custom.export'), React.createElement(IconExport, { size: ICON_SIZE }), onExport),
       action(
         t('custom.delete'),
-        React.createElement(IconTrashOutlineRegular, { size: ICON_SIZE }),
+        React.createElement(IconDelete, { size: ICON_SIZE }),
         onDelete,
         { danger: true },
       ),
@@ -1519,7 +1516,7 @@ export function ThemePanel(props: {
             disabled: importing,
             onClick: startImport,
           },
-          React.createElement(IconDownloadOutlineRegular, { size: ICON_SIZE }),
+          React.createElement(IconImport, { size: ICON_SIZE }),
           t('custom.import'),
         ),
         React.createElement(
@@ -1531,7 +1528,7 @@ export function ThemePanel(props: {
             disabled: editing !== null,
             onClick: startAdd,
           },
-          React.createElement(IconPlusOutlineRegular, { size: ICON_SIZE }),
+          React.createElement(IconPlus, { size: ICON_SIZE }),
           t('custom.add'),
         ),
         // The browser's own picker, kept out of the layout but inside this

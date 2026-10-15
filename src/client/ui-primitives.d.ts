@@ -138,10 +138,9 @@ declare module '@deepseek-ai/dsh-client-ui-primitives' {
     size?: number
     className?: string
   }
+  /**
+   * The one glyph this plugin still renders from the shell — the select's
+   * chevron. Every action icon is the plugin's own (see icons.tsx).
+   */
   export const IconChevronDownOutlineRegular: React.FC<IconProps>
-  export const IconDownloadOutlineRegular: React.FC<IconProps>
-  export const IconEditOutlineRegular: React.FC<IconProps>
-  export const IconPlusOutlineRegular: React.FC<IconProps>
-  export const IconShareOutlineRegular: React.FC<IconProps>
-  export const IconTrashOutlineRegular: React.FC<IconProps>
 }

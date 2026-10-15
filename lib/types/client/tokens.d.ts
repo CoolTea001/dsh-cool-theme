@@ -13,6 +13,12 @@ export declare function resolvePreset(src: PresetId | PresetDef): {
         [x: string]: string;
     };
 } | null;
+/**
+ * Every token a theme publishes, in one layer: the primitive ramps it retints,
+ * plus the alias tokens that move DSH's interactive components onto the theme's
+ * accent (see css/accents.ts). The accent goes last so it wins over any alias a
+ * custom theme's own map happens to carry.
+ */
 export declare function buildOverrides(src: PresetId | PresetDef): Record<string, {
     light: string;
     dark: string;
