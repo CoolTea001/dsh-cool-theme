@@ -52,9 +52,9 @@ export type CustomState = { base: PresetId; theme: CustomTheme }
 const SEED_MODE_CONTROL_ID = 'ct-seed-mode'
 
 /**
- * Key of the border swatch in the shared colour popover. The border seed is the
- * one seed that is not a plain fill — it also carries an opacity — so both the
- * popover's height and its alpha-aware picker key off this name.
+ * Key of the border swatch in the shared colour popover. It is the one seed that
+ * is not a plain fill — it carries an opacity too — which is why its picker is
+ * the alpha-aware one and one control taller (see `seedPickerHeight`).
  */
 const BORDER_SEED_KEY = 'border'
 
@@ -71,11 +71,6 @@ const PICKER_HEIGHT = 240
 const PICKER_HEIGHT_WITH_ALPHA = PICKER_HEIGHT + 24
 const PICKER_GAP = 8
 const PICKER_MARGIN = 8
-
-/** The popover height for the seed being edited, given its key. */
-function pickerHeight(key: string | null): number {
-  return key === BORDER_SEED_KEY ? PICKER_HEIGHT_WITH_ALPHA : PICKER_HEIGHT
-}
 
 /**
  * The alpha checkerboard behind a translucent swatch. Both squares are the same
@@ -611,6 +606,13 @@ export function ThemePanel(props: {
   const pickerAnchorRef = React.useRef<HTMLElement | null>(null)
   /** The popover node itself; outside-pointerdown detection needs its bounds. */
   const pickerPopRef = React.useRef<HTMLDivElement | null>(null)
+  /**
+   * Height of the box the open popover was placed with, captured beside its
+   * anchor. The two popovers differ by one control, and a scroll or resize has
+   * to rebuild the same box; the clicked dot is not in that scope, so its own
+   * fact travels here rather than being re-derived from the dot's key.
+   */
+  const pickerHeightRef = React.useRef(PICKER_HEIGHT)
 
   /**
    * Viewport coordinates that put the popover beside its anchor swatch. The
@@ -633,15 +635,19 @@ export function ThemePanel(props: {
     return { left, top }
   }
 
-  /** Toggle one seed's popover; `anchor` is the swatch that was clicked. */
-  function togglePicker(key: string, anchor: HTMLElement) {
+  /**
+   * Toggle one seed's popover; `anchor` is the swatch that was clicked and
+   * `height` the height of the box it opens.
+   */
+  function togglePicker(key: string, anchor: HTMLElement, height: number) {
     if (pickerDotKey === key) {
       closePicker()
       return
     }
     pickerAnchorRef.current = anchor
+    pickerHeightRef.current = height
     setPickerDotKey(key)
-    setPickerPos(placePicker(anchor, pickerHeight(key)))
+    setPickerPos(placePicker(anchor, height))
   }
 
   function closePicker() {
@@ -674,7 +680,7 @@ export function ThemePanel(props: {
       const anchor = pickerAnchorRef.current
       if (!anchor) return
       cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => setPickerPos(placePicker(anchor, pickerHeight(pickerDotKey))))
+      raf = requestAnimationFrame(() => setPickerPos(placePicker(anchor, pickerHeightRef.current)))
     }
     window.addEventListener('scroll', update, true)
     window.addEventListener('resize', update)
@@ -683,8 +689,8 @@ export function ThemePanel(props: {
       window.removeEventListener('resize', update)
       cancelAnimationFrame(raf)
     }
-    // `pickerDotKey` is a dependency because the height the popover is placed
-    // with depends on which seed owns it.
+    // `pickerDotKey` stays a dependency: switching dots re-places the popover on
+    // the new anchor even before the next scroll or resize.
   }, [pickerOpen, pickerDotKey])
 
   /** Re-read both the list and the active pointer after any list mutation. */
@@ -1236,6 +1242,13 @@ export function ThemePanel(props: {
       swatch?: React.CSSProperties
     }
 
+    /**
+     * Height of the box one seed's dot opens. Only the border seed's picker
+     * carries an opacity slider, and that seed is the one that declares it, so
+     * the height follows `SeedDot.alpha` rather than a name.
+     */
+    const seedPickerHeight = (dot: SeedDot) => (dot.alpha ? PICKER_HEIGHT_WITH_ALPHA : PICKER_HEIGHT)
+
     /** A group row: its name on the left, every seed's dot on the right. */
     const dotRow = (key: string, label: string, dots: SeedDot[]) =>
       React.createElement(
@@ -1264,7 +1277,8 @@ export function ThemePanel(props: {
                 'aria-haspopup': 'dialog',
                 'aria-expanded': pickerDotKey === d.key,
                 'aria-label': `${d.name} — ${d.hint}`,
-                onClick: (e: React.MouseEvent<HTMLButtonElement>) => togglePicker(d.key, e.currentTarget),
+                onClick: (e: React.MouseEvent<HTMLButtonElement>) =>
+                  togglePicker(d.key, e.currentTarget, seedPickerHeight(d)),
               }),
             }),
           ),
@@ -1317,7 +1331,7 @@ export function ThemePanel(props: {
         // The opacity travels in the accessible name: the tooltip bubble only
         // has room for the seed's name, and the percentage is exactly what a
         // swatch this faint cannot show on its own.
-        hint: `${t('custom.border.desc')} — ${String(seed.alpha)}%`,
+        hint: `${t('custom.border.desc')} — ${seed.alpha}%`,
         value: seed.color,
         onChange: (v: string) => set({ color: v }),
         // The picker hands colour and opacity back as one value, so both

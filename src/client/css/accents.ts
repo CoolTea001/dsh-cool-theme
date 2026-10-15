@@ -8,9 +8,12 @@
  * same `--dsw-static-neutral-bluish-*` step in both appearances, so the brand is
  * monochrome by construction. A preset that retints only the primitive layer
  * therefore cannot separate them — the button simply becomes the new text
- * colour. Components the shell wires to no token at all (the off-state Switch
- * track, the `interactive-bg-*` overlays) are literal hex values in
- * `design-platform.css` and stay put for the same reason.
+ * colour. Components whose colour is a literal in the shell's stylesheets
+ * rather than a step of the palette stay put for the same reason: the
+ * `interactive-bg-*` overlays are `rgba()` constants there, and the off-state
+ * Switch track is `--dsw-alias-border-l3`, itself a literal hairline. A
+ * primitive-only retint has nothing to reach them through, which is why this
+ * layer republishes those aliases by name.
  *
  * The accent is read from the palette's own `--dsw-static-deepseek-*` scale: the
  * colour DSH already spends on focus rings, links and `--dsw-alias-state-business-primary`,
@@ -91,7 +94,7 @@ const WHITE: Rgb = [255, 255, 255]
  * a `color-mix()`, a named colour): without a concrete triple there is no way to
  * derive an ink or a tooltip that is guaranteed to stay readable.
  */
-function pick(palette: StaticMap, keys: readonly string[]): Rgb | null {
+function pickRgb(palette: StaticMap, keys: readonly string[]): Rgb | null {
   for (const key of keys) {
     const value = palette[key]
     if (value === undefined) continue
@@ -162,9 +165,9 @@ type AccentPalette = {
 }
 
 function accentPalette(palette: StaticMap, mode: Mode): AccentPalette | null {
-  const accent = pick(palette, ACCENT_KEYS[mode])
-  const lightest = pick(palette, [LIGHTEST_INK_KEY])
-  const darkest = pick(palette, [DARKEST_INK_KEY])
+  const accent = pickRgb(palette, ACCENT_KEYS[mode])
+  const lightest = pickRgb(palette, [LIGHTEST_INK_KEY])
+  const darkest = pickRgb(palette, [DARKEST_INK_KEY])
   if (!accent || !lightest || !darkest) return null
 
   // Whatever the appearance, the shell prints the tooltip label with the
@@ -191,7 +194,7 @@ function accentPalette(palette: StaticMap, mode: Mode): AccentPalette | null {
   const accentHex = toHex(accent)
   return {
     accent: accentHex,
-    hover: toHex(pick(palette, HOVER_KEYS[mode]) ?? accent),
+    hover: toHex(pickRgb(palette, HOVER_KEYS[mode]) ?? accent),
     onAccent: toHex(onAccent),
     tooltipBg: toHex(tooltipBg),
     hoverOverlay: `color-mix(in srgb, ${accentHex} ${OVERLAY_ALPHA[mode].hover}%, transparent)`,

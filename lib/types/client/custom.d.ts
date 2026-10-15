@@ -62,7 +62,7 @@ export type CustomTheme = {
     green: SeedPair;
     amber: SeedPair;
     red: SeedPair;
-    /** Border colour and opacity per appearance; l2 is computed, never stored. */
+    /** Border colour and opacity per appearance; only l1 is the seed, the rest are derived. */
     border: Record<Mode, BorderSeed>;
     shiki: Record<ShikiKey, SeedPair>;
 };
@@ -145,7 +145,7 @@ export declare function normalizeCustom(raw: unknown, fallback: CustomTheme): Cu
  * built once per appearance, so the light text and the dark text are no longer
  * the two ends of the same colour axis.
  *
- * The two border aliases are the one set of tokens a seed publishes directly
+ * The border aliases are the one set of tokens a seed publishes directly
  * instead of through a `--dsw-static-*` ramp: DSH keeps its border levels as
  * alpha overlays in the base stylesheets, so they have no scale to hang off.
  */

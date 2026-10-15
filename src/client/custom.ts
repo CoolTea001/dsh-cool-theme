@@ -74,7 +74,7 @@ export type CustomTheme = {
   green: SeedPair
   amber: SeedPair
   red: SeedPair
-  /** Border colour and opacity per appearance; l2 is computed, never stored. */
+  /** Border colour and opacity per appearance; only l1 is the seed, the rest are derived. */
   border: Record<Mode, BorderSeed>
   shiki: Record<ShikiKey, SeedPair>
 }
@@ -243,9 +243,8 @@ function pickAlpha(value: unknown, fallback: number): number {
  */
 export function borderCss(seed: BorderSeed, alpha: number = seed.alpha): string {
   const hex = toHex(seed.color)
-  const at = (from: number) => parseInt(hex.slice(from, from + 2), 16)
-  const a = clampAlpha(alpha) / 100
-  return `rgba(${String(at(1))}, ${String(at(3))}, ${String(at(5))}, ${String(a)})`
+  const channel = (from: number) => parseInt(hex.slice(from, from + 2), 16)
+  return `rgba(${channel(1)}, ${channel(3)}, ${channel(5)}, ${clampAlpha(alpha) / 100})`
 }
 
 /**
@@ -426,7 +425,7 @@ export function normalizeCustom(raw: unknown, fallback: CustomTheme): CustomThem
  * built once per appearance, so the light text and the dark text are no longer
  * the two ends of the same colour axis.
  *
- * The two border aliases are the one set of tokens a seed publishes directly
+ * The border aliases are the one set of tokens a seed publishes directly
  * instead of through a `--dsw-static-*` ramp: DSH keeps its border levels as
  * alpha overlays in the base stylesheets, so they have no scale to hang off.
  */
@@ -504,9 +503,8 @@ export function decodeList(
   if (!raw) return []
   try {
     const parsed = JSON.parse(raw) as { v?: number; items?: unknown }
-    const version = parsed?.v
-    const known = typeof version === 'number' && READABLE_SCHEMA_VERSIONS.includes(version)
-    if (!parsed || !known || !Array.isArray(parsed.items)) return []
+    if (!parsed || typeof parsed.v !== 'number' || !READABLE_SCHEMA_VERSIONS.includes(parsed.v)) return []
+    if (!Array.isArray(parsed.items)) return []
     const out: SavedTheme[] = []
     for (const item of parsed.items) {
       const e = item as Partial<SavedTheme>

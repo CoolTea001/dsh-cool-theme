@@ -8,9 +8,12 @@
  * same `--dsw-static-neutral-bluish-*` step in both appearances, so the brand is
  * monochrome by construction. A preset that retints only the primitive layer
  * therefore cannot separate them — the button simply becomes the new text
- * colour. Components the shell wires to no token at all (the off-state Switch
- * track, the `interactive-bg-*` overlays) are literal hex values in
- * `design-platform.css` and stay put for the same reason.
+ * colour. Components whose colour is a literal in the shell's stylesheets
+ * rather than a step of the palette stay put for the same reason: the
+ * `interactive-bg-*` overlays are `rgba()` constants there, and the off-state
+ * Switch track is `--dsw-alias-border-l3`, itself a literal hairline. A
+ * primitive-only retint has nothing to reach them through, which is why this
+ * layer republishes those aliases by name.
  *
  * The accent is read from the palette's own `--dsw-static-deepseek-*` scale: the
  * colour DSH already spends on focus rings, links and `--dsw-alias-state-business-primary`,
