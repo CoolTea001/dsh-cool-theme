@@ -72,6 +72,12 @@ const BASE_CSS = [
   // it is one control taller. Growing the box by exactly that keeps the
   // saturation panel the same size in both popovers instead of shrinking it.
   '.ct-color-pop-alpha .react-colorful{height:194px;}',
+  // The drag handle, shared by all three controls. The library draws it at 28px,
+  // which is wider than the 24px hue and opacity bars it rides on; capping it at
+  // the bar height leaves it flush inside every control. The bars and the panel
+  // stay the drag targets, so the handle is only an indicator — the shadow stays
+  // the library's own.
+  '.ct-color-pop .react-colorful__pointer{width:24px;height:24px;}',
   // The hex field under the gradient: the editor name field's metrics, centered
   // so a colour reads as a value rather than a sentence.
   '.ct-color-pop .ct-hex-input{box-sizing:border-box;width:100%;height:34px;padding:0 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:20px;text-align:center;outline:none;}',
