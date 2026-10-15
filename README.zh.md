@@ -1,4 +1,4 @@
-![dsh-cool-theme cover](https://cdn.cooltea.top/dsh-cool-theme/readme-cover-v0.6.0.png)
+![dsh-cool-theme cover](https://cdn.cooltea.top/dsh-cool-theme/readme-cover-v0.8.0.png)
 
 # dsh-cool-theme
 
@@ -8,27 +8,19 @@
 
 ## 描述
 
-DeepSeek Harness 主题插件 —— 支持「深色」「浅色」「跟随系统」外观切换，提供 34 款预设主题，支持创建/分享/导入自定义主题。
+DeepSeek Harness 主题插件 —— 支持深色/浅色外观切换，提供 34 款预设主题，支持创建/分享/导入自定义主题。
 
 ## 功能介绍
 
 1. **外观切换：** 将通用设置中的外观切换功能移至主题设置中管理，你可以在设置弹窗/主题标签中设置外观：深色、浅色、跟随系统
-2. **34款预设主题：** 内置 34 款预设主题，每一款主题都适配了深色/浅色外观：Aura、Ayu、Catppuccin、Catppuccin Frappe、Catppuccin Macchiato、Cobalt2、Cursor、DSH、Dracula、Everforest、Flexoki、GitHub、Gruvbox、Kanagawa、Lucent Orng、Material、Matrix、Mercury、Monokai、Night Owl、Nord、One Dark、OpenCode、Orng、Osaka Jade、Palenight、Rosé Pine、Solarized、Synthwave 84、System、Tokyo Night、Vercel、Vesper、Zenburn。
-3. **侧边栏透明：** 预设主题与自定义主题之间的开关控制 macOS 侧边栏面板透明效果，默认关闭（侧边栏不透明）。
-4. **自定义主题：** 开启自定义主题后，可以创建自定义主题（配色继承当前预设主题）。编辑器涵盖调色板与 9 个语法标记，并在「前景色」与「成功色」之间提供边框色选择器：可调整边框颜色与透明度，界面各处的边框层级（侧边栏、标签栏、卡片、按钮等）都会据此自动派生。
-5. **控件跟随主题色：** 在任意预设主题或自定义主题下，DSH 的实心按钮、开关、复选框与 tooltip 都使用主题强调色，而不是 DSH 默认绘制的单色「前景色」。强调色取自调色板自身的强调色阶（也就是 DSH 已用于焦点环与链接的颜色），其上的文字与 tooltip 底色均由该色派生并做过对比度校验。选择 **DSH** 预设则保留原本的单色控件。
-6. **主题分享：** 分享自己创建的自定义主题，或者导入他人分享的自定义主题。
+2. **34款预设主题：** 内置 34 款预设主题，每一款主题都适配了深色/浅色外观：Aura、Ayu、Catppuccin、Catppuccin Frappe、Catppuccin Macchiato、Cobalt2、Cursor、DSH、Dracula、Everforest、Flexoki、GitHub、Gruvbox、Kanagawa、Lucent Orng、Material、Matrix、Mercury、Monokai、Night Owl、Nord、One Dark、OpenCode、Orng、Osaka Jade、Palenight、Rosé Pine、Solarized、Synthwave 84、System、Tokyo Night、Vercel、Vesper、Zenburn
+3. **侧边栏透明：** 通过开关控制 macOS 侧边栏面板透明效果
+4. **自定义主题：** 开启自定义主题后，可以创建自定义主题（配色继承当前预设主题）
+5. **主题分享：** 分享自己创建的自定义主题，或者导入他人分享的自定义主题
 
 ## 安装教程
 
-```bash
-# 安装：dsh plugin --profile <your-profile> add dsh-cool-theme
-dsh plugin --profile web add dsh-cool-theme # web 端
-dsh plugin --profile desktop add dsh-cool-theme # 桌面端
-
-# 卸载
-dsh plugin --profile <your-profile> remove dsh-cool-theme
-```
+使用 DSH 的新增插件功能，输入包名：dsh-cool-theme 即可。
 
 ## 参与贡献
 
@@ -45,8 +37,7 @@ pnpm install
 // 启动本地开发
 pnpm run dev
 
-// 本地安装
-dsh plugin --profile <your-profile> add /absolute/path/to/dsh-cool-theme
+// 本地安装：使用 DSH 的新增插件功能，输入本地项目路径即可
 
 // 重启 DSH 服务
 dsh web
