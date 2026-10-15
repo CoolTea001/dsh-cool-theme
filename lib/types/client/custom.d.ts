@@ -8,11 +8,12 @@
  * through `resolvePreset` -> `primitiveOverrides` unchanged. The one structural
  * difference is the neutral ramp, which is built per appearance (see below).
  *
- * Seed groups (6):
+ * Seed groups (7):
  *   neutral  merged `--dsw-static-neutral-bluish-*` + `--dsw-static-neutral-*`,
  *            one ramp PER appearance
  *   accent   merged `--dsw-static-deepseek-*` + `--dsw-static-blue-*`
  *   green / amber / red
+ *   border   `--dsw-alias-border-l1`, with `-l2` derived from it
  *   shiki    9 syntax tokens
  */
 import type { PresetDef } from './presets.js';
@@ -32,7 +33,17 @@ export type NeutralRamp = {
     lightest: string;
     darkest: string;
 };
-/** Everything a user can edit. 2*2 + 4*2 + 9*2 = 30 colours. */
+/**
+ * The border seed. Unlike every other seed it is an overlay rather than a solid
+ * fill, so it carries an opaque base colour plus an opacity percentage (0–100).
+ * It publishes two aliases: `--dsw-alias-border-l1` is exactly this seed, and
+ * `-l2` is derived from it (see {@link borderTokens}).
+ */
+export type BorderSeed = {
+    color: string;
+    alpha: number;
+};
+/** Everything a user can edit. 2*2 + 4*2 + 9*2 = 30 colours, plus 2 borders. */
 export type CustomTheme = {
     /**
      * One neutral ramp PER appearance. DSH's alias layer picks a different step
@@ -50,14 +61,23 @@ export type CustomTheme = {
     green: SeedPair;
     amber: SeedPair;
     red: SeedPair;
+    /** Border colour and opacity per appearance; l2 is computed, never stored. */
+    border: Record<Mode, BorderSeed>;
     shiki: Record<ShikiKey, SeedPair>;
 };
+/**
+ * DSH's own `--dsw-alias-border-l1`: a 4% black hairline in light and a 6% white
+ * one in dark. A fresh custom theme starts here, so turning custom mode on
+ * leaves the borders exactly as the shell paints them until the seed is moved.
+ */
+export declare const DEFAULT_BORDER: Record<Mode, BorderSeed>;
 /**
  * Parse a colour into `#RRGGBB`, or null when it is not a format we understand.
  *
  * Accepted: `#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA`, `rgb()`/`rgba()` with
- * numbers or percentages, and `hsl()`/`hsla()`. Alpha is parsed but dropped —
- * every token these seeds drive is an opaque theme colour.
+ * numbers or percentages, and `hsl()`/`hsla()`. Alpha is parsed but dropped:
+ * every seed stores an opaque colour, and the one overlay — the border — keeps
+ * its opacity in a field of its own.
  *
  * `primitives.ts` stores `rgb(r, g, b)` while presets store hex, so both shapes
  * have to work; the extra forms are there for what users may type.
@@ -65,6 +85,23 @@ export type CustomTheme = {
 export declare function tryToHex(input: unknown): string | null;
 /** `tryToHex` with a black fallback, for call sites that need a guaranteed value. */
 export declare function toHex(input: unknown): string;
+/**
+ * One border alias value, at the seed's own opacity or an override of it.
+ *
+ * Written as `rgba()` rather than an 8-digit hex because the seed stores the
+ * opacity as a percentage and `rgba()` is the form DSH's own border tokens take.
+ */
+export declare function borderCss(seed: BorderSeed, alpha?: number): string;
+/**
+ * The two alias values one border seed publishes. l1 is the seed itself; l2 is
+ * the same hue one step stronger, so a single picker drives both of DSH's
+ * border aliases and the stronger one can never end up weaker than the subtle
+ * one.
+ */
+export declare function borderTokens(seed: BorderSeed): {
+    l1: string;
+    l2: string;
+};
 /**
  * Recover the seed inputs from an already-generated preset.
  *
@@ -75,9 +112,11 @@ export declare function toHex(input: unknown): string;
 export declare function extractSeeds(base: PresetDef): CustomTheme;
 /**
  * Bump when the `CustomTheme` shape changes so old blobs can be migrated.
- * v2 split the neutral ramp per appearance; v1 blobs stay readable.
+ * v2 split the neutral ramp per appearance; v3 added the border seed. Older
+ * blobs stay readable: a v1/v2 theme simply starts from the shipped border
+ * default, which is what it was already rendering.
  */
-export declare const CUSTOM_SCHEMA_VERSION = 2;
+export declare const CUSTOM_SCHEMA_VERSION = 3;
 /** Self-contained stored form: records the preset the seeds were derived from. */
 export type CustomEnvelope = {
     v: number;
@@ -95,6 +134,10 @@ export declare function normalizeCustom(raw: unknown, fallback: CustomTheme): Cu
  * Unlike the presets (which ship one ramp for both appearances), the ramp is
  * built once per appearance, so the light text and the dark text are no longer
  * the two ends of the same colour axis.
+ *
+ * The two border aliases are the one set of tokens a seed publishes directly
+ * instead of through a `--dsw-static-*` ramp: DSH keeps its border levels as
+ * alpha overlays in the base stylesheets, so they have no scale to hang off.
  */
 export declare function buildCustomPreset(v: CustomTheme): PresetDef;
 /** A named custom theme the user saved. */

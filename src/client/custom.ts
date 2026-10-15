@@ -8,11 +8,12 @@
  * through `resolvePreset` -> `primitiveOverrides` unchanged. The one structural
  * difference is the neutral ramp, which is built per appearance (see below).
  *
- * Seed groups (6):
+ * Seed groups (7):
  *   neutral  merged `--dsw-static-neutral-bluish-*` + `--dsw-static-neutral-*`,
  *            one ramp PER appearance
  *   accent   merged `--dsw-static-deepseek-*` + `--dsw-static-blue-*`
  *   green / amber / red
+ *   border   `--dsw-alias-border-l1`, with `-l2` derived from it
  *   shiki    9 syntax tokens
  */
 
@@ -46,7 +47,15 @@ export type ShikiKey = (typeof SHIKI_KEYS)[number]
 /** The two endpoints of ONE appearance's neutral ramp: step 00 and step 1000. */
 export type NeutralRamp = { lightest: string; darkest: string }
 
-/** Everything a user can edit. 2*2 + 4*2 + 9*2 = 30 colours. */
+/**
+ * The border seed. Unlike every other seed it is an overlay rather than a solid
+ * fill, so it carries an opaque base colour plus an opacity percentage (0–100).
+ * It publishes two aliases: `--dsw-alias-border-l1` is exactly this seed, and
+ * `-l2` is derived from it (see {@link borderTokens}).
+ */
+export type BorderSeed = { color: string; alpha: number }
+
+/** Everything a user can edit. 2*2 + 4*2 + 9*2 = 30 colours, plus 2 borders. */
 export type CustomTheme = {
   /**
    * One neutral ramp PER appearance. DSH's alias layer picks a different step
@@ -64,6 +73,8 @@ export type CustomTheme = {
   green: SeedPair
   amber: SeedPair
   red: SeedPair
+  /** Border colour and opacity per appearance; l2 is computed, never stored. */
+  border: Record<Mode, BorderSeed>
   shiki: Record<ShikiKey, SeedPair>
 }
 
@@ -97,12 +108,33 @@ const HEX = /^#([0-9a-f]{3,8})$/i
 const RGB_FN = /^rgba?\(([^)]*)\)$/i
 const HSL_FN = /^hsla?\(([^)]*)\)$/i
 
+/**
+ * DSH's own `--dsw-alias-border-l1`: a 4% black hairline in light and a 6% white
+ * one in dark. A fresh custom theme starts here, so turning custom mode on
+ * leaves the borders exactly as the shell paints them until the seed is moved.
+ */
+export const DEFAULT_BORDER: Record<Mode, BorderSeed> = {
+  light: { color: '#000000', alpha: 4 },
+  dark: { color: '#FFFFFF', alpha: 6 },
+}
+
+/**
+ * How much stronger `--dsw-alias-border-l2` reads than l1, in percentage points.
+ * DSH's own pair runs 4% -> 10% in light and 6% -> 12% in dark — +6 in both — so
+ * deriving l2 this way reproduces the shipped borders exactly at the default
+ * seed and keeps the two aliases in the relationship the shell authored.
+ */
+const BORDER_L2_ALPHA_STEP = 6
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 const clamp255 = (n: number) => Math.max(0, Math.min(255, Math.round(n)))
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
+
+/** An opacity percentage, folded into the 0–100 the seed stores. */
+const clampAlpha = (n: number) => Math.max(0, Math.min(100, Math.round(n)))
 
 /** Accepts both `a, b, c` and the modern `a b c / d` argument syntax. */
 function fnArgs(body: string): string[] {
@@ -136,8 +168,9 @@ const toRgbHex = (rgb: number[]) =>
  * Parse a colour into `#RRGGBB`, or null when it is not a format we understand.
  *
  * Accepted: `#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA`, `rgb()`/`rgba()` with
- * numbers or percentages, and `hsl()`/`hsla()`. Alpha is parsed but dropped —
- * every token these seeds drive is an opaque theme colour.
+ * numbers or percentages, and `hsl()`/`hsla()`. Alpha is parsed but dropped:
+ * every seed stores an opaque colour, and the one overlay — the border — keeps
+ * its opacity in a field of its own.
  *
  * `primitives.ts` stores `rgb(r, g, b)` while presets store hex, so both shapes
  * have to work; the extra forms are there for what users may type.
@@ -184,6 +217,37 @@ export function toHex(input: unknown): string {
   return tryToHex(input) ?? '#000000'
 }
 
+/** A stored opacity: a finite number folded into 0–100, anything else the fallback. */
+function pickAlpha(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? clampAlpha(value) : fallback
+}
+
+/**
+ * One border alias value, at the seed's own opacity or an override of it.
+ *
+ * Written as `rgba()` rather than an 8-digit hex because the seed stores the
+ * opacity as a percentage and `rgba()` is the form DSH's own border tokens take.
+ */
+export function borderCss(seed: BorderSeed, alpha: number = seed.alpha): string {
+  const hex = toHex(seed.color)
+  const at = (from: number) => parseInt(hex.slice(from, from + 2), 16)
+  const a = clampAlpha(alpha) / 100
+  return `rgba(${String(at(1))}, ${String(at(3))}, ${String(at(5))}, ${String(a)})`
+}
+
+/**
+ * The two alias values one border seed publishes. l1 is the seed itself; l2 is
+ * the same hue one step stronger, so a single picker drives both of DSH's
+ * border aliases and the stronger one can never end up weaker than the subtle
+ * one.
+ */
+export function borderTokens(seed: BorderSeed): { l1: string; l2: string } {
+  return {
+    l1: borderCss(seed),
+    l2: borderCss(seed, seed.alpha + BORDER_L2_ALPHA_STEP),
+  }
+}
+
 function readSeed(map: StaticMap, fallback: StaticMap, key: string): string {
   return toHex(map[key] ?? fallback[key])
 }
@@ -227,18 +291,25 @@ export function extractSeeds(base: PresetDef): CustomTheme {
     green: pair('--dsw-static-green-500'),
     amber: pair('--dsw-static-amber-500'),
     red: pair('--dsw-static-red-500'),
+    // No preset ships a border token — DSH's own pair lives in its base
+    // stylesheets, not in the `--dsw-static-*` scales — so the seed starts from
+    // the shipped default, per appearance. Copied rather than referenced, so a
+    // draft can never write back into the module constant.
+    border: { light: { ...DEFAULT_BORDER.light }, dark: { ...DEFAULT_BORDER.dark } },
     shiki,
   }
 }
 
 /**
  * Bump when the `CustomTheme` shape changes so old blobs can be migrated.
- * v2 split the neutral ramp per appearance; v1 blobs stay readable.
+ * v2 split the neutral ramp per appearance; v3 added the border seed. Older
+ * blobs stay readable: a v1/v2 theme simply starts from the shipped border
+ * default, which is what it was already rendering.
  */
-export const CUSTOM_SCHEMA_VERSION = 2
+export const CUSTOM_SCHEMA_VERSION = 3
 
-/** v1 carried one neutral ramp shared by both appearances. */
-const CUSTOM_SCHEMA_VERSION_LEGACY = 1
+/** Every stored version this build still reads; anything else is foreign data. */
+const READABLE_SCHEMA_VERSIONS: readonly number[] = [1, 2, CUSTOM_SCHEMA_VERSION]
 
 /** Self-contained stored form: records the preset the seeds were derived from. */
 export type CustomEnvelope = { v: number; base: string; theme: unknown }
@@ -253,7 +324,8 @@ export function parseEnvelope(raw: string | null): CustomEnvelope | null {
   try {
     const parsed = JSON.parse(raw) as Partial<CustomEnvelope>
     if (!parsed || typeof parsed !== 'object') return null
-    if (parsed.v !== CUSTOM_SCHEMA_VERSION && parsed.v !== CUSTOM_SCHEMA_VERSION_LEGACY) return null
+    const version = parsed.v
+    if (typeof version !== 'number' || !READABLE_SCHEMA_VERSIONS.includes(version)) return null
     return { v: CUSTOM_SCHEMA_VERSION, base: String(parsed.base ?? ''), theme: parsed.theme }
   } catch {
     return null
@@ -287,6 +359,10 @@ export function normalizeCustom(raw: unknown, fallback: CustomTheme): CustomThem
     const v = (value ?? {}) as Partial<NeutralRamp>
     return { lightest: pick(v.lightest, fb.lightest), darkest: pick(v.darkest, fb.darkest) }
   }
+  const pickBorder = (value: unknown, fb: BorderSeed): BorderSeed => {
+    const v = (value ?? {}) as Partial<BorderSeed>
+    return { color: pick(v.color, fb.color), alpha: pickAlpha(v.alpha, fb.alpha) }
+  }
 
   const shikiSrc = (src.shiki ?? {}) as Partial<Record<ShikiKey, Partial<SeedPair>>>
   const shiki = SHIKI_KEYS.reduce<Record<ShikiKey, SeedPair>>((acc, k) => {
@@ -305,6 +381,10 @@ export function normalizeCustom(raw: unknown, fallback: CustomTheme): CustomThem
     green: pickPair(src.green, fallback.green),
     amber: pickPair(src.amber, fallback.amber),
     red: pickPair(src.red, fallback.red),
+    border: {
+      light: pickBorder(src.border?.light, fallback.border.light),
+      dark: pickBorder(src.border?.dark, fallback.border.dark),
+    },
     shiki,
   }
 }
@@ -315,6 +395,10 @@ export function normalizeCustom(raw: unknown, fallback: CustomTheme): CustomThem
  * Unlike the presets (which ship one ramp for both appearances), the ramp is
  * built once per appearance, so the light text and the dark text are no longer
  * the two ends of the same colour axis.
+ *
+ * The two border aliases are the one set of tokens a seed publishes directly
+ * instead of through a `--dsw-static-*` ramp: DSH keeps its border levels as
+ * alpha overlays in the base stylesheets, so they have no scale to hang off.
  */
 export function buildCustomPreset(v: CustomTheme): PresetDef {
   /** One appearance's ramp, published under both prefixes DSH reads from. */
@@ -341,10 +425,16 @@ export function buildCustomPreset(v: CustomTheme): PresetDef {
     return out
   }
 
+  /** Both border aliases, derived from this appearance's one border seed. */
+  const border = (mode: Mode): StaticMap => {
+    const { l1, l2 } = borderTokens(v.border[mode])
+    return { '--dsw-alias-border-l1': l1, '--dsw-alias-border-l2': l2 }
+  }
+
   return {
     label: 'Custom',
-    light: { ...ramp('light'), ...semantic('light'), ...shiki('light') },
-    dark: { ...ramp('dark'), ...semantic('dark'), ...shiki('dark') },
+    light: { ...ramp('light'), ...semantic('light'), ...border('light'), ...shiki('light') },
+    dark: { ...ramp('dark'), ...semantic('dark'), ...border('dark'), ...shiki('dark') },
   }
 }
 
@@ -387,7 +477,8 @@ export function decodeList(
   if (!raw) return []
   try {
     const parsed = JSON.parse(raw) as { v?: number; items?: unknown }
-    const known = parsed?.v === CUSTOM_SCHEMA_VERSION || parsed?.v === CUSTOM_SCHEMA_VERSION_LEGACY
+    const version = parsed?.v
+    const known = typeof version === 'number' && READABLE_SCHEMA_VERSIONS.includes(version)
     if (!parsed || !known || !Array.isArray(parsed.items)) return []
     const out: SavedTheme[] = []
     for (const item of parsed.items) {

@@ -9,12 +9,14 @@ import { type PresetId, presetOptions } from './presets.js'
 import { type ThemeKey } from './locales.js'
 import { ThemeApiUnavailableError, exportTheme, importTheme } from './theme-files.js'
 import {
+  type BorderSeed,
   type CustomTheme,
   type Mode,
   type NeutralRamp,
   type SavedTheme,
   type SeedPair,
   SHIKI_KEYS,
+  borderCss,
   nextThemeName,
 } from './custom.js'
 // The shell's own controls, resolved at runtime from the frozen platform module
@@ -51,6 +53,38 @@ export type CustomState = { base: PresetId; theme: CustomTheme }
  * literal would drift silently and leave `aria-controls` pointing at nothing.
  */
 const SEED_MODE_CONTROL_ID = 'ct-seed-mode'
+
+/**
+ * Key of the border swatch in the shared colour popover. The border seed is the
+ * one seed that is not a plain fill — it also carries an opacity — so both the
+ * popover's height and its extra row key off this name.
+ */
+const BORDER_SEED_KEY = 'border'
+
+/**
+ * The colour popover's box. It comes in two heights: every seed shows a gradient
+ * and a hex field, and the border seed adds an opacity row under them. These are
+ * estimates for choosing which side of the swatch to open on — the popover is
+ * `position:fixed`, so being taller than estimated only means it hangs higher.
+ */
+const PICKER_WIDTH = 224
+const PICKER_HEIGHT = 240
+const PICKER_HEIGHT_WITH_ALPHA = 288
+const PICKER_GAP = 8
+const PICKER_MARGIN = 8
+
+/** The popover height for the seed being edited, given its key. */
+function pickerHeight(key: string | null): number {
+  return key === BORDER_SEED_KEY ? PICKER_HEIGHT_WITH_ALPHA : PICKER_HEIGHT
+}
+
+/**
+ * The alpha checkerboard behind a translucent swatch. Both squares are the same
+ * grey at different alphas, so the pattern reads on a light and a dark panel
+ * alike without needing a colour per appearance.
+ */
+const ALPHA_CHECKERBOARD =
+  'repeating-conic-gradient(rgba(128, 128, 128, .45) 0% 25%, rgba(128, 128, 128, .18) 0% 50%)'
 
 /**
  * The one glyph size this panel draws at. Every icon here is explicit about it
@@ -118,11 +152,17 @@ function sameRamp(a: NeutralRamp | undefined, b: NeutralRamp | undefined): boole
   return a?.lightest === b?.lightest && a?.darkest === b?.darkest
 }
 
-/** Structural equality over all 30 seeds, ignoring key order. */
+/** Structural equality of one border seed: both its channels have to match. */
+function sameBorder(a: BorderSeed | undefined, b: BorderSeed | undefined): boolean {
+  return a?.color === b?.color && a?.alpha === b?.alpha
+}
+
+/** Structural equality over every seed, ignoring key order. */
 function sameSeeds(a: CustomTheme, b: CustomTheme): boolean {
   if (!sameRamp(a.neutral?.light, b.neutral?.light) || !sameRamp(a.neutral?.dark, b.neutral?.dark)) return false
   if (!samePair(a.accent, b.accent) || !samePair(a.green, b.green)) return false
   if (!samePair(a.amber, b.amber) || !samePair(a.red, b.red)) return false
+  if (!sameBorder(a.border?.light, b.border?.light) || !sameBorder(a.border?.dark, b.border?.dark)) return false
   return SHIKI_KEYS.every((k) => samePair(a.shiki?.[k], b.shiki?.[k]))
 }
 
@@ -547,21 +587,24 @@ export function ThemePanel(props: {
   /** The popover node itself; outside-pointerdown detection needs its bounds. */
   const pickerPopRef = React.useRef<HTMLDivElement | null>(null)
 
-  /** Viewport coordinates that put the popover beside its anchor swatch. */
-  function placePicker(anchor: HTMLElement): { left: number; top: number } {
-    const WIDTH = 224
-    const HEIGHT = 240
-    const GAP = 8
-    const MARGIN = 8
+  /**
+   * Viewport coordinates that put the popover beside its anchor swatch. The
+   * caller passes the height of the box being opened, because the border seed's
+   * popover carries one more row than every other seed's.
+   */
+  function placePicker(anchor: HTMLElement, height: number): { left: number; top: number } {
     const rect = anchor.getBoundingClientRect()
     const viewW = window.innerWidth
     const viewH = window.innerHeight
     // Right-align with the swatch: the dots hug the panel's trailing edge, so
     // the popover grows leftward into the free column beside the labels.
-    const left = Math.min(Math.max(MARGIN, rect.right - WIDTH), Math.max(MARGIN, viewW - WIDTH - MARGIN))
+    const left = Math.min(
+      Math.max(PICKER_MARGIN, rect.right - PICKER_WIDTH),
+      Math.max(PICKER_MARGIN, viewW - PICKER_WIDTH - PICKER_MARGIN),
+    )
     // Drop below when there is room; otherwise hang above the swatch.
-    const below = rect.bottom + GAP + HEIGHT <= viewH - MARGIN
-    const top = below ? rect.bottom + GAP : Math.max(MARGIN, rect.top - GAP - HEIGHT)
+    const below = rect.bottom + PICKER_GAP + height <= viewH - PICKER_MARGIN
+    const top = below ? rect.bottom + PICKER_GAP : Math.max(PICKER_MARGIN, rect.top - PICKER_GAP - height)
     return { left, top }
   }
 
@@ -573,7 +616,7 @@ export function ThemePanel(props: {
     }
     pickerAnchorRef.current = anchor
     setPickerDotKey(key)
-    setPickerPos(placePicker(anchor))
+    setPickerPos(placePicker(anchor, pickerHeight(key)))
   }
 
   function closePicker() {
@@ -606,7 +649,7 @@ export function ThemePanel(props: {
       const anchor = pickerAnchorRef.current
       if (!anchor) return
       cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => setPickerPos(placePicker(anchor)))
+      raf = requestAnimationFrame(() => setPickerPos(placePicker(anchor, pickerHeight(pickerDotKey))))
     }
     window.addEventListener('scroll', update, true)
     window.addEventListener('resize', update)
@@ -615,7 +658,9 @@ export function ThemePanel(props: {
       window.removeEventListener('resize', update)
       cancelAnimationFrame(raf)
     }
-  }, [pickerOpen])
+    // `pickerDotKey` is a dependency because the height the popover is placed
+    // with depends on which seed owns it.
+  }, [pickerOpen, pickerDotKey])
 
   /** Re-read both the list and the active pointer after any list mutation. */
   function syncSaved() {
@@ -1151,6 +1196,14 @@ export function ThemePanel(props: {
       hint: string
       value: string
       onChange: (v: string) => void
+      /**
+       * The opacity channel, for the one seed that has one (the border). Its
+       * presence is what grows the popover's slider row, so every other seed
+       * keeps the two-control popover it had.
+       */
+      alpha?: { value: number; onChange: (n: number) => void }
+      /** Swatch paint; defaults to a flat fill of `value`. */
+      swatch?: React.CSSProperties
     }
 
     /** A group row: its name on the left, every seed's dot on the right. */
@@ -1174,9 +1227,10 @@ export function ThemePanel(props: {
               children: React.createElement('button', {
                 type: 'button',
                 className: 'ct-seed-dot',
-                // The button itself paints the colour and opens the popover
+                // The button itself paints the colour — a flat fill, or the
+                // border seed's own overlay preview — and opens the popover
                 // picker anchored to it.
-                style: { background: d.value },
+                style: d.swatch ?? { background: d.value },
                 'aria-haspopup': 'dialog',
                 'aria-expanded': pickerDotKey === d.key,
                 'aria-label': `${d.name} — ${d.hint}`,
@@ -1186,6 +1240,36 @@ export function ThemePanel(props: {
           ),
         ),
       )
+
+    /**
+     * The opacity slider, drawn only for a seed that declares one. What the
+     * seed carries decides the popover's shape, so an alpha-bearing seed needs
+     * nothing special at the call site — and no other seed grows the row.
+     */
+    const alphaRow = (dot: SeedDot) => {
+      const alpha = dot.alpha
+      if (!alpha) return null
+      return React.createElement(
+        'div',
+        { className: 'ct-alpha' },
+        React.createElement(
+          'div',
+          { className: 'ct-alpha-head' },
+          React.createElement('span', { className: 'ct-alpha-label' }, t('custom.border.alpha')),
+          React.createElement('span', { className: 'ct-alpha-value' }, `${String(alpha.value)}%`),
+        ),
+        React.createElement('input', {
+          type: 'range',
+          className: 'ct-alpha-range',
+          min: 0,
+          max: 100,
+          step: 1,
+          value: alpha.value,
+          'aria-label': `${dot.name} — ${t('custom.border.alpha')}`,
+          onChange: (e: React.ChangeEvent<HTMLInputElement>) => alpha.onChange(Number(e.target.value)),
+        }),
+      )
+    }
 
     const pair = (key: 'accent' | 'green' | 'amber' | 'red', title: ThemeKey, desc: ThemeKey): SeedDot => ({
       key,
@@ -1215,9 +1299,44 @@ export function ThemePanel(props: {
       }
     })
 
+    /**
+     * The border swatch. It is the one seed that is an overlay rather than a
+     * fill, so it is also the only one whose popover grows the opacity slider
+     * (`SeedDot.alpha`) and whose swatch previews that opacity over a
+     * checkerboard. Both border aliases follow from it: l1 is the seed and l2 is
+     * derived while the palette is built.
+     */
+    const borderDot = (): SeedDot => {
+      const seed = custom.border[seedMode]
+      const set = (next: Partial<BorderSeed>) =>
+        editCustom({ ...custom, border: { ...custom.border, [seedMode]: { ...seed, ...next } } })
+      const rgba = borderCss(seed)
+      return {
+        key: BORDER_SEED_KEY,
+        name: t('custom.border.title'),
+        // The opacity travels in the accessible name: the tooltip bubble only
+        // has room for the seed's name, and the percentage is exactly what a
+        // swatch this faint cannot show on its own.
+        hint: `${t('custom.border.desc')} — ${String(seed.alpha)}%`,
+        value: seed.color,
+        onChange: (v: string) => set({ color: v }),
+        alpha: { value: seed.alpha, onChange: (n: number) => set({ alpha: n }) },
+        // The overlay over the checkerboard rather than a flat fill: painted
+        // straight onto the panel, the default 4% hairline would be invisible.
+        swatch: {
+          backgroundImage: `linear-gradient(${rgba}, ${rgba}), ${ALPHA_CHECKERBOARD}`,
+          backgroundSize: 'auto, 10px 10px',
+        },
+      }
+    }
+
     const seedDots: SeedDot[] = [
       pair('accent', 'custom.accent.title', 'custom.accent.desc'),
       ...neutralDots,
+      // Between the foreground and the success swatches: a border separates the
+      // neutral ramp's surfaces, so it belongs beside them rather than with the
+      // state colours.
+      borderDot(),
       pair('green', 'custom.green.title', 'custom.green.desc'),
       pair('amber', 'custom.amber.title', 'custom.amber.desc'),
       pair('red', 'custom.red.title', 'custom.red.desc'),
@@ -1309,6 +1428,9 @@ export function ThemePanel(props: {
               'aria-label': pickerDot.name,
               onChange: (v: string) => pickerDot.onChange(v.toUpperCase()),
             }),
+            // Absent for every seed but the border, whose swatch is the only one
+            // carrying an opacity channel.
+            alphaRow(pickerDot),
           )
         : null
 
