@@ -37,7 +37,6 @@ export declare const zh: {
     'custom.red.desc': string;
     'custom.border.title': string;
     'custom.border.desc': string;
-    'custom.border.alpha': string;
     'custom.shiki.desc': string;
     'custom.seed.light': string;
     'custom.seed.dark': string;
@@ -117,7 +116,6 @@ export declare const en: {
     'custom.red.desc': string;
     'custom.border.title': string;
     'custom.border.desc': string;
-    'custom.border.alpha': string;
     'custom.shiki.desc': string;
     'custom.seed.light': string;
     'custom.seed.dark': string;

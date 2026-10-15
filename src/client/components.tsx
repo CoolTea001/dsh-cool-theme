@@ -3,7 +3,7 @@
  */
 
 import * as React from 'react'
-import { HexColorInput, HexColorPicker } from 'react-colorful'
+import { HexAlphaColorPicker, HexColorInput, HexColorPicker } from 'react-colorful'
 import { CUSTOM_PRESET_ID, THEME_ARCHIVE_EXTENSION } from '../contract.js'
 import { type PresetId, presetOptions } from './presets.js'
 import { type ThemeKey } from './locales.js'
@@ -57,19 +57,21 @@ const SEED_MODE_CONTROL_ID = 'ct-seed-mode'
 /**
  * Key of the border swatch in the shared colour popover. The border seed is the
  * one seed that is not a plain fill — it also carries an opacity — so both the
- * popover's height and its extra row key off this name.
+ * popover's height and its alpha-aware picker key off this name.
  */
 const BORDER_SEED_KEY = 'border'
 
 /**
- * The colour popover's box. It comes in two heights: every seed shows a gradient
- * and a hex field, and the border seed adds an opacity row under them. These are
- * estimates for choosing which side of the swatch to open on — the popover is
- * `position:fixed`, so being taller than estimated only means it hangs higher.
+ * The colour popover's box. It comes in two heights: the picker itself is a
+ * saturation panel plus a hue slider, and the border seed's picker carries an
+ * opacity slider under those. These are estimates for choosing which side of
+ * the swatch to open on — the popover is `position:fixed`, so being taller than
+ * estimated only means it hangs higher.
  */
 const PICKER_WIDTH = 224
 const PICKER_HEIGHT = 240
-const PICKER_HEIGHT_WITH_ALPHA = 288
+/** One more 24px control in the picker, one more 24px of popover. */
+const PICKER_HEIGHT_WITH_ALPHA = PICKER_HEIGHT + 24
 const PICKER_GAP = 8
 const PICKER_MARGIN = 8
 
@@ -85,6 +87,32 @@ function pickerHeight(key: string | null): number {
  */
 const ALPHA_CHECKERBOARD =
   'repeating-conic-gradient(rgba(128, 128, 128, .45) 0% 25%, rgba(128, 128, 128, .18) 0% 50%)'
+
+/**
+ * The picker carries opacity as an 8-bit hex channel while a seed keeps it as a
+ * whole percentage, so the two have to be converted at the popover's edge. A
+ * byte is finer than one percent, so every percentage a seed can hold survives
+ * the round trip unchanged.
+ */
+const opacityToByte = (percent: number) => Math.round((percent / 100) * 255)
+const byteToOpacity = (byte: string) => Math.round((parseInt(byte, 16) / 255) * 100)
+
+/**
+ * A seed as the picker reads it: `#RRGGBB`, plus `#RRGGBBAA` when there is an
+ * opacity to carry. An opaque colour stays six digits, which is the form the
+ * picker itself hands back.
+ */
+function withAlpha(hex: string, alpha: number): string {
+  if (alpha >= 100) return hex
+  return `${hex}${opacityToByte(alpha).toString(16).padStart(2, '0').toUpperCase()}`
+}
+
+/** A picker value back in seed shape: the opaque colour and its opacity. */
+function splitAlpha(value: string): BorderSeed {
+  const hex = value.replace(/^#/, '')
+  const color = `#${hex.slice(0, 6)}`.toUpperCase()
+  return { color, alpha: hex.length >= 8 ? byteToOpacity(hex.slice(6, 8)) : 100 }
+}
 
 /**
  * The one glyph size this panel draws at. Every icon here is explicit about it
@@ -1194,14 +1222,19 @@ export function ThemePanel(props: {
       key: string
       name: string
       hint: string
+      /** The opaque colour: what the swatch paints and the hex field shows. */
       value: string
+      /** A value typed into the hex field; always an opaque colour. */
       onChange: (v: string) => void
       /**
        * The opacity channel, for the one seed that has one (the border). Its
-       * presence is what grows the popover's slider row, so every other seed
-       * keeps the two-control popover it had.
+       * presence swaps the opaque picker for the alpha-aware one, which is the
+       * same saturation panel and hue slider with an opacity slider under them:
+       * `value` seeds that slider and `onPicked` receives the picker's own
+       * colour-plus-opacity value, so one gesture over either the panel or
+       * either slider writes both channels in one update.
        */
-      alpha?: { value: number; onChange: (n: number) => void }
+      alpha?: { value: number; onPicked: (v: string) => void }
       /** Swatch paint; defaults to a flat fill of `value`. */
       swatch?: React.CSSProperties
     }
@@ -1241,36 +1274,6 @@ export function ThemePanel(props: {
         ),
       )
 
-    /**
-     * The opacity slider, drawn only for a seed that declares one. What the
-     * seed carries decides the popover's shape, so an alpha-bearing seed needs
-     * nothing special at the call site — and no other seed grows the row.
-     */
-    const alphaRow = (dot: SeedDot) => {
-      const alpha = dot.alpha
-      if (!alpha) return null
-      return React.createElement(
-        'div',
-        { className: 'ct-alpha' },
-        React.createElement(
-          'div',
-          { className: 'ct-alpha-head' },
-          React.createElement('span', { className: 'ct-alpha-label' }, t('custom.border.alpha')),
-          React.createElement('span', { className: 'ct-alpha-value' }, `${String(alpha.value)}%`),
-        ),
-        React.createElement('input', {
-          type: 'range',
-          className: 'ct-alpha-range',
-          min: 0,
-          max: 100,
-          step: 1,
-          value: alpha.value,
-          'aria-label': `${dot.name} — ${t('custom.border.alpha')}`,
-          onChange: (e: React.ChangeEvent<HTMLInputElement>) => alpha.onChange(Number(e.target.value)),
-        }),
-      )
-    }
-
     const pair = (key: 'accent' | 'green' | 'amber' | 'red', title: ThemeKey, desc: ThemeKey): SeedDot => ({
       key,
       name: t(title),
@@ -1301,7 +1304,7 @@ export function ThemePanel(props: {
 
     /**
      * The border swatch. It is the one seed that is an overlay rather than a
-     * fill, so it is also the only one whose popover grows the opacity slider
+     * fill, so it is also the only one whose picker carries an opacity slider
      * (`SeedDot.alpha`) and whose swatch previews that opacity over a
      * checkerboard. Both border aliases follow from it: l1 is the seed and l2 is
      * derived while the palette is built.
@@ -1320,7 +1323,10 @@ export function ThemePanel(props: {
         hint: `${t('custom.border.desc')} — ${String(seed.alpha)}%`,
         value: seed.color,
         onChange: (v: string) => set({ color: v }),
-        alpha: { value: seed.alpha, onChange: (n: number) => set({ alpha: n }) },
+        // The picker hands colour and opacity back as one value, so both
+        // channels land in a single update while the panel or a slider is
+        // dragged.
+        alpha: { value: seed.alpha, onPicked: (v: string) => set(splitAlpha(v)) },
         // The overlay over the checkerboard rather than a flat fill: painted
         // straight onto the panel, the default 4% hairline would be invisible.
         swatch: {
@@ -1407,20 +1413,31 @@ export function ThemePanel(props: {
     // so the card's box does not clip or place it) — the dirty-draft guard
     // passes clicks inside `[data-ct-editor]`, and every picker interaction is
     // exactly such a click.
+    //
+    // The picker is the panel/hue/opacity stack the library lays out itself,
+    // with the hex field under it. The border seed swaps in the alpha-aware
+    // picker, which is the same stack with one more slider and one more 24px of
+    // height (`ct-color-pop-alpha`), so both popovers keep the same panel size.
     const pickerDot = pickerDotKey ? [...seedDots, ...shikiDots].find((d) => d.key === pickerDotKey) ?? null : null
+    const pickerAlpha = pickerDot?.alpha
     const pickerPop =
       pickerDot && pickerPos
         ? React.createElement(
             'div',
             {
               key: 'color-picker',
-              className: 'ct-color-pop',
+              className: pickerAlpha ? 'ct-color-pop ct-color-pop-alpha' : 'ct-color-pop',
               ref: pickerPopRef,
               style: { left: pickerPos.left, top: pickerPos.top },
             },
-            React.createElement(HexColorPicker, {
-              color: pickerDot.value,
-              onChange: (v: string) => pickerDot.onChange(v.toUpperCase()),
+            React.createElement(pickerAlpha ? HexAlphaColorPicker : HexColorPicker, {
+              // The seed's colour, plus its opacity when it has one: the picker
+              // carries opacity as a hex channel, while the seed keeps it as a
+              // field of its own.
+              color: pickerAlpha ? withAlpha(pickerDot.value, pickerAlpha.value) : pickerDot.value,
+              // Dragging the panel or either slider writes colour and opacity
+              // together; typing in the hex field below only moves the colour.
+              onChange: pickerAlpha ? pickerAlpha.onPicked : (v: string) => pickerDot.onChange(v.toUpperCase()),
             }),
             React.createElement(HexColorInput, {
               className: 'ct-hex-input',
@@ -1428,9 +1445,6 @@ export function ThemePanel(props: {
               'aria-label': pickerDot.name,
               onChange: (v: string) => pickerDot.onChange(v.toUpperCase()),
             }),
-            // Absent for every seed but the border, whose swatch is the only one
-            // carrying an opacity channel.
-            alphaRow(pickerDot),
           )
         : null
 

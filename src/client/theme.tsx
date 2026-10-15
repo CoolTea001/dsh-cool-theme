@@ -68,19 +68,14 @@ const BASE_CSS = [
   // `border-l4` hairline and the prominent shadow.
   '.ct-color-pop{position:fixed;z-index:1200;box-sizing:border-box;width:224px;padding:12px;border:1px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-shadow-lv3);display:flex;flex-direction:column;gap:10px;}',
   '.ct-color-pop .react-colorful{width:198px;height:170px;}',
+  // The border seed's picker is the same stack with an opacity slider added, so
+  // it is one control taller. Growing the box by exactly that keeps the
+  // saturation panel the same size in both popovers instead of shrinking it.
+  '.ct-color-pop-alpha .react-colorful{height:194px;}',
   // The hex field under the gradient: the editor name field's metrics, centered
   // so a colour reads as a value rather than a sentence.
   '.ct-color-pop .ct-hex-input{box-sizing:border-box;width:100%;height:34px;padding:0 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:20px;text-align:center;outline:none;}',
   '.ct-color-pop .ct-hex-input:focus{border-color:var(--dsw-alias-border-l3);}',
-  // The border seed's opacity row — the one control the popover only grows for
-  // it. A native range tinted with the brand accent keeps the interaction the
-  // platform's own, and the percentage beside the label is what a 4% swatch
-  // cannot show by itself.
-  '.ct-alpha{display:flex;flex-direction:column;gap:6px;}',
-  '.ct-alpha-head{display:flex;align-items:baseline;justify-content:space-between;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);}',
-  '.ct-alpha-value{color:var(--dsw-alias-label-primary);font-variant-numeric:tabular-nums;}',
-  '.ct-alpha-range{box-sizing:border-box;width:100%;height:18px;margin:0;accent-color:var(--dsw-alias-brand-primary);cursor:pointer;}',
-  '.ct-alpha-range:focus-visible{outline:none;border-radius:9px;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
   // Saved-theme cards, matching DSH's own provider rows: an outlined card with
   // the name and its "in use" dot on the left, and the row's actions on the
   // right. The active entry is marked by the dot alone, so selection never
