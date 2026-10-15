@@ -1,9 +1,10 @@
 # AGENTS.zh.md
 
-## 提交规则
+## commit message 生成规则
 
-1. commit 前检查是否包含临时文件、大文件、敏感内容（密钥、token、.env）。
-2. commit message 使用英文生成。
+1. commit message 使用英文生成，内容保持简洁。
+2. commit 前检查是否包含临时文件、大文件、敏感内容（密钥、token、.env）。
+3. commit message 需要添加 feat | refactor | fix | chore 等标识。
 
 ## 文档语言
 

@@ -2,8 +2,9 @@
 
 ## Commit Rules
 
-1. Before commit, check for temp files, large files, and sensitive content (keys, tokens, .env).
-2. Commit messages must be in English.
+1. Commit messages must be in English and kept concise.
+2. Before commit, check for temp files, large files, and sensitive content (keys, tokens, .env).
+3. Commit messages must be prefixed with a tag such as feat | refactor | fix | chore.
 
 ## Docs Language
 

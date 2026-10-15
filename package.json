@@ -1,6 +1,6 @@
 {
   "name": "dsh-cool-theme",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "DeepSeek Harness theme plugin — supports Dark / Light / System appearance switching, ships 34 preset themes, and supports creating, sharing, and importing custom themes.",
   "type": "module",
   "license": "MIT",
