@@ -13,15 +13,22 @@ import {
   THEME_ARCHIVE_EXTENSION,
   THEME_ARCHIVE_MAX_BYTES,
   THEME_FILE_VERSION,
+  isRecord,
   normalizeBackground,
   themeAssetsPath,
 } from '../contract.js'
 import type { ThemeAsset, ThemeDocument } from '../contract.js'
 import { normalizeCustom, type CustomTheme, type SavedTheme } from './custom.js'
 
+/** The document fields the browser owns; timestamps and asset sizes stay the Host's. */
+type DocumentPayload = Pick<ThemeDocument, 'id' | 'name' | 'base' | 'theme' | 'assets'> & {
+  /** Repairing the background is this module's job, so the wire value stays unknown. */
+  background: unknown
+}
+
 /** Repair one stored document against the preset its seeds derive from. */
 export function documentToSaved(
-  doc: ThemeDocument,
+  doc: DocumentPayload,
   fallbackFor: (base: string) => CustomTheme,
 ): SavedTheme {
   return {
@@ -35,20 +42,16 @@ export function documentToSaved(
 }
 
 /** The document payload for one entry; timestamps stay the Host's business. */
-export function savedToDocument(entry: SavedTheme): Record<string, unknown> {
+export function savedToDocument(entry: SavedTheme): Omit<ThemeDocument, 'createdAt' | 'updatedAt'> {
   return {
     v: THEME_FILE_VERSION,
     id: entry.id,
     name: entry.name,
     base: entry.base,
     theme: entry.theme,
-    assets: entry.assets satisfies ThemeAsset[],
+    assets: entry.assets,
     background: entry.background,
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /**
@@ -101,15 +104,12 @@ function payloadThemes(
     out.push(
       documentToSaved(
         {
-          v: typeof doc.v === 'number' ? doc.v : THEME_FILE_VERSION,
           id: doc.id,
           name: doc.name,
           base: typeof doc.base === 'string' ? doc.base : '',
           theme: doc.theme,
           assets: Array.isArray(doc.assets) ? (doc.assets as ThemeAsset[]) : [],
-          background: normalizeBackground(doc.background),
-          createdAt: '',
-          updatedAt: '',
+          background: doc.background,
         },
         fallbackFor,
       ),

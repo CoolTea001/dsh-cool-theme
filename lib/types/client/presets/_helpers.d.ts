@@ -1,6 +1,9 @@
 /**
  * Helpers for preset color scale generation.
- * Uses the same linear RGB interpolation as scripts/interpolate-colors.ts
+ *
+ * Presets are authored as two endpoint colours plus semantic base colours; the
+ * ramps between them are interpolated in linear RGB, and every preset in
+ * `presets/` uses these same helpers.
  */
 export declare const BLUISH_STEPS: readonly [0, 50, 60, 75, 100, 150, 200, 300, 400, 500, 600, 700, 750, 800, 850, 875, 900, 950, 1000];
 export declare const NEUTRAL_STEPS: readonly [0, 50, 100, 150, 200, 250, 300, 400, 500, 550, 600, 700, 800, 850, 900, 1000];
@@ -12,7 +15,7 @@ export declare const GREEN_STEPS: readonly [100, 400, 500, 900];
 export declare const AMBER_STEPS: readonly [100, 400, 500, 600, 900];
 export declare const RED_STEPS: readonly [50, 100, 400, 500, 600, 900];
 /**
- * Linearly interpolate between two colors (RGB space, same as scripts/interpolate-colors.ts)
+ * Linearly interpolate between two colors in RGB space.
  * @param colorStart color at scale 0, e.g. "#FAFAFA"
  * @param colorEnd   color at scale 1000, e.g. "#0D1017"
  * @param steps      array of scales to compute

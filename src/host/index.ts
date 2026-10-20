@@ -24,16 +24,17 @@ import {
   THEME_ASSET_MAX_BYTES,
   archiveFileName,
   freeThemeName,
+  isRecord,
   isThemeAssetName,
+  newThemeId,
 } from '../contract.js'
-import type { ThemeBackground, ThemeDocument } from '../contract.js'
+import type { ThemeDocument } from '../contract.js'
 import { isKnownBase } from '../presets-ids.js'
 import { AssetError, readAsset, saveImageAsset, writeAssetFile } from './assets.js'
 import {
   deleteTheme,
   isThemeId,
   listThemes,
-  newThemeId,
   putTheme,
   themeExists,
 } from './theme-files.js'
@@ -65,7 +66,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 /** Answer 405 unless the request uses one of the allowed methods. */
-function methodAllowed(req: IncomingMessage, res: ServerResponse, allowed: string[]): boolean {
+function methodAllowed(req: IncomingMessage, res: ServerResponse, allowed: readonly string[]): boolean {
   const method = req.method ?? 'GET'
   if (allowed.includes(method)) return true
   res.writeHead(405, { allow: allowed.join(', ') })
@@ -89,10 +90,6 @@ async function readBuffer(req: IncomingMessage, limit: number): Promise<Buffer> 
     chunks.push(buf)
   }
   return Buffer.concat(chunks)
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /** The roster, oldest first, as the browser half reads it. */
@@ -138,7 +135,7 @@ async function handlePut(req: IncomingMessage, res: ServerResponse): Promise<voi
         name: raw.name,
         base: raw.base,
         theme: raw.theme,
-        background: raw.background as ThemeBackground | null,
+        background: raw.background,
       }),
     )
   }
@@ -156,6 +153,10 @@ async function handleDelete(res: ServerResponse, id: string): Promise<void> {
  * here that does not answer JSON — and the only one that sets a filename.
  */
 async function handleExport(res: ServerResponse, id: string): Promise<void> {
+  if (!(await themeExists(id))) {
+    sendJson(res, 404, { ok: false, error: 'unknown theme' })
+    return
+  }
   const packed = await packTheme(id)
   const name = archiveFileName(packed.fileName, id)
   res.writeHead(200, {
@@ -313,12 +314,6 @@ export function apply(ctx: any): void {
           ? pathname.slice(THEME_API_PATH_THEMES.length + 1)
           : null
         const parts = rest === null ? [] : rest.split('/')
-        // `themes/import` has no slash of its own, so it must be recognised
-        // before the id branch reads it as a theme whose id is "import".
-        if (parts.length === 1 && parts[0] === 'import') {
-          if (!methodAllowed(req, res, ['POST'])) return
-          return await handleImport(req, res)
-        }
         const id = parts.length > 0 ? decodeSegment(parts[0]) : null
         if (id !== null && isThemeId(id)) {
           if (parts.length === 1) {

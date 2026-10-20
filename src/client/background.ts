@@ -24,14 +24,25 @@
  */
 
 import {
+  THEME_ASSET_MAX_BYTES,
   THEME_BACKGROUND_DARK_FACTOR,
   THEME_BACKGROUND_DEFAULT_OPACITY,
-  THEME_BACKGROUND_MAX_BLUR,
   assetTypeOf,
+  clampBackgroundBlur,
+  clampBackgroundOpacity,
 } from '../contract.js'
 
 /** What the input accepts and what the Host will store. */
 export const BACKGROUND_ACCEPT = 'image/png,image/jpeg,image/webp,image/avif,image/gif'
+
+/** Longest edge a re-encoded wallpaper keeps; pixels past it are never painted. */
+const BACKGROUND_MAX_EDGE_PX = 3840
+
+/** A file at or below this size is uploaded untouched, keeping quality and animation. */
+const BACKGROUND_KEEP_ORIGINAL_BYTES = 1.5 * 1024 * 1024
+
+/** Encoder qualities tried in order until the re-encoded image fits the upload cap. */
+const BACKGROUND_ENCODE_QUALITIES = [0.85, 0.7, 0.55] as const
 
 /** One background as the renderer needs it: where the bytes are, and how to paint them. */
 export type ResolvedBackground = {
@@ -94,8 +105,6 @@ export const BACKGROUND_CSS = [
   'html[data-ds-dark-theme],body[data-ds-dark-theme]{--ct-bg-wash:var(--ct-bg-wash-dark,transparent);}',
 ].join('\n')
 
-const clampOpacity = (value: number) => Math.max(0, Math.min(100, Math.round(value)))
-
 /** The layer's custom properties, all set on `<html>` so the composer can read them. */
 const BACKGROUND_VARIABLES = [
   '--ct-bg-light',
@@ -113,12 +122,12 @@ const BACKGROUND_VARIABLES = [
  * reproduces the layer's own `colour + image at opacity` composite.
  */
 function surfaceWash(color: string, opacity: number): string {
-  return `color-mix(in srgb, ${color} ${String(100 - clampOpacity(opacity))}%, transparent)`
+  return `color-mix(in srgb, ${color} ${String(100 - clampBackgroundOpacity(opacity))}%, transparent)`
 }
 
 /** The opacity the dark appearance actually paints, derived from the light one. */
 export function darkOpacity(lightOpacity: number): number {
-  return clampOpacity(clampOpacity(lightOpacity) * THEME_BACKGROUND_DARK_FACTOR)
+  return clampBackgroundOpacity(clampBackgroundOpacity(lightOpacity) * THEME_BACKGROUND_DARK_FACTOR)
 }
 
 /** Quote a URL for a CSS `url()` token. */
@@ -168,9 +177,9 @@ export function createBackgroundLayer() {
     }
     ensure()
     if (layer === null || image === null) return
-    const opacity = clampOpacity(bg.opacity)
+    const opacity = clampBackgroundOpacity(bg.opacity)
     const dark = darkOpacity(opacity)
-    const blur = Math.max(0, Math.min(THEME_BACKGROUND_MAX_BLUR, bg.blur))
+    const blur = clampBackgroundBlur(bg.blur)
     // On `<html>` rather than on the layer: the composer's copy of the
     // wallpaper lives outside this element and reads the same properties.
     const style = document.documentElement.style
@@ -202,8 +211,8 @@ export async function prepareBackgroundImage(file: File): Promise<Blob> {
   if (!isSupportedImage(file)) {
     throw new Error('unsupported image type')
   }
-  const limit = 4 * 1024 * 1024
-  if (file.size <= 1.5 * 1024 * 1024) {
+  const limit = THEME_ASSET_MAX_BYTES
+  if (file.size <= BACKGROUND_KEEP_ORIGINAL_BYTES) {
     return file
   }
 
@@ -219,7 +228,7 @@ export async function prepareBackgroundImage(file: File): Promise<Blob> {
   }
 
   try {
-    const scale = Math.min(1, 3840 / Math.max(bitmap.width, bitmap.height))
+    const scale = Math.min(1, BACKGROUND_MAX_EDGE_PX / Math.max(bitmap.width, bitmap.height))
     const width = Math.max(1, Math.round(bitmap.width * scale))
     const height = Math.max(1, Math.round(bitmap.height * scale))
     const canvas = document.createElement('canvas')
@@ -230,7 +239,7 @@ export async function prepareBackgroundImage(file: File): Promise<Blob> {
     context.drawImage(bitmap, 0, 0, width, height)
 
     let best: Blob | null = null
-    for (const quality of [0.85, 0.7, 0.55]) {
+    for (const quality of BACKGROUND_ENCODE_QUALITIES) {
       const encoded = await new Promise<Blob | null>((resolve) => {
         canvas.toBlob(resolve, 'image/webp', quality)
       })

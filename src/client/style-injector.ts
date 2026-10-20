@@ -2,7 +2,18 @@
  * Style injection helper: prefers DSH `styles.insert`, falls back to raw DOM.
  */
 
-declare const styles: { insert: (css: string) => () => void }
+declare const styles: { insert: (css: string) => () => void } | undefined
+
+/** Hand one sheet to DSH's style service when it is present; null otherwise. */
+function insertViaPlatform(css: string): (() => void) | null {
+  try {
+    if (typeof styles === 'undefined' || typeof styles.insert !== 'function') return null
+    const dispose = styles.insert(css)
+    return typeof dispose === 'function' ? dispose : null
+  } catch {
+    return null
+  }
+}
 
 export function createStyleInjector() {
   const disposers = new Set<() => void>()
@@ -19,12 +30,8 @@ export function createStyleInjector() {
   }
 
   function insert(css: string): () => void {
-    try {
-      if (typeof styles !== 'undefined' && typeof (styles as any).insert === 'function') {
-        const dispose = (styles as any).insert(css) as () => void
-        if (typeof dispose === 'function') return track(dispose)
-      }
-    } catch {}
+    const platformDispose = insertViaPlatform(css)
+    if (platformDispose) return track(platformDispose)
 
     const tag = document.createElement('style')
     tag.dataset.plugin = 'dsh-cool-theme'
@@ -33,13 +40,9 @@ export function createStyleInjector() {
     return track(() => tag.remove())
   }
 
-  function disposeAll() {
-    for (const d of [...disposers]) {
-      try {
-        d()
-      } catch {}
-    }
-    disposers.clear()
+  function disposeAll(): void {
+    // Every disposer is a tracked wrapper, which already swallows its own error.
+    for (const dispose of [...disposers]) dispose()
   }
 
   return { insert, disposeAll }

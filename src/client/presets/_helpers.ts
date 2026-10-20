@@ -1,6 +1,9 @@
 /**
  * Helpers for preset color scale generation.
- * Uses the same linear RGB interpolation as scripts/interpolate-colors.ts
+ *
+ * Presets are authored as two endpoint colours plus semantic base colours; the
+ * ramps between them are interpolated in linear RGB, and every preset in
+ * `presets/` uses these same helpers.
  */
 
 export const BLUISH_STEPS = [0, 50, 60, 75, 100, 150, 200, 300, 400, 500, 600, 700, 750, 800, 850, 875, 900, 950, 1000] as const
@@ -25,34 +28,36 @@ function hexToRgb(hex: string): [number, number, number] {
   ]
 }
 
-function rgbToHex(rgb: [number, number, number]): string {
-  const [r, g, b] = rgb.map(v => Math.round(v).toString(16).padStart(2, '0').toUpperCase())
+function rgbToHex(rgb: readonly number[]): string {
+  const [r, g, b] = rgb.map((v) => Math.round(v).toString(16).padStart(2, '0').toUpperCase())
   return `#${r}${g}${b}`
 }
 
+/** Fold an interpolated channel into the byte a hex colour can store. */
+const clampChannel = (value: number) => Math.max(0, Math.min(255, Math.round(value)))
+
 /**
- * Linearly interpolate between two colors (RGB space, same as scripts/interpolate-colors.ts)
+ * Linearly interpolate between two colors in RGB space.
  * @param colorStart color at scale 0, e.g. "#FAFAFA"
  * @param colorEnd   color at scale 1000, e.g. "#0D1017"
  * @param steps      array of scales to compute
  * @returns map of scale -> hex color
  */
-export function interpolateColors(colorStart: string, colorEnd: string, steps: readonly number[]): Record<number, string> {
+export function interpolateColors(
+  colorStart: string,
+  colorEnd: string,
+  steps: readonly number[],
+): Record<number, string> {
   const start = hexToRgb(colorStart)
   const end = hexToRgb(colorEnd)
-  const diffR = end[0] - start[0]
-  const diffG = end[1] - start[1]
-  const diffB = end[2] - start[2]
   const result: Record<number, string> = {}
   for (const step of steps) {
     const t = step / 1000
-    let r = Math.round(start[0] + diffR * t)
-    let g = Math.round(start[1] + diffG * t)
-    let b = Math.round(start[2] + diffB * t)
-    r = Math.max(0, Math.min(255, r))
-    g = Math.max(0, Math.min(255, g))
-    b = Math.max(0, Math.min(255, b))
-    result[step] = rgbToHex([r, g, b])
+    result[step] = rgbToHex([
+      clampChannel(start[0] + (end[0] - start[0]) * t),
+      clampChannel(start[1] + (end[1] - start[1]) * t),
+      clampChannel(start[2] + (end[2] - start[2]) * t),
+    ])
   }
   return result
 }
@@ -154,17 +159,17 @@ function buildTintShadeScale(
 ): Record<string, string> {
   const map: Record<string, string> = {}
   for (const step of steps) {
-    const w = weights[step as string]
-    if (w === undefined) continue
-    // 500 is the base itself; >500 and '950' are shades (base → black), the rest are tints (white → base)
+    const weight = weights[String(step)]
+    if (weight === undefined) continue
+    // 500 is the base itself; >500 and '950' are shades (base → black), the rest
+    // are tints (white → base).
+    const isBase = String(step) === '500'
     const isShade = (typeof step === 'number' && step > 500) || step === '950'
-    const color =
-      step === 500 || step === '500'
-        ? base.toUpperCase()
-        : isShade
-          ? mix('#000000', base, w)
-          : mix('#FFFFFF', base, w)
-    map[`${prefix}-${step}`] = color
+    map[`${prefix}-${step}`] = isBase
+      ? base.toUpperCase()
+      : isShade
+        ? mix('#000000', base, weight)
+        : mix('#FFFFFF', base, weight)
   }
   return map
 }

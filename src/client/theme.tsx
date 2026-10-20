@@ -10,7 +10,7 @@ import {
   themeAssetUrl,
   type ThemeBackground,
 } from '../contract.js'
-import { PRESETS, NOOP_PRESET_IDS, type PresetId, type PresetDef } from './presets.js'
+import { PRESETS, NOOP_PRESET_IDS, isBuiltinPresetId, type PresetId, type PresetDef } from './presets.js'
 import { buildBaseCss, buildOverrides, buildFullCssFallback } from './tokens.js'
 import { createStyleInjector } from './style-injector.js'
 import { ThemePanel, CUSTOM_SELECTION, type Selection, type CustomState } from './components.js'
@@ -209,11 +209,7 @@ const BASE_CSS = [
 ].join('\n')
 
 function isValidSelection(v: string | null): v is Selection {
-  return !!v && (v === CUSTOM_SELECTION || NOOP_PRESET_IDS.has(v as PresetId) || v in PRESETS)
-}
-
-function isPresetId(v: unknown): v is PresetId {
-  return typeof v === 'string' && v in PRESETS
+  return !!v && (v === CUSTOM_SELECTION || NOOP_PRESET_IDS.has(v as PresetId) || isBuiltinPresetId(v))
 }
 
 function presetDef(id: PresetId): PresetDef {
@@ -251,6 +247,15 @@ export function registerTheme(ctx: any) {
   let baselineDisposer: (() => void) | null = null
   let overrideDispose: (() => void) | null = null
   let fallbackDispose: (() => void) | null = null
+
+  // Resolve the initial selection before any closure below can read `lastPreset`.
+  const initialSelection = getSelection()
+  /** The preset the custom editor seeds from; updated whenever a preset is applied. */
+  let lastPreset: PresetId = initialSelection === CUSTOM_SELECTION ? 'dsh' : initialSelection
+  if (initialSelection === CUSTOM_SELECTION) {
+    const env = parseEnvelope(readRaw(CUSTOM_THEME_STORAGE_KEY))
+    if (env && isBuiltinPresetId(env.base)) lastPreset = env.base
+  }
 
   const release = (fn: (() => void) | null) => {
     if (!fn) return null
@@ -341,7 +346,7 @@ export function registerTheme(ctx: any) {
   /** The preset the custom seeds derive from, restored from the stored blob. */
   function customBase(): PresetId {
     const env = parseEnvelope(readRaw(CUSTOM_THEME_STORAGE_KEY))
-    if (env && isPresetId(env.base)) return env.base
+    if (env && isBuiltinPresetId(env.base)) return env.base
     return lastPreset
   }
 
@@ -570,7 +575,7 @@ export function registerTheme(ctx: any) {
   // --- saved custom themes -------------------------------------------------
 
   const fallbackForBase = (base: string): CustomTheme =>
-    extractSeeds(presetDef(isPresetId(base) ? base : lastPreset))
+    extractSeeds(presetDef(isBuiltinPresetId(base) ? base : lastPreset))
 
   /**
    * The roster as the Host last reported it; `null` means it has not answered
@@ -622,7 +627,7 @@ export function registerTheme(ctx: any) {
   function loadSaved(id: string): CustomTheme | null {
     const entry = readList().find((e) => e.id === id)
     if (!entry) return null
-    if (isPresetId(entry.base)) lastPreset = entry.base
+    if (isBuiltinPresetId(entry.base)) lastPreset = entry.base
     writeRaw(CUSTOM_ACTIVE_STORAGE_KEY, entry.id)
     writeRaw(CUSTOM_THEME_STORAGE_KEY, encodeCustom(entry.base, entry.theme))
     scheduleApply(() => apply(buildCustomPreset(entry.theme)))
@@ -677,15 +682,6 @@ export function registerTheme(ctx: any) {
       if (readActiveId() === null && next[0]) loadSaved(next[0].id)
       return next
     },
-  }
-
-  const initialSelection = getSelection()
-  // Resolve the custom base without reading `lastPreset`, which is still being
-  // initialised here (reading it would hit the temporal dead zone).
-  let lastPreset: PresetId = initialSelection === CUSTOM_SELECTION ? 'dsh' : initialSelection
-  if (initialSelection === CUSTOM_SELECTION) {
-    const env = parseEnvelope(readRaw(CUSTOM_THEME_STORAGE_KEY))
-    if (env && isPresetId(env.base)) lastPreset = env.base
   }
 
   apply(initialSelection)

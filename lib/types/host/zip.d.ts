@@ -4,9 +4,13 @@
  * A theme is one small JSON document plus whatever media sits beside it, so the
  * archive format is worth exactly this much: a writer that emits stored/deflated
  * entries with a central directory, and a reader that walks that directory back.
- * Node owns the compression (`zlib.deflateRawSync` / `inflateRawSync`); the two
- * checksums and the record layout are all that has to be written here, which
- * keeps the plugin dependency-free.
+ * Node owns the compression (`zlib.deflateRawSync` / `inflateRawSync`); the
+ * CRC-32 and the record layout are all that has to be written here, which keeps
+ * the plugin dependency-free.
+ *
+ * Reading is strict: every entry's CRC is verified and the bytes it may inflate
+ * are capped, so a corrupt or oversized archive is refused rather than becoming
+ * a half-parsed theme.
  *
  * Deliberately unsupported, because nothing this plugin writes ever produces
  * them: zip64, encrypted entries, multi-disk archives, and data descriptors.
@@ -18,6 +22,7 @@ export type ZipEntry = {
 };
 /** How a read should select and bound the entries it inflates. */
 export type ReadZipOptions = {
+    /** Skip entries this returns false for, before they are inflated. */
     filter?: (name: string) => boolean;
     /** Largest uncompressed entry to accept; a bigger one is a refusal, not a skip. */
     maxEntryBytes?: number;

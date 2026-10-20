@@ -14,19 +14,15 @@
 
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { THEME_FILE_VERSION, normalizeBackground } from '../contract.js'
-import type { ThemeBackground, ThemeDocument } from '../contract.js'
+import { THEME_FILE_VERSION, backgroundForAssets, isRecord } from '../contract.js'
+import type { ThemeDocument } from '../contract.js'
 import { listAssets, pruneAssets } from './assets.js'
-import { DOCUMENT_NAME, assetsDir, isThemeId, newThemeId, themeDir, themesRoot } from './paths.js'
+import { DOCUMENT_NAME, assetsDir, isThemeId, themeDir, themesRoot } from './paths.js'
 
-export { DOCUMENT_NAME, assetsDir, harnessHome, isThemeId, newThemeId, themeDir, themesRoot } from './paths.js'
+export { DOCUMENT_NAME, assetsDir, harnessHome, isThemeId, themeDir, themesRoot } from './paths.js'
 
 function documentPath(id: string): string {
   return join(themeDir(id), DOCUMENT_NAME)
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /** Whether a theme directory already holds a readable document. */
@@ -59,8 +55,7 @@ async function readDocument(id: string): Promise<ThemeDocument | null> {
     // The directory decides what media exists; the document only says which of
     // it the theme actually uses.
     const assets = await listAssets(id)
-    const stored = normalizeBackground(parsed.background)
-    const background = stored && assets.some((asset) => asset.name === stored.asset) ? stored : null
+    const background = backgroundForAssets(parsed.background, assets)
     return {
       v: typeof parsed.v === 'number' ? parsed.v : THEME_FILE_VERSION,
       id: parsed.id,
@@ -125,15 +120,15 @@ export async function putTheme(input: {
   name: string
   base: string
   theme: unknown
-  background?: ThemeBackground | null
+  /** Wire value from the client; repaired against the stored assets below. */
+  background?: unknown
 }): Promise<ThemeDocument> {
   const existing = await readDocument(input.id)
   const now = new Date().toISOString()
   // Scan before pruning: a just-uploaded file is already on disk, and the list
   // written into the document has to include it.
   const assets = await listAssets(input.id)
-  const stored = normalizeBackground(input.background)
-  const background = stored && assets.some((asset) => asset.name === stored.asset) ? stored : null
+  const background = backgroundForAssets(input.background, assets)
   const doc: ThemeDocument = {
     v: THEME_FILE_VERSION,
     id: input.id,

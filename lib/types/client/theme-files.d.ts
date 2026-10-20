@@ -7,10 +7,15 @@
  */
 import type { ThemeAsset, ThemeDocument } from '../contract.js';
 import { type CustomTheme, type SavedTheme } from './custom.js';
+/** The document fields the browser owns; timestamps and asset sizes stay the Host's. */
+type DocumentPayload = Pick<ThemeDocument, 'id' | 'name' | 'base' | 'theme' | 'assets'> & {
+    /** Repairing the background is this module's job, so the wire value stays unknown. */
+    background: unknown;
+};
 /** Repair one stored document against the preset its seeds derive from. */
-export declare function documentToSaved(doc: ThemeDocument, fallbackFor: (base: string) => CustomTheme): SavedTheme;
+export declare function documentToSaved(doc: DocumentPayload, fallbackFor: (base: string) => CustomTheme): SavedTheme;
 /** The document payload for one entry; timestamps stay the Host's business. */
-export declare function savedToDocument(entry: SavedTheme): Record<string, unknown>;
+export declare function savedToDocument(entry: SavedTheme): Omit<ThemeDocument, 'createdAt' | 'updatedAt'>;
 /**
  * The Host answered as something other than this API — its route half is not
  * mounted (the usual cause is a DSH process started before this plugin's host
@@ -54,4 +59,5 @@ export declare function uploadThemeAsset(themeId: string, image: Blob): Promise<
  * UI. Callers adopt the result, then stop reading the browser copy.
  */
 export declare function legacyThemesToAdopt(legacy: SavedTheme[], hostThemes: SavedTheme[]): SavedTheme[];
+export {};
 //# sourceMappingURL=theme-files.d.ts.map

@@ -30,7 +30,7 @@ export declare function packTheme(id: string): Promise<{
 }>;
 /** An archive's document, validated; anything else throws {@link ArchiveError}. */
 export type UnpackedTheme = {
-    /** Created document, ready for the client to give a fresh id and name. */
+    /** The validated document; the Host assigns a fresh id and name when storing it. */
     document: PackedDocument;
     /** Media carried beside the document, already bounds-checked. */
     assets: {

@@ -4,15 +4,9 @@ import { buildScale, BLUISH_STEPS, NEUTRAL_STEPS, buildSemanticScales } from './
 const bluish = buildScale('--dsw-static-neutral-bluish', '#FFFFFF', '#0F1115', BLUISH_STEPS)
 const neutral = buildScale('--dsw-static-neutral', '#FFFFFF', '#000000', NEUTRAL_STEPS)
 
-const lightSemantic = buildSemanticScales({
-  deepseek: '#4176E6',
-  blue: '#3B82F6',
-  green: '#22C55E',
-  amber: '#F59E0B',
-  red: '#EF4444',
-})
-
-const darkSemantic = buildSemanticScales({
+// DSH's own palette is appearance-independent below the alias layer, so both
+// appearances share the same semantic scales.
+const semantic = buildSemanticScales({
   deepseek: '#4176E6',
   blue: '#3B82F6',
   green: '#22C55E',
@@ -25,13 +19,11 @@ export const dsh = {
   light: {
     ...bluish,
     ...neutral,
-    ...lightSemantic,
-
+    ...semantic,
   },
   dark: {
     ...bluish,
     ...neutral,
-    ...darkSemantic,
-
+    ...semantic,
   },
 } as const satisfies { label: string; light: StaticMap; dark: StaticMap }

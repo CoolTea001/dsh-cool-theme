@@ -26,7 +26,7 @@ export function isThemeId(value: unknown): value is string {
  */
 export function harnessHome(): string {
   const configured = process.env.DSH_HOME?.trim()
-  return configured && configured !== '' ? configured : join(homedir(), '.dsh')
+  return configured ? configured : join(homedir(), '.dsh')
 }
 
 /** Root of every stored theme. */
@@ -39,7 +39,7 @@ export function themeDir(id: string): string {
   return join(themesRoot(), id)
 }
 
-/** Directory name of the theme document inside one theme's own directory. */
+/** File name of the theme document inside one theme's own directory. */
 export const DOCUMENT_NAME = 'theme.json'
 
 /** Media directory beside the document. */
@@ -48,13 +48,4 @@ export const ASSETS_DIR = 'assets'
 /** Absolute path of a theme's media directory. */
 export function assetsDir(id: string): string {
   return join(themeDir(id), ASSETS_DIR)
-}
-
-/**
- * A fresh theme id. The same shape the client mints (`ct_` + time + noise), so
- * an id never says which half created it, and `isThemeId` is the only rule both
- * halves apply.
- */
-export function newThemeId(): string {
-  return `ct_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
 }

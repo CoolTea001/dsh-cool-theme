@@ -9,11 +9,18 @@ export declare const CUSTOM_LIST_STORAGE_KEY = "cool-theme-custom-list";
 export declare const CUSTOM_ACTIVE_STORAGE_KEY = "cool-theme-custom-active";
 export declare const CUSTOM_MIGRATED_STORAGE_KEY = "cool-theme-custom-migrated";
 export declare const SIDEBAR_TRANSPARENT_STORAGE_KEY = "cool-theme-sidebar-transparent";
+/** A plain JSON object: not null, not an array, and not a primitive. */
+export declare function isRecord(value: unknown): value is Record<string, unknown>;
 /**
  * Documents are one directory each — `<root>/<id>/theme.json` — so a theme can
  * later carry media beside its seeds without changing this contract.
  */
 export declare const THEME_FILE_VERSION = 1;
+/**
+ * A fresh theme id. Both halves mint ids in the same shape, so an id never says
+ * which half created it; the Host is the side that validates the pattern.
+ */
+export declare function newThemeId(): string;
 /** Media kind carried with a theme; the seed payload itself is `theme`. */
 export type ThemeAssetKind = 'image' | 'video';
 /** One media file stored under the theme's `assets/` directory. */
@@ -73,6 +80,10 @@ export declare const THEME_BACKGROUND_DEFAULT_OPACITY = 40;
  */
 export declare const THEME_BACKGROUND_DARK_FACTOR = 0.7;
 export declare const THEME_BACKGROUND_MAX_BLUR = 24;
+/** Fold an opacity into the 0–100 percentage a background stores. */
+export declare function clampBackgroundOpacity(value: number): number;
+/** Fold a blur radius into the 0–{@link THEME_BACKGROUND_MAX_BLUR} px a background stores. */
+export declare function clampBackgroundBlur(value: number): number;
 /**
  * Bytes one uploaded image may occupy. It matches a single archive entry's
  * uncompressed cap on purpose: an image the roster accepts must also survive
@@ -96,6 +107,12 @@ export declare function assetTypeOf(name: string): {
 export declare function isThemeAssetName(value: unknown): value is string;
 /** Fold any stored or posted background into this build's shape, or drop it. */
 export declare function normalizeBackground(raw: unknown): ThemeBackground | null;
+/**
+ * The background a theme may keep: `raw` normalized, but only while the file it
+ * names is actually stored beside the theme. A document that points at a missing
+ * image drops the background rather than rendering a broken wallpaper.
+ */
+export declare function backgroundForAssets(raw: unknown, assets: readonly Pick<ThemeAsset, 'name'>[]): ThemeBackground | null;
 /**
  * The Host's theme-file API, all below one prefix route. Kept here so the two
  * halves cannot drift on a path.

@@ -21,7 +21,7 @@ import type { StaticMap } from './css/primitives.js'
 import { PRIMITIVES_LIGHT, PRIMITIVES_DARK } from './css/primitives.js'
 import type { PresetDef } from './presets.js'
 import type { ThemeAsset, ThemeBackground } from '../contract.js'
-import { normalizeBackground } from '../contract.js'
+import { isRecord, normalizeBackground } from '../contract.js'
 import { buildScale, BLUISH_STEPS, NEUTRAL_STEPS, buildSemanticScales } from './presets/_helpers.js'
 
 export type { PresetDef }
@@ -140,10 +140,6 @@ const BORDER_ALPHA_STEPS: Record<Mode, Record<BorderLevel, number>> = {
   dark: { l2: 6, l3: 10, l4: 14, thin: 0 },
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 const clamp255 = (n: number) => Math.max(0, Math.min(255, Math.round(n)))
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
 
@@ -207,9 +203,9 @@ export function tryToHex(input: unknown): string | null {
   if (rgbFn) {
     const parts = fnArgs(rgbFn[1])
     if (parts.length < 3) return null
-    const rgb = parts.slice(0, 3).map(channel)
-    if (rgb.some((n) => n === null)) return null
-    return toRgbHex(rgb as number[])
+    const [r, g, b] = parts.slice(0, 3).map(channel)
+    if (r === null || g === null || b === null) return null
+    return toRgbHex([r, g, b])
   }
 
   const hslFn = s.match(HSL_FN)
@@ -303,11 +299,9 @@ export function extractSeeds(base: PresetDef): CustomTheme {
 
   const shiki = SHIKI_KEYS.reduce<Record<ShikiKey, SeedPair>>((acc, k) => {
     const cssKey = `--shiki-token-${k}`
-    const lightMap = base.light as Record<string, string | undefined>
-    const darkMap = base.dark as Record<string, string | undefined>
     acc[k] = {
-      light: toHex(lightMap[cssKey] ?? SHIKI_FALLBACK.light[k]),
-      dark: toHex(darkMap[cssKey] ?? SHIKI_FALLBACK.dark[k]),
+      light: toHex(base.light[cssKey] ?? SHIKI_FALLBACK.light[k]),
+      dark: toHex(base.dark[cssKey] ?? SHIKI_FALLBACK.dark[k]),
     }
     return acc
   }, {} as Record<ShikiKey, SeedPair>)
@@ -352,8 +346,8 @@ export function encodeCustom(base: string, theme: CustomTheme): string {
 export function parseEnvelope(raw: string | null): CustomEnvelope | null {
   if (!raw) return null
   try {
-    const parsed = JSON.parse(raw) as Partial<CustomEnvelope>
-    if (!parsed || typeof parsed !== 'object') return null
+    const parsed: unknown = JSON.parse(raw)
+    if (!isRecord(parsed)) return null
     const version = parsed.v
     if (typeof version !== 'number' || !READABLE_SCHEMA_VERSIONS.includes(version)) return null
     return { v: CUSTOM_SCHEMA_VERSION, base: String(parsed.base ?? ''), theme: parsed.theme }
@@ -496,11 +490,7 @@ export function sameBackground(a: ThemeBackground | null, b: ThemeBackground | n
   return a.asset === b.asset && a.opacity === b.opacity && a.blur === b.blur
 }
 
-/** Collision-resistant enough for a local list, and stable across reloads. */
-export function newThemeId(): string {
-  return `ct_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
-}
-
+/** Serialize the saved list with its schema version. */
 export function encodeList(list: SavedTheme[]): string {
   return JSON.stringify({ v: CUSTOM_SCHEMA_VERSION, items: list })
 }
@@ -516,21 +506,26 @@ export function decodeList(
 ): SavedTheme[] {
   if (!raw) return []
   try {
-    const parsed = JSON.parse(raw) as { v?: number; items?: unknown }
-    if (!parsed || typeof parsed.v !== 'number' || !READABLE_SCHEMA_VERSIONS.includes(parsed.v)) return []
-    if (!Array.isArray(parsed.items)) return []
+    const parsed: unknown = JSON.parse(raw)
+    if (
+      !isRecord(parsed)
+      || typeof parsed.v !== 'number'
+      || !READABLE_SCHEMA_VERSIONS.includes(parsed.v)
+      || !Array.isArray(parsed.items)
+    ) {
+      return []
+    }
     const out: SavedTheme[] = []
     for (const item of parsed.items) {
-      const e = item as Partial<SavedTheme>
-      if (typeof e?.id !== 'string' || typeof e?.name !== 'string') continue
-      const base = typeof e.base === 'string' ? e.base : ''
+      if (!isRecord(item) || typeof item.id !== 'string' || typeof item.name !== 'string') continue
+      const base = typeof item.base === 'string' ? item.base : ''
       out.push({
-        id: e.id,
-        name: e.name,
+        id: item.id,
+        name: item.name,
         base,
-        theme: normalizeCustom(e.theme, fallbackFor(base)),
-        assets: Array.isArray(e.assets) ? e.assets : [],
-        background: normalizeBackground(e.background),
+        theme: normalizeCustom(item.theme, fallbackFor(base)),
+        assets: Array.isArray(item.assets) ? (item.assets as ThemeAsset[]) : [],
+        background: normalizeBackground(item.background),
       })
     }
     return out

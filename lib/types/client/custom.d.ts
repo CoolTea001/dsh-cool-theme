@@ -172,8 +172,7 @@ export type SavedTheme = {
  * would be written to the document.
  */
 export declare function sameBackground(a: ThemeBackground | null, b: ThemeBackground | null): boolean;
-/** Collision-resistant enough for a local list, and stable across reloads. */
-export declare function newThemeId(): string;
+/** Serialize the saved list with its schema version. */
 export declare function encodeList(list: SavedTheme[]): string;
 /**
  * Parse the saved list. Entries with a corrupt theme are repaired against

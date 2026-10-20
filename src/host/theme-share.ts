@@ -21,7 +21,8 @@ import {
   THEME_ARCHIVE_MAX_ENTRY_BYTES,
   THEME_FILE_VERSION,
   assetTypeOf,
-  normalizeBackground,
+  backgroundForAssets,
+  isRecord,
 } from '../contract.js'
 import type { ThemeAsset, ThemeBackground, ThemeDocument } from '../contract.js'
 import { listAssets } from './assets.js'
@@ -31,10 +32,6 @@ import { createZip, readZip } from './zip.js'
 /** The document as it is packed; the timestamps are the Host's own bookkeeping. */
 type PackedDocument = Pick<ThemeDocument, 'id' | 'name' | 'base' | 'theme' | 'assets'> & {
   background: ThemeBackground | null
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /** A share refused for a reason worth showing the user. */
@@ -65,8 +62,7 @@ export async function packTheme(id: string): Promise<{
     assets.push({ ...asset, bytes: bytes.byteLength })
   }
 
-  const stored = normalizeBackground(doc.background)
-  const background = stored && assets.some((asset) => asset.name === stored.asset) ? stored : null
+  const background = backgroundForAssets(doc.background, assets)
 
   const packed: PackedDocument = {
     id: doc.id,
@@ -85,7 +81,7 @@ export async function packTheme(id: string): Promise<{
 
 /** An archive's document, validated; anything else throws {@link ArchiveError}. */
 export type UnpackedTheme = {
-  /** Created document, ready for the client to give a fresh id and name. */
+  /** The validated document; the Host assigns a fresh id and name when storing it. */
   document: PackedDocument
   /** Media carried beside the document, already bounds-checked. */
   assets: { name: string; bytes: Buffer; kind: ThemeAsset['kind']; mime: string }[]
@@ -152,8 +148,7 @@ export function unpackTheme(archive: Buffer): UnpackedTheme {
   // A background survives the trip only when its file did. Dropping it is
   // better than importing a theme whose document points at a missing image: the
   // colours still arrive, and the user can pick a new wallpaper.
-  const stored = normalizeBackground(parsed.background)
-  const background = stored && assets.some((asset) => asset.name === stored.asset) ? stored : null
+  const background = backgroundForAssets(parsed.background, assets)
 
   return {
     document: {

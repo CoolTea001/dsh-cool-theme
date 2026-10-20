@@ -16,6 +16,12 @@ export declare const PRESETS: Record<BuiltinPresetId, PresetDef>;
 /** `native` is a legacy storage alias for `dsh` — both mean "system default, no overrides". */
 export type PresetId = keyof typeof PRESETS | 'native';
 /**
+ * Whether `value` names a shipped preset. `Object.hasOwn` rather than `in`,
+ * because `in` also accepts inherited names like `toString`, which are not
+ * presets and would resolve to a non-preset value downstream.
+ */
+export declare function isBuiltinPresetId(value: unknown): value is BuiltinPresetId;
+/**
  * Presets that override nothing: the shell keeps its own colours. The single
  * source of this set, so the token layer and the panel cannot drift on it.
  */

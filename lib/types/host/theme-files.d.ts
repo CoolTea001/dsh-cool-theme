@@ -11,8 +11,8 @@
  * can never describe files that are not there. A background is kept only while
  * the file it names is still on disk.
  */
-import type { ThemeBackground, ThemeDocument } from '../contract.js';
-export { DOCUMENT_NAME, assetsDir, harnessHome, isThemeId, newThemeId, themeDir, themesRoot } from './paths.js';
+import type { ThemeDocument } from '../contract.js';
+export { DOCUMENT_NAME, assetsDir, harnessHome, isThemeId, themeDir, themesRoot } from './paths.js';
 /** Whether a theme directory already holds a readable document. */
 export declare function themeExists(id: string): Promise<boolean>;
 /** Every stored theme, oldest by creation time first; unreadable directories are skipped. */
@@ -31,7 +31,8 @@ export declare function putTheme(input: {
     name: string;
     base: string;
     theme: unknown;
-    background?: ThemeBackground | null;
+    /** Wire value from the client; repaired against the stored assets below. */
+    background?: unknown;
 }): Promise<ThemeDocument>;
 /** Remove one theme directory. A missing directory is already the goal. */
 export declare function deleteTheme(id: string): Promise<void>;

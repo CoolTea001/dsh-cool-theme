@@ -86,6 +86,15 @@ export const PRESETS: Record<BuiltinPresetId, PresetDef> = {
 export type PresetId = keyof typeof PRESETS | 'native'
 
 /**
+ * Whether `value` names a shipped preset. `Object.hasOwn` rather than `in`,
+ * because `in` also accepts inherited names like `toString`, which are not
+ * presets and would resolve to a non-preset value downstream.
+ */
+export function isBuiltinPresetId(value: unknown): value is BuiltinPresetId {
+  return typeof value === 'string' && Object.hasOwn(PRESETS, value)
+}
+
+/**
  * Presets that override nothing: the shell keeps its own colours. The single
  * source of this set, so the token layer and the panel cannot drift on it.
  */

@@ -14,8 +14,15 @@ export type CustomState = {
     base: PresetId;
     theme: CustomTheme;
 };
+/** The slice of the shell's Theme service this panel reads and writes. */
+type ThemeService = {
+    getTheme?: () => {
+        preference?: string;
+    } | null;
+    setTheme?: (preference: string) => void;
+} | undefined;
 export declare function ThemePanel(props: {
-    theme: any;
+    theme: ThemeService;
     getSelection: () => Selection;
     setSelection: (s: Selection) => void;
     getCustom: () => CustomState;
@@ -62,4 +69,5 @@ export declare function ThemePanel(props: {
         paddingBottom: number;
     };
 }, HTMLElement>;
+export {};
 //# sourceMappingURL=components.d.ts.map

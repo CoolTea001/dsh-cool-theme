@@ -8,6 +8,8 @@ import {
   CUSTOM_PRESET_ID,
   THEME_ARCHIVE_EXTENSION,
   THEME_ASSET_MAX_BYTES,
+  THEME_BACKGROUND_MAX_BLUR,
+  newThemeId,
   themeAssetUrl,
   type ThemeBackground,
 } from '../contract.js'
@@ -35,7 +37,6 @@ import {
   type SeedPair,
   SHIKI_KEYS,
   borderCss,
-  newThemeId,
   nextThemeName,
   sameBackground,
 } from './custom.js'
@@ -135,6 +136,31 @@ function splitAlpha(value: string): BorderSeed {
  */
 const ICON_SIZE = 14
 
+/** Bytes in one megabyte, for naming the upload cap in the user's units. */
+const BYTES_PER_MB = 1024 * 1024
+/** The upload cap as the whole megabytes a localized message can name. */
+const THEME_ASSET_MAX_MB = String(THEME_ASSET_MAX_BYTES / BYTES_PER_MB)
+
+/**
+ * A cheap sanity gate before decoding: the picker can hand over a camera RAW of
+ * hundreds of megabytes, so anything far past the upload cap is refused before
+ * the browser tries to decode it.
+ */
+const BACKGROUND_PICK_MAX_BYTES = THEME_ASSET_MAX_BYTES * 4
+
+/** The failure shapes the Host reports, most specific first. */
+const IMPORT_FAILURE_MATCHERS: readonly (readonly [RegExp, ThemeKey])[] = [
+  [
+    /not a zip archive|zip central directory|zip local header|zip64|unsupported zip compression/i,
+    'custom.importFailed.notArchive',
+  ],
+  [/missing theme\.json/i, 'custom.importFailed.noDocument'],
+  [/newer than this plugin/i, 'custom.importFailed.tooNew'],
+  [/carries media|unsupported media type|unusable media path/i, 'custom.importFailed.media'],
+  [/larger than|too large|too many files/i, 'custom.importFailed.tooLarge'],
+  [/not valid JSON|must be|unusable theme|did not report/i, 'custom.importFailed.badDocument'],
+]
+
 /**
  * Which message an import failure deserves. The Host answers with its own
  * reason, so the shape of that reason is what selects the localized text; an
@@ -143,19 +169,7 @@ const ICON_SIZE = 14
 function importFailureMessage(t: (key: ThemeKey) => string, error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   if (error instanceof ThemeApiUnavailableError) return t('custom.toast.unavailable')
-  const key: ThemeKey = /not a zip archive|zip central directory|zip local header|zip64|unsupported zip compression/i.test(message)
-    ? 'custom.importFailed.notArchive'
-    : /missing theme\.json/i.test(message)
-      ? 'custom.importFailed.noDocument'
-      : /newer than this plugin/i.test(message)
-        ? 'custom.importFailed.tooNew'
-        : /carries media|unsupported media type|unusable media path/i.test(message)
-          ? 'custom.importFailed.media'
-          : /larger than|too large|too many files/i.test(message)
-            ? 'custom.importFailed.tooLarge'
-            : /not valid JSON|must be|unusable theme|did not report/i.test(message)
-              ? 'custom.importFailed.badDocument'
-              : 'custom.importFailed.other'
+  const key = IMPORT_FAILURE_MATCHERS.find(([pattern]) => pattern.test(message))?.[1] ?? 'custom.importFailed.other'
   return t(key).replace('{0}', message)
 }
 
@@ -386,7 +400,7 @@ function backgroundFailureMessage(t: (key: ThemeKey) => string, error: unknown):
   if (error instanceof ThemeApiUnavailableError) return t('custom.toast.unavailable')
   const message = error instanceof Error ? error.message : String(error)
   if (/too large|larger than|413/i.test(message)) {
-    return t('background.tooLarge').replace('{0}', String(THEME_ASSET_MAX_BYTES / (1024 * 1024)))
+    return t('background.tooLarge').replace('{0}', THEME_ASSET_MAX_MB)
   }
   if (/unsupported|decode|encode|format/i.test(message)) return t('background.badType')
   return t('background.uploadFailed')
@@ -509,8 +523,14 @@ function effectiveMode(scheme: string): Mode {
   }
 }
 
+/** The slice of the shell's Theme service this panel reads and writes. */
+type ThemeService = {
+  getTheme?: () => { preference?: string } | null
+  setTheme?: (preference: string) => void
+} | undefined
+
 export function ThemePanel(props: {
-  theme: any
+  theme: ThemeService
   getSelection: () => Selection
   setSelection: (s: Selection) => void
   getCustom: () => CustomState
@@ -567,7 +587,7 @@ export function ThemePanel(props: {
   } = props
   let initScheme = 'system'
   try {
-    const snap = theme?.getTheme()
+    const snap = theme?.getTheme?.()
     if (snap?.preference) initScheme = snap.preference
   } catch {}
   const [scheme, setScheme] = React.useState(initScheme)
@@ -891,7 +911,7 @@ export function ThemePanel(props: {
   function applyAppearance(id: string) {
     setScheme(id)
     try {
-      theme?.setTheme(id)
+      theme?.setTheme?.(id)
     } catch {}
   }
 
@@ -944,7 +964,7 @@ export function ThemePanel(props: {
       // away with a draft gives it back here, where setState is no longer safe.
       if (schemeRef.current !== open.originScheme) {
         try {
-          theme?.setTheme(open.originScheme)
+          theme?.setTheme?.(open.originScheme)
         } catch {}
       }
       if (open.originId) saved.load(open.originId)
@@ -1217,8 +1237,8 @@ export function ThemePanel(props: {
     // A cheap sanity gate before decoding: the picker can hand over a RAW image
     // of hundreds of megabytes, and there is no point decoding one that is
     // already far past the upload cap.
-    if (file.size > THEME_ASSET_MAX_BYTES * 4) {
-      showToast(t('background.tooLarge').replace('{0}', String(THEME_ASSET_MAX_BYTES / (1024 * 1024))))
+    if (file.size > BACKGROUND_PICK_MAX_BYTES) {
+      showToast(t('background.tooLarge').replace('{0}', THEME_ASSET_MAX_MB))
       return
     }
     replacePending(file)
@@ -1363,7 +1383,6 @@ export function ThemePanel(props: {
     setEditing(null)
     setSelectionState(shownPreset)
     setSelection(shownPreset)
-    setShownPreset(shownPreset)
   }
 
   function editCustom(next: CustomTheme) {
@@ -1379,7 +1398,7 @@ export function ThemePanel(props: {
 
   const customOn = selection === CUSTOM_SELECTION
 
-  const children: any[] = [
+  const children: React.ReactNode[] = [
     React.createElement(
       'div',
       { className: 'ct-row', key: 'appearance' },
@@ -1789,7 +1808,7 @@ export function ThemePanel(props: {
                 'bg-blur',
                 t('background.blur'),
                 backgroundDraft.blur,
-                24,
+                THEME_BACKGROUND_MAX_BLUR,
                 ' px',
                 (v) => updateBackground({ blur: v }),
               ),
@@ -1837,7 +1856,7 @@ export function ThemePanel(props: {
         pickerPop,
       )
 
-    const cards: any[] = list.map((entry) =>
+    const cards: React.ReactNode[] = list.map((entry) =>
       editing && editing.id === entry.id
         ? editorCard(entry.id)
         : React.createElement(ThemeCard, {

@@ -33,6 +33,15 @@ export const CUSTOM_MIGRATED_STORAGE_KEY = 'cool-theme-custom-migrated'
 export const SIDEBAR_TRANSPARENT_STORAGE_KEY = 'cool-theme-sidebar-transparent'
 
 // ---------------------------------------------------------------------------
+// Shared guards
+// ---------------------------------------------------------------------------
+
+/** A plain JSON object: not null, not an array, and not a primitive. */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+// ---------------------------------------------------------------------------
 // Theme files
 // ---------------------------------------------------------------------------
 
@@ -41,6 +50,14 @@ export const SIDEBAR_TRANSPARENT_STORAGE_KEY = 'cool-theme-sidebar-transparent'
  * later carry media beside its seeds without changing this contract.
  */
 export const THEME_FILE_VERSION = 1
+
+/**
+ * A fresh theme id. Both halves mint ids in the same shape, so an id never says
+ * which half created it; the Host is the side that validates the pattern.
+ */
+export function newThemeId(): string {
+  return `ct_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
+}
 
 /** Media kind carried with a theme; the seed payload itself is `theme`. */
 export type ThemeAssetKind = 'image' | 'video'
@@ -112,6 +129,16 @@ export const THEME_BACKGROUND_DARK_FACTOR = 0.7
 
 export const THEME_BACKGROUND_MAX_BLUR = 24
 
+/** Fold an opacity into the 0–100 percentage a background stores. */
+export function clampBackgroundOpacity(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)))
+}
+
+/** Fold a blur radius into the 0–{@link THEME_BACKGROUND_MAX_BLUR} px a background stores. */
+export function clampBackgroundBlur(value: number): number {
+  return Math.max(0, Math.min(THEME_BACKGROUND_MAX_BLUR, Math.round(value)))
+}
+
 /**
  * Bytes one uploaded image may occupy. It matches a single archive entry's
  * uncompressed cap on purpose: an image the roster accepts must also survive
@@ -154,19 +181,32 @@ export function isThemeAssetName(value: unknown): value is string {
 
 /** Fold any stored or posted background into this build's shape, or drop it. */
 export function normalizeBackground(raw: unknown): ThemeBackground | null {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
-  const value = raw as Record<string, unknown>
-  if (!isThemeAssetName(value.asset)) return null
-  if (!assetTypeOf(value.asset)) return null
+  if (!isRecord(raw)) return null
+  if (!isThemeAssetName(raw.asset)) return null
+  if (!assetTypeOf(raw.asset)) return null
   // Only a real number counts: `Number(null)` is 0, which would turn a
   // malformed document into an invisible image instead of the default.
-  const opacity = typeof value.opacity === 'number' ? value.opacity : Number.NaN
-  const blur = typeof value.blur === 'number' ? value.blur : Number.NaN
+  const opacity = typeof raw.opacity === 'number' ? raw.opacity : Number.NaN
+  const blur = typeof raw.blur === 'number' ? raw.blur : Number.NaN
   return {
-    asset: value.asset,
-    opacity: Number.isFinite(opacity) ? Math.max(0, Math.min(100, Math.round(opacity))) : THEME_BACKGROUND_DEFAULT_OPACITY,
-    blur: Number.isFinite(blur) ? Math.max(0, Math.min(THEME_BACKGROUND_MAX_BLUR, Math.round(blur))) : 0,
+    asset: raw.asset,
+    opacity: Number.isFinite(opacity) ? clampBackgroundOpacity(opacity) : THEME_BACKGROUND_DEFAULT_OPACITY,
+    blur: Number.isFinite(blur) ? clampBackgroundBlur(blur) : 0,
   }
+}
+
+/**
+ * The background a theme may keep: `raw` normalized, but only while the file it
+ * names is actually stored beside the theme. A document that points at a missing
+ * image drops the background rather than rendering a broken wallpaper.
+ */
+export function backgroundForAssets(
+  raw: unknown,
+  assets: readonly Pick<ThemeAsset, 'name'>[],
+): ThemeBackground | null {
+  const background = normalizeBackground(raw)
+  if (background === null) return null
+  return assets.some((asset) => asset.name === background.asset) ? background : null
 }
 
 /**
