@@ -14,7 +14,13 @@
  * them. Making the tokens transparent is what let scrolled text show through
  * the composer.
  *
- * Content cards keep their own opaque surfaces on top of the layer.
+ * The composer still has to hide the messages that scroll under it, but painting
+ * the panel colour there would cut a solid band out of the wallpaper. Instead
+ * the seat re-paints the same wallpaper — the same image, `background-attachment:
+ * fixed`, with the panel colour laid on top at `1 - opacity` — so the band is
+ * pixel-identical to the layer below and only the fade at its top edge shows
+ * that anything is being covered. Content cards keep their own opaque surfaces
+ * on top of the layer.
  */
 import { type ThemeBackgroundFit } from '../contract.js';
 /** What the input accepts and what the Host will store. */

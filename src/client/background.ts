@@ -14,7 +14,13 @@
  * them. Making the tokens transparent is what let scrolled text show through
  * the composer.
  *
- * Content cards keep their own opaque surfaces on top of the layer.
+ * The composer still has to hide the messages that scroll under it, but painting
+ * the panel colour there would cut a solid band out of the wallpaper. Instead
+ * the seat re-paints the same wallpaper — the same image, `background-attachment:
+ * fixed`, with the panel colour laid on top at `1 - opacity` — so the band is
+ * pixel-identical to the layer below and only the fade at its top edge shows
+ * that anything is being covered. Content cards keep their own opaque surfaces
+ * on top of the layer.
  */
 
 import {
@@ -47,7 +53,7 @@ export type BackgroundSurfaceColors = { light: string; dark: string }
 export const BACKGROUND_CSS = [
   '.ct-bg{position:fixed;inset:0;z-index:-1;pointer-events:none;background-color:var(--ct-bg-light,#fff);}',
   'html[data-ds-dark-theme] .ct-bg,body[data-ds-dark-theme] .ct-bg{background-color:var(--ct-bg-dark,#151517);}',
-  '.ct-bg-image{position:absolute;inset:0;background-position:center;background-repeat:no-repeat;opacity:var(--ct-bg-opacity-light,0);filter:blur(var(--ct-bg-blur,0px));transform:scale(1.03);}',
+  '.ct-bg-image{position:absolute;inset:0;background-image:var(--ct-bg-image,none);background-position:center;background-repeat:var(--ct-bg-repeat,no-repeat);background-size:var(--ct-bg-size,cover);opacity:var(--ct-bg-opacity-light,0);filter:blur(var(--ct-bg-blur,0px));}',
   'html[data-ds-dark-theme] .ct-bg-image,body[data-ds-dark-theme] .ct-bg-image{opacity:var(--ct-bg-opacity-dark,0);}',
   // The canvas surfaces that clear for the layer. They are matched by class
   // substring because the hashed prefix (`_6Qf49G_centerCol`) rotates between
@@ -63,9 +69,46 @@ export const BACKGROUND_CSS = [
   // The drawer's own opaque frame, which the sidebar setting would otherwise
   // keep painting over the layer on Windows and Linux.
   'html:not([data-platform="darwin"]).ct-bg-on #root > [class*="frame"]{background:transparent !important;}',
+  // The status row does not overlay the transcript, so it can clear too.
+  'html.ct-bg-on [class*="bottomRow"]{background:transparent !important;}',
+  // The composer overlays the transcript: keep its seat transparent and let a
+  // pseudo-element repaint the very same wallpaper over it. `background-
+  // attachment: fixed` anchors both layers to the viewport, which is exactly
+  // where `.ct-bg` painted them, so the copy lines up to the pixel. The panel
+  // colour sits on top at `1 - image opacity`; compositing that over the image
+  // reproduces `.ct-bg`'s `colour + image at opacity` exactly. The top 36px is
+  // masked, matching the fade the shell itself used to draw.
+  'html.ct-bg-on [class*="centerCol"] [data-phase="active"] [data-composer-seat]{background:transparent !important;}',
+  'html.ct-bg-on [class*="centerCol"] [data-phase="active"] [data-composer-seat]::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background-image:linear-gradient(var(--ct-bg-wash,transparent),var(--ct-bg-wash,transparent)),var(--ct-bg-image,none);background-size:auto,var(--ct-bg-size,cover);background-position:center,center;background-repeat:no-repeat,var(--ct-bg-repeat,no-repeat);background-attachment:fixed,fixed;filter:blur(var(--ct-bg-blur,0px));-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 36px);mask-image:linear-gradient(180deg,transparent 0,#000 36px);}',
+  // The wash is the panel colour at the alpha the image leaves free; it has to
+  // follow the appearance, exactly like the layer's own opacity does.
+  'html{--ct-bg-wash:var(--ct-bg-wash-light,transparent);}',
+  'html[data-ds-dark-theme],body[data-ds-dark-theme]{--ct-bg-wash:var(--ct-bg-wash-dark,transparent);}',
 ].join('\n')
 
 const clampOpacity = (value: number) => Math.max(0, Math.min(100, Math.round(value)))
+
+/** The layer's custom properties, all set on `<html>` so the composer can read them. */
+const BACKGROUND_VARIABLES = [
+  '--ct-bg-light',
+  '--ct-bg-dark',
+  '--ct-bg-opacity-light',
+  '--ct-bg-opacity-dark',
+  '--ct-bg-blur',
+  '--ct-bg-image',
+  '--ct-bg-size',
+  '--ct-bg-repeat',
+  '--ct-bg-wash-light',
+  '--ct-bg-wash-dark',
+] as const
+
+/**
+ * The panel colour at the alpha the image does not cover. Laid over the image it
+ * reproduces the layer's own `colour + image at opacity` composite.
+ */
+function surfaceWash(color: string, opacity: number): string {
+  return `color-mix(in srgb, ${color} ${String(100 - clampOpacity(opacity))}%, transparent)`
+}
 
 /** The opacity the dark appearance actually paints, derived from the light one. */
 export function darkOpacity(lightOpacity: number): number {
@@ -102,7 +145,9 @@ export function createBackgroundLayer() {
     layer?.remove()
     layer = null
     image = null
-    if (typeof document !== 'undefined') document.documentElement.classList.remove('ct-bg-on')
+    if (typeof document === 'undefined') return
+    document.documentElement.classList.remove('ct-bg-on')
+    for (const name of BACKGROUND_VARIABLES) document.documentElement.style.removeProperty(name)
   }
 
   /**
@@ -118,15 +163,21 @@ export function createBackgroundLayer() {
     ensure()
     if (layer === null || image === null) return
     const opacity = clampOpacity(bg.opacity)
+    const dark = darkOpacity(opacity)
     const blur = Math.max(0, Math.min(THEME_BACKGROUND_MAX_BLUR, bg.blur))
-    layer.style.setProperty('--ct-bg-light', colors.light)
-    layer.style.setProperty('--ct-bg-dark', colors.dark)
-    layer.style.setProperty('--ct-bg-opacity-light', String(opacity / 100))
-    layer.style.setProperty('--ct-bg-opacity-dark', String(darkOpacity(opacity) / 100))
-    layer.style.setProperty('--ct-bg-blur', `${String(blur)}px`)
-    image.style.backgroundImage = cssUrl(bg.url)
-    image.style.backgroundSize = bg.fit === 'tile' ? 'auto auto' : bg.fit
-    image.style.backgroundRepeat = bg.fit === 'tile' ? 'repeat' : 'no-repeat'
+    // On `<html>` rather than on the layer: the composer's copy of the
+    // wallpaper lives outside this element and reads the same properties.
+    const style = document.documentElement.style
+    style.setProperty('--ct-bg-light', colors.light)
+    style.setProperty('--ct-bg-dark', colors.dark)
+    style.setProperty('--ct-bg-opacity-light', String(opacity / 100))
+    style.setProperty('--ct-bg-opacity-dark', String(dark / 100))
+    style.setProperty('--ct-bg-blur', `${String(blur)}px`)
+    style.setProperty('--ct-bg-image', cssUrl(bg.url))
+    style.setProperty('--ct-bg-size', bg.fit === 'tile' ? 'auto auto' : bg.fit)
+    style.setProperty('--ct-bg-repeat', bg.fit === 'tile' ? 'repeat' : 'no-repeat')
+    style.setProperty('--ct-bg-wash-light', surfaceWash(colors.light, opacity))
+    style.setProperty('--ct-bg-wash-dark', surfaceWash(colors.dark, dark))
   }
 
   return { render, unmount, dispose: unmount }
