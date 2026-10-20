@@ -22,14 +22,12 @@
  * that anything is being covered. Content cards keep their own opaque surfaces
  * on top of the layer.
  */
-import { type ThemeBackgroundFit } from '../contract.js';
 /** What the input accepts and what the Host will store. */
 export declare const BACKGROUND_ACCEPT = "image/png,image/jpeg,image/webp,image/avif,image/gif";
 /** One background as the renderer needs it: where the bytes are, and how to paint them. */
 export type ResolvedBackground = {
     url: string;
     opacity: number;
-    fit: ThemeBackgroundFit;
     blur: number;
 };
 /** The two surface colours the image is composited over, per appearance. */
@@ -66,7 +64,6 @@ export declare function isSupportedImage(file: File): boolean;
 /** A fresh background's first settings: what a picker should start from. */
 export declare const DEFAULT_BACKGROUND: {
     opacity: number;
-    fit: "cover";
     blur: number;
 };
 //# sourceMappingURL=background.d.ts.map

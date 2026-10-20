@@ -10,7 +10,6 @@ import {
   THEME_ASSET_MAX_BYTES,
   themeAssetUrl,
   type ThemeBackground,
-  type ThemeBackgroundFit,
 } from '../contract.js'
 import { type PresetId, presetOptions } from './presets.js'
 import { type ThemeKey } from './locales.js'
@@ -23,7 +22,6 @@ import {
 import {
   BACKGROUND_ACCEPT,
   DEFAULT_BACKGROUND,
-  darkOpacity,
   isSupportedImage,
   prepareBackgroundImage,
   type ResolvedBackground,
@@ -685,7 +683,7 @@ export function ThemePanel(props: {
   const backgroundKey =
     editing === null
       ? ''
-      : `${editing.id ?? 'new'}|${editing.background?.asset ?? ''}|${String(editing.background?.opacity ?? '')}|${editing.background?.fit ?? ''}|${String(editing.background?.blur ?? '')}|${pendingImage?.url ?? ''}`
+      : `${editing.id ?? 'new'}|${editing.background?.asset ?? ''}|${String(editing.background?.opacity ?? '')}|${String(editing.background?.blur ?? '')}|${pendingImage?.url ?? ''}`
 
   React.useEffect(() => {
     if (!editing) {
@@ -711,7 +709,6 @@ export function ThemePanel(props: {
     onPreviewBackground({
       url,
       opacity: editing.background.opacity,
-      fit: editing.background.fit,
       blur: editing.background.blur,
     })
     // `backgroundKey` names every input of this effect.
@@ -1735,7 +1732,6 @@ export function ThemePanel(props: {
           'div',
           { className: 'ct-row-main' },
           React.createElement('div', { className: 'ct-row-title' }, t('background.title')),
-          React.createElement('div', { className: 'ct-row-desc' }, t('background.desc')),
         ),
       ),
       backgroundDraft
@@ -1774,28 +1770,6 @@ export function ThemePanel(props: {
               100,
               '%',
               (v) => updateBackground({ opacity: v }),
-            ),
-            React.createElement(
-              'div',
-              { className: 'ct-bg-note' },
-              t('background.darkHint').replace('{0}', String(darkOpacity(backgroundDraft.opacity))),
-            ),
-            React.createElement(
-              'div',
-              { className: 'ct-bg-field', key: 'bg-fit' },
-              React.createElement('div', { className: 'ct-bg-field-label' }, t('background.fit')),
-              React.createElement(SegmentedControl, {
-                id: 'ct-bg-fit',
-                value: backgroundDraft.fit,
-                options: [
-                  { value: 'cover', label: t('background.fit.cover') },
-                  { value: 'contain', label: t('background.fit.contain') },
-                  { value: 'tile', label: t('background.fit.tile') },
-                ],
-                onChange: (v: string) => updateBackground({ fit: v as ThemeBackgroundFit }),
-                label: t('background.fit'),
-                className: 'ct-bg-fit',
-              }),
             ),
             backgroundRange(
               'bg-blur',

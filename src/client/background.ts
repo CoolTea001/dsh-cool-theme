@@ -28,7 +28,6 @@ import {
   THEME_BACKGROUND_DEFAULT_OPACITY,
   THEME_BACKGROUND_MAX_BLUR,
   assetTypeOf,
-  type ThemeBackgroundFit,
 } from '../contract.js'
 
 /** What the input accepts and what the Host will store. */
@@ -38,7 +37,6 @@ export const BACKGROUND_ACCEPT = 'image/png,image/jpeg,image/webp,image/avif,ima
 export type ResolvedBackground = {
   url: string
   opacity: number
-  fit: ThemeBackgroundFit
   blur: number
 }
 
@@ -53,7 +51,7 @@ export type BackgroundSurfaceColors = { light: string; dark: string }
 export const BACKGROUND_CSS = [
   '.ct-bg{position:fixed;inset:0;z-index:-1;pointer-events:none;background-color:var(--ct-bg-light,#fff);}',
   'html[data-ds-dark-theme] .ct-bg,body[data-ds-dark-theme] .ct-bg{background-color:var(--ct-bg-dark,#151517);}',
-  '.ct-bg-image{position:absolute;inset:0;background-image:var(--ct-bg-image,none);background-position:center;background-repeat:var(--ct-bg-repeat,no-repeat);background-size:var(--ct-bg-size,cover);opacity:var(--ct-bg-opacity-light,0);filter:blur(var(--ct-bg-blur,0px));}',
+  '.ct-bg-image{position:absolute;inset:0;background-image:var(--ct-bg-image,none);background-position:center;background-repeat:no-repeat;background-size:cover;opacity:var(--ct-bg-opacity-light,0);filter:blur(var(--ct-bg-blur,0px));}',
   'html[data-ds-dark-theme] .ct-bg-image,body[data-ds-dark-theme] .ct-bg-image{opacity:var(--ct-bg-opacity-dark,0);}',
   // The canvas surfaces that clear for the layer. They are matched by class
   // substring because the hashed prefix (`_6Qf49G_centerCol`) rotates between
@@ -89,7 +87,7 @@ export const BACKGROUND_CSS = [
   // reproduces `.ct-bg`'s `colour + image at opacity` exactly. The top 36px is
   // masked, matching the fade the shell itself used to draw.
   'html.ct-bg-on [class*="centerCol"] [data-phase="active"] [data-composer-seat]{background:transparent !important;}',
-  'html.ct-bg-on [class*="centerCol"] [data-phase="active"] [data-composer-seat]::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background-image:linear-gradient(var(--ct-bg-wash,transparent),var(--ct-bg-wash,transparent)),var(--ct-bg-image,none);background-size:auto,var(--ct-bg-size,cover);background-position:center,center;background-repeat:no-repeat,var(--ct-bg-repeat,no-repeat);background-attachment:fixed,fixed;filter:blur(var(--ct-bg-blur,0px));-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 36px);mask-image:linear-gradient(180deg,transparent 0,#000 36px);}',
+  'html.ct-bg-on [class*="centerCol"] [data-phase="active"] [data-composer-seat]::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background-image:linear-gradient(var(--ct-bg-wash,transparent),var(--ct-bg-wash,transparent)),var(--ct-bg-image,none);background-size:auto,cover;background-position:center,center;background-repeat:no-repeat;background-attachment:fixed,fixed;filter:blur(var(--ct-bg-blur,0px));-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 36px);mask-image:linear-gradient(180deg,transparent 0,#000 36px);}',
   // The wash is the panel colour at the alpha the image leaves free; it has to
   // follow the appearance, exactly like the layer's own opacity does.
   'html{--ct-bg-wash:var(--ct-bg-wash-light,transparent);}',
@@ -106,8 +104,6 @@ const BACKGROUND_VARIABLES = [
   '--ct-bg-opacity-dark',
   '--ct-bg-blur',
   '--ct-bg-image',
-  '--ct-bg-size',
-  '--ct-bg-repeat',
   '--ct-bg-wash-light',
   '--ct-bg-wash-dark',
 ] as const
@@ -184,8 +180,6 @@ export function createBackgroundLayer() {
     style.setProperty('--ct-bg-opacity-dark', String(dark / 100))
     style.setProperty('--ct-bg-blur', `${String(blur)}px`)
     style.setProperty('--ct-bg-image', cssUrl(bg.url))
-    style.setProperty('--ct-bg-size', bg.fit === 'tile' ? 'auto auto' : bg.fit)
-    style.setProperty('--ct-bg-repeat', bg.fit === 'tile' ? 'repeat' : 'no-repeat')
     style.setProperty('--ct-bg-wash-light', surfaceWash(colors.light, opacity))
     style.setProperty('--ct-bg-wash-dark', surfaceWash(colors.dark, dark))
   }
@@ -263,6 +257,5 @@ export function isSupportedImage(file: File): boolean {
 /** A fresh background's first settings: what a picker should start from. */
 export const DEFAULT_BACKGROUND = {
   opacity: THEME_BACKGROUND_DEFAULT_OPACITY,
-  fit: 'cover' as const,
   blur: 0,
 }

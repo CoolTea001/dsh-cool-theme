@@ -43,9 +43,6 @@ export type ThemeDocument = {
     createdAt: string;
     updatedAt: string;
 };
-/** How a background image fills its layer. */
-export declare const THEME_BACKGROUND_FITS: readonly ["cover", "contain", "tile"];
-export type ThemeBackgroundFit = (typeof THEME_BACKGROUND_FITS)[number];
 /**
  * The background one saved custom theme may carry.
  *
@@ -64,7 +61,6 @@ export type ThemeBackground = {
      * never becomes transparent to reveal the image.
      */
     opacity: number;
-    fit: ThemeBackgroundFit;
     /** Softness in px; 0 keeps the image sharp, which is the default. */
     blur: number;
 };

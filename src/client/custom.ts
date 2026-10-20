@@ -493,7 +493,7 @@ export type SavedTheme = {
  */
 export function sameBackground(a: ThemeBackground | null, b: ThemeBackground | null): boolean {
   if (a === null || b === null) return a === b
-  return a.asset === b.asset && a.opacity === b.opacity && a.fit === b.fit && a.blur === b.blur
+  return a.asset === b.asset && a.opacity === b.opacity && a.blur === b.blur
 }
 
 /** Collision-resistant enough for a local list, and stable across reloads. */

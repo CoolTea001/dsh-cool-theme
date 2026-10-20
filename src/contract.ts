@@ -78,10 +78,6 @@ export type ThemeDocument = {
 // Theme background
 // ---------------------------------------------------------------------------
 
-/** How a background image fills its layer. */
-export const THEME_BACKGROUND_FITS = ['cover', 'contain', 'tile'] as const
-export type ThemeBackgroundFit = (typeof THEME_BACKGROUND_FITS)[number]
-
 /**
  * The background one saved custom theme may carry.
  *
@@ -100,7 +96,6 @@ export type ThemeBackground = {
    * never becomes transparent to reveal the image.
    */
   opacity: number
-  fit: ThemeBackgroundFit
   /** Softness in px; 0 keeps the image sharp, which is the default. */
   blur: number
 }
@@ -167,13 +162,9 @@ export function normalizeBackground(raw: unknown): ThemeBackground | null {
   // malformed document into an invisible image instead of the default.
   const opacity = typeof value.opacity === 'number' ? value.opacity : Number.NaN
   const blur = typeof value.blur === 'number' ? value.blur : Number.NaN
-  const fit = THEME_BACKGROUND_FITS.includes(value.fit as ThemeBackgroundFit)
-    ? (value.fit as ThemeBackgroundFit)
-    : 'cover'
   return {
     asset: value.asset,
     opacity: Number.isFinite(opacity) ? Math.max(0, Math.min(100, Math.round(opacity))) : THEME_BACKGROUND_DEFAULT_OPACITY,
-    fit,
     blur: Number.isFinite(blur) ? Math.max(0, Math.min(THEME_BACKGROUND_MAX_BLUR, Math.round(blur))) : 0,
   }
 }

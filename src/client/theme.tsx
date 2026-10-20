@@ -200,8 +200,6 @@ const BASE_CSS = [
   '.ct-bg-value{flex:none;width:44px;text-align:right;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums;}',
   // Aligned under the track, not under the label: 96px label + 16px gap + the
   // label's own 3px lead-in.
-  '.ct-bg-note{padding-left:115px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);}',
-  '.ct-bg-fit{flex:1 1 auto;min-width:0;}',
   // The shell's control package has no slider, so the two background sliders are
   // a plain range input wearing the theme's own track, thumb and focus ring.
   '.ct-range{flex:1 1 auto;min-width:0;height:20px;margin:0;padding:0;appearance:none;-webkit-appearance:none;background:transparent;cursor:pointer;}',
@@ -429,7 +427,6 @@ export function registerTheme(ctx: any) {
     return {
       url: themeAssetUrl(id, background.asset),
       opacity: background.opacity,
-      fit: background.fit,
       blur: background.blur,
     }
   }
@@ -530,7 +527,7 @@ export function registerTheme(ctx: any) {
    * Preview a background while the editor is open, or clear the preview when it
    * closes. `undefined` means "no preview, show the committed background";
    * `null` means "the open draft has no background", which must hide the
-   * committed one too. A change that only moves opacity, fit or blur repaints
+   * committed one too. A change that only moves opacity or blur repaints
    * the layer alone; one that turns the layer on or off also has to add or
    * remove the transparent tokens, so that case goes through the coalesced
    * palette rebuild.
