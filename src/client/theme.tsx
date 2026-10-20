@@ -55,7 +55,7 @@ const BASE_CSS = [
   '.ct-row:last-child{border-bottom:none;}',
   '.ct-row-flush{border-bottom:none;}',
   '.ct-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding-right:48px;}',
-  '.ct-row-title{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:400;line-height:22px;}',
+  '.ct-row-title{padding-left:3px;color:var(--dsw-alias-label-primary);font-size:14px;font-weight:400;line-height:22px;}',
   '.ct-row-desc{color:var(--dsw-alias-label-tertiary);font-size:12px;font-weight:400;line-height:18px;}',
   // Colour editor: one row per group, its name on the left and every seed's
   // round swatch on the right. A swatch is a plain button — it paints the seed
@@ -188,7 +188,7 @@ const BASE_CSS = [
   // buttons, segmented control and tooltip are the shell's. No hairline above
   // it — the spacing alone separates it from the rows, and a rule there only cut
   // the card in two.
-  '.ct-bg-section{margin-top:4px;padding-top:12px;display:flex;flex-direction:column;gap:8px;}',
+  '.ct-bg-section{padding-top:12px;display:flex;flex-direction:column;gap:8px;}',
   '.ct-bg-head{display:flex;align-items:center;}',
   '.ct-bg-body{display:flex;align-items:center;gap:16px;}',
   '.ct-bg-controls{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px;}',

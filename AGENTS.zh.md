@@ -1,10 +1,12 @@
 # AGENTS.zh.md
 
-## commit message 生成规则
+## commit & push 规则
 
-1. commit message 使用英文生成，内容保持简洁。
-2. commit 前检查是否包含临时文件、大文件、敏感内容（密钥、token、.env）。
-3. commit message 需要添加 feat | refactor | fix | chore 等标识。
+1. 未经允许，禁止主动执行 git commit 和 git push
+
+## README 规则
+
+1. 未经允许，禁止主动更新 README（`README.md` / `README.zh.md`）。
 
 ## 文档语言
 
