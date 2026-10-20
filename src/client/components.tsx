@@ -1756,6 +1756,51 @@ export function ThemePanel(props: {
         }),
       )
 
+    // The head's action group. The image's commands are text links rather than
+    // buttons, so the section title stays the strongest thing in the row, and
+    // the switch is its fixed last item: whatever the state, the section always
+    // shows one.
+    const backgroundActions: React.ReactNode[] = []
+    if (backgroundDraft === null) {
+      backgroundActions.push(
+        React.createElement(
+          'button',
+          { key: 'add', type: 'button', className: 'ct-bg-link', onClick: startBackgroundPick },
+          t('background.add'),
+        ),
+      )
+    } else if (backgroundDraft.enabled) {
+      // Off hides every command but the switch: with nothing painted there is
+      // nothing to replace, remove or tune until the image comes back on.
+      backgroundActions.push(
+        React.createElement(
+          'button',
+          { key: 'replace', type: 'button', className: 'ct-bg-link', onClick: startBackgroundPick },
+          t('background.replace'),
+        ),
+        React.createElement(
+          'button',
+          { key: 'remove', type: 'button', className: 'ct-bg-link', onClick: removeBackground },
+          t('background.remove'),
+        ),
+      )
+    }
+    backgroundActions.push(
+      // Also the reason "remove" is not the only way out of a wallpaper: off
+      // keeps the file and the settings, so the theme can go back to plain
+      // surfaces without losing the image it was set up with. A theme with no
+      // image at all is simply the same switch in its off state, waiting until
+      // there is something to turn on.
+      React.createElement(Switch, {
+        key: 'enabled',
+        className: 'ct-bg-switch',
+        checked: backgroundDraft?.enabled ?? false,
+        disabled: backgroundDraft === null,
+        label: t('background.title'),
+        onChange: (on: boolean) => updateBackground({ enabled: on }),
+      }),
+    )
+
     // The wallpaper controls belong to the custom editor: a preset has no
     // document of its own to carry one, and the panel only shows this card
     // inside custom mode.
@@ -1770,43 +1815,11 @@ export function ThemePanel(props: {
           { className: 'ct-row-main' },
           React.createElement('div', { className: 'ct-row-title' }, t('background.title')),
         ),
-        // The one place the wallpaper is picked or dropped. `ghost` keeps them
-        // plain text beside the title, so the image below stays the subject.
-        React.createElement(
-          'div',
-          { className: 'ct-bg-actions' },
-          backgroundDraft
-            ? [
-                React.createElement(
-                  Button,
-                  { key: 'replace', variant: 'ghost', size: 'sm', onClick: startBackgroundPick },
-                  t('background.replace'),
-                ),
-                React.createElement(
-                  Button,
-                  { key: 'remove', variant: 'ghost', size: 'sm', onClick: removeBackground },
-                  t('background.remove'),
-                ),
-                // The image's own switch, and the reason "remove" is not the
-                // only way out of one: off keeps the file and the settings, so
-                // the theme can go back to plain surfaces without losing the
-                // wallpaper it was set up with.
-                React.createElement(Switch, {
-                  key: 'enabled',
-                  className: 'ct-bg-switch',
-                  checked: backgroundDraft.enabled,
-                  label: t('background.title'),
-                  onChange: (on: boolean) => updateBackground({ enabled: on }),
-                }),
-              ]
-            : React.createElement(
-                Button,
-                { variant: 'ghost', size: 'sm', onClick: startBackgroundPick },
-                t('background.add'),
-              ),
-        ),
+        React.createElement('div', { className: 'ct-bg-actions' }, backgroundActions),
       ),
-      backgroundDraft
+      // The thumbnail and both sliders describe the image that is painted, so
+      // they belong to the on state with it.
+      backgroundDraft?.enabled
         ? React.createElement(
             'div',
             { className: 'ct-bg-body' },

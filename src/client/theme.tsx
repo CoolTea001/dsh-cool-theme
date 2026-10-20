@@ -195,11 +195,17 @@ const BASE_CSS = [
   // The thumbnail is the picked file's own object URL before Save, and the
   // stored asset after it, so the same face answers both states.
   '.ct-bg-thumb{width:88px;height:56px;flex:none;border:1px solid var(--dsw-alias-border-l3);border-radius:10px;background-color:var(--dsw-alias-bg-module-platform);background-size:cover;background-position:center;}',
-  '.ct-bg-actions{display:flex;align-items:center;gap:4px;margin-left:auto;}',
-  // The switch closes that group and is its only control that is not a ghost
-  // button: the group's own 4px gap is the icon-button rhythm, and a bare track
-  // against a text button reads as cramped.
-  '.ct-bg-switch{margin-left:8px;}',
+  '.ct-bg-actions{display:flex;align-items:center;gap:8px;margin-left:auto;}',
+  // The image's own commands are links, not buttons: DSH's link idiom, which is
+  // the accent at rest and a dotted underline once hovered or focused, so the
+  // section title stays the loudest thing in the row. The accent token is also
+  // the one the plugin re-hues for a custom theme, so a link never falls back to
+  // DSH's blue in a theme built around another colour.
+  '.ct-bg-link{box-sizing:border-box;display:inline-flex;align-items:center;height:28px;padding:0 2px;border:none;border-radius:4px;background:transparent;color:var(--dsw-alias-brand-primary);cursor:pointer;font:inherit;font-size:12px;line-height:18px;white-space:nowrap;text-decoration:none;}',
+  '.ct-bg-link:hover,.ct-bg-link:focus-visible{outline:none;text-decoration:underline dotted;text-underline-offset:3px;}',
+  // The switch closes that group and is its only control that is not a link: a
+  // bare track against two words needs the extra room the group's own gap lacks.
+  '.ct-bg-switch{margin-left:4px;}',
   '.ct-bg-field{display:flex;align-items:center;gap:16px;}',
   '.ct-bg-field-label{flex:0 0 auto;min-width:108px;padding-left:3px;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);white-space:nowrap;font-variant-numeric:tabular-nums;}',
   // Aligned under the track, not under the label: 96px label + 16px gap + the
