@@ -194,7 +194,7 @@ const BASE_CSS = [
   // The thumbnail is the picked file's own object URL before Save, and the
   // stored asset after it, so the same face answers both states.
   '.ct-bg-thumb{width:88px;height:56px;flex:none;border:1px solid var(--dsw-alias-border-l3);border-radius:10px;background-color:var(--dsw-alias-bg-module-platform);background-size:cover;background-position:center;}',
-  '.ct-bg-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}',
+  '.ct-bg-actions{display:flex;align-items:center;gap:4px;margin-left:auto;}',
   '.ct-bg-field{display:flex;align-items:center;gap:16px;}',
   '.ct-bg-field-label{flex:0 0 auto;min-width:96px;padding-left:3px;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);}',
   '.ct-bg-value{flex:none;width:44px;text-align:right;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums;}',

@@ -1733,6 +1733,30 @@ export function ThemePanel(props: {
           { className: 'ct-row-main' },
           React.createElement('div', { className: 'ct-row-title' }, t('background.title')),
         ),
+        // The one place the wallpaper is picked or dropped. `ghost` keeps them
+        // plain text beside the title, so the image below stays the subject.
+        React.createElement(
+          'div',
+          { className: 'ct-bg-actions' },
+          backgroundDraft
+            ? [
+                React.createElement(
+                  Button,
+                  { key: 'replace', variant: 'ghost', size: 'sm', onClick: startBackgroundPick },
+                  t('background.replace'),
+                ),
+                React.createElement(
+                  Button,
+                  { key: 'remove', variant: 'ghost', size: 'sm', onClick: removeBackground },
+                  t('background.remove'),
+                ),
+              ]
+            : React.createElement(
+                Button,
+                { variant: 'ghost', size: 'sm', onClick: startBackgroundPick },
+                t('background.add'),
+              ),
+        ),
       ),
       backgroundDraft
         ? React.createElement(
@@ -1748,20 +1772,6 @@ export function ThemePanel(props: {
                   ? { backgroundImage: `url("${backgroundPreviewUrl}")` }
                   : undefined,
               }),
-              React.createElement(
-                'div',
-                { className: 'ct-bg-actions' },
-                React.createElement(
-                  Button,
-                  { variant: 'outline', size: 'sm', onClick: startBackgroundPick },
-                  t('background.replace'),
-                ),
-                React.createElement(
-                  Button,
-                  { variant: 'ghost', size: 'sm', onClick: removeBackground },
-                  t('background.remove'),
-                ),
-              ),
             ),
             backgroundRange(
               'bg-opacity',
@@ -1780,12 +1790,7 @@ export function ThemePanel(props: {
               (v) => updateBackground({ blur: v }),
             ),
           )
-        : React.createElement(
-            'button',
-            { type: 'button', className: 'ct-add-btn', onClick: startBackgroundPick },
-            React.createElement(IconPlus, { size: ICON_SIZE }),
-            t('background.add'),
-          ),
+        : null,
       React.createElement('input', {
         ref: backgroundInputRef,
         type: 'file',
