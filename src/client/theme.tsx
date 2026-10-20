@@ -298,8 +298,11 @@ export function registerTheme(ctx: any) {
   // (`_6Qf49G_sidebarCol`) rotates between builds; `sidebarCollapsed` contains
   // the same substring, so it is excluded rather than painted opaque with the
   // column.
+  // `:not(.ct-bg-on)` keeps this rule inert while a wallpaper is mounted, so a
+  // custom theme's background always wins over the switch without needing to
+  // out-specify this `!important` declaration.
   const SIDEBAR_OPAQUE_CSS =
-    'html[data-platform="darwin"] [class*="sidebarCol"]:not([class*="sidebarCollapsed"]){background:var(--dsw-specific-sidebar-fill) !important;}'
+    'html[data-platform="darwin"]:not(.ct-bg-on) [class*="sidebarCol"]:not([class*="sidebarCollapsed"]){background:var(--dsw-specific-sidebar-fill) !important;}'
   let sidebarOpaqueDisposer: (() => void) | null = null
 
   /**
@@ -375,9 +378,10 @@ export function registerTheme(ctx: any) {
    * repaints before the new layer lands — twice the DOM work and a visible
    * flash per change, which is exactly what a dragged colour slider produces.
    *
-   * A custom theme that carries a background is the one case that also makes
-   * the two canvas tokens transparent: the picture lives in a layer below the
-   * shell, and an opaque surface would hide it.
+   * A custom theme that carries a background needs nothing extra here: the
+   * canvas is cleared by `BACKGROUND_CSS` while the layer is mounted, and the
+   * tokens themselves stay opaque so every overlay that has to occlude
+   * scrolling content keeps working.
    */
   function apply(src: Selection | PresetDef) {
     lastApplied = src
@@ -397,8 +401,7 @@ export function registerTheme(ctx: any) {
     }
     ensureBaseline(true)
     renderBackground(bg)
-    const options = { transparentBase: bg !== null }
-    const overrides = buildOverrides(target, options)
+    const overrides = buildOverrides(target)
     if (theme?.overrideTokens) {
       try {
         overrideDispose = theme.overrideTokens('dsh-cool-theme', overrides)
@@ -409,7 +412,7 @@ export function registerTheme(ctx: any) {
     }
     overrideDispose = release(overrideDispose)
     fallbackDispose = release(fallbackDispose)
-    fallbackDispose = injector.insert(buildFullCssFallback(target, options))
+    fallbackDispose = injector.insert(buildFullCssFallback(target))
   }
 
   /**

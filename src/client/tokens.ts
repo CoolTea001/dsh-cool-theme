@@ -27,49 +27,23 @@ export function resolvePreset(src: PresetId | PresetDef) {
   }
 }
 
-/** Options a palette can be published with. */
-export type OverrideOptions = {
-  /**
-   * Make the two canvas tokens (`bg-base` and the sidebar fill) transparent so
-   * the background layer below them shows through. Only a custom theme that
-   * carries a background asks for this; presets and plain custom themes keep
-   * the shell's opaque surfaces.
-   */
-  transparentBase?: boolean
-}
-
-/** The two tokens a background has to clear for its layer to be visible. */
-const TRANSPARENT_BASE = {
-  '--dsw-alias-bg-base': { light: 'transparent', dark: 'transparent' },
-  '--dsw-specific-sidebar-fill': { light: 'transparent', dark: 'transparent' },
-}
-
 /**
  * Every token a theme publishes, in one layer: the primitive ramps it retints,
  * plus the alias tokens that move DSH's interactive components onto the theme's
  * accent (see css/accents.ts). The accent goes last so it wins over any alias a
  * custom theme's own map happens to carry.
  */
-export function buildOverrides(
-  src: PresetId | PresetDef,
-  options?: OverrideOptions,
-): Record<string, { light: string; dark: string }> {
+export function buildOverrides(src: PresetId | PresetDef): Record<string, { light: string; dark: string }> {
   const resolved = resolvePreset(src)
   if (!resolved) return {}
-  const overrides = {
+  return {
     ...primitiveOverrides(resolved.light, resolved.dark),
     ...accentOverrides(resolved.light, resolved.dark),
   }
-  return options?.transparentBase ? { ...overrides, ...TRANSPARENT_BASE } : overrides
 }
 
-export function buildFullCssFallback(src: PresetId | PresetDef, options?: OverrideOptions): string {
+export function buildFullCssFallback(src: PresetId | PresetDef): string {
   const resolved = resolvePreset(src)
   if (!resolved) return ''
-  const css = `${buildPrimitivesCss(resolved.light, resolved.dark)}\n\n${buildAccentCss(resolved.light, resolved.dark)}`
-  if (!options?.transparentBase) return css
-  // The fallback exists for hosts without `overrideTokens`; publishing the same
-  // two transparent tokens there is what keeps a background visible. `body`
-  // carries them because that is where the shell's own presenter writes tokens.
-  return `${css}\n\nbody{--dsw-alias-bg-base:transparent !important;--dsw-specific-sidebar-fill:transparent !important;}`
+  return `${buildPrimitivesCss(resolved.light, resolved.dark)}\n\n${buildAccentCss(resolved.light, resolved.dark)}`
 }

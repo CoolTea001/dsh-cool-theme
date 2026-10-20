@@ -2,15 +2,19 @@
  * The wallpaper layer behind the app.
  *
  * The theme's own surface colour is painted by this layer, not by the shell's
- * tokens: while a background is on, `--dsw-alias-bg-base` and the sidebar fill
- * are overridden to transparent (see `tokens.ts`), which lets both columns show
- * this one layer. The image sits *on top of* that colour at its own opacity, so
- * lowering the opacity reveals the panel colour — the panel never becomes
- * transparent to reveal the image.
+ * tokens: the image sits *on top of* that colour at its own opacity, so lowering
+ * the opacity reveals the panel colour — the panel never becomes transparent to
+ * reveal the image.
  *
  * One fixed layer spans the whole window, so the sidebar and the main canvas
- * always share the same image and the same alignment. Content cards keep their
- * own opaque surfaces on top of it.
+ * always share the same image and the same alignment. Only the two canvas
+ * surfaces are cleared (`BACKGROUND_CSS`): the shell's background tokens stay
+ * opaque, because the composer's fade, sticky code-block banners and table
+ * headers paint themselves with those same tokens to occlude what scrolls under
+ * them. Making the tokens transparent is what let scrolled text show through
+ * the composer.
+ *
+ * Content cards keep their own opaque surfaces on top of the layer.
  */
 
 import {
@@ -45,6 +49,20 @@ export const BACKGROUND_CSS = [
   'html[data-ds-dark-theme] .ct-bg,body[data-ds-dark-theme] .ct-bg{background-color:var(--ct-bg-dark,#151517);}',
   '.ct-bg-image{position:absolute;inset:0;background-position:center;background-repeat:no-repeat;opacity:var(--ct-bg-opacity-light,0);filter:blur(var(--ct-bg-blur,0px));transform:scale(1.03);}',
   'html[data-ds-dark-theme] .ct-bg-image,body[data-ds-dark-theme] .ct-bg-image{opacity:var(--ct-bg-opacity-dark,0);}',
+  // The canvas surfaces that clear for the layer. They are matched by class
+  // substring because the hashed prefix (`_6Qf49G_centerCol`) rotates between
+  // builds; the conversation root has a stable `data-phase` attribute instead.
+  // `centerCol` and `sidebarCol` are the only layout classes carrying these
+  // names, and the desktop frame patch is limited to non-darwin, where macOS
+  // already leaves the frame transparent.
+  'html.ct-bg-on [data-phase]{background:transparent !important;}',
+  'html.ct-bg-on [class*="centerCol"]{background:transparent !important;}',
+  // The sidebar column and its own root both paint with the sidebar fill, so
+  // the token is cleared on the column and inherited by everything under it.
+  'html.ct-bg-on body [class*="sidebarCol"]{--dsw-specific-sidebar-fill:transparent;background:transparent !important;}',
+  // The drawer's own opaque frame, which the sidebar setting would otherwise
+  // keep painting over the layer on Windows and Linux.
+  'html:not([data-platform="darwin"]).ct-bg-on #root > [class*="frame"]{background:transparent !important;}',
 ].join('\n')
 
 const clampOpacity = (value: number) => Math.max(0, Math.min(100, Math.round(value)))
@@ -75,12 +93,16 @@ export function createBackgroundLayer() {
     // Prepended, and at z-index -1: the layer sits above the document canvas
     // but below every in-flow column, so no class hash is involved.
     document.body.prepend(layer)
+    // `BACKGROUND_CSS` clears the canvas only while this class is present, so
+    // removing the wallpaper hands the shell its own opaque surfaces back.
+    document.documentElement.classList.add('ct-bg-on')
   }
 
   function unmount(): void {
     layer?.remove()
     layer = null
     image = null
+    if (typeof document !== 'undefined') document.documentElement.classList.remove('ct-bg-on')
   }
 
   /**

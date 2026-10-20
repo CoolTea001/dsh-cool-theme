@@ -2,15 +2,19 @@
  * The wallpaper layer behind the app.
  *
  * The theme's own surface colour is painted by this layer, not by the shell's
- * tokens: while a background is on, `--dsw-alias-bg-base` and the sidebar fill
- * are overridden to transparent (see `tokens.ts`), which lets both columns show
- * this one layer. The image sits *on top of* that colour at its own opacity, so
- * lowering the opacity reveals the panel colour — the panel never becomes
- * transparent to reveal the image.
+ * tokens: the image sits *on top of* that colour at its own opacity, so lowering
+ * the opacity reveals the panel colour — the panel never becomes transparent to
+ * reveal the image.
  *
  * One fixed layer spans the whole window, so the sidebar and the main canvas
- * always share the same image and the same alignment. Content cards keep their
- * own opaque surfaces on top of it.
+ * always share the same image and the same alignment. Only the two canvas
+ * surfaces are cleared (`BACKGROUND_CSS`): the shell's background tokens stay
+ * opaque, because the composer's fade, sticky code-block banners and table
+ * headers paint themselves with those same tokens to occlude what scrolls under
+ * them. Making the tokens transparent is what let scrolled text show through
+ * the composer.
+ *
+ * Content cards keep their own opaque surfaces on top of the layer.
  */
 import { type ThemeBackgroundFit } from '../contract.js';
 /** What the input accepts and what the Host will store. */
