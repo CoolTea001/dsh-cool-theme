@@ -2,8 +2,10 @@
  * Theme settings UI: scheme selector, preset picker, and the custom colour editor.
  */
 import * as React from 'react';
+import { type ThemeBackground } from '../contract.js';
 import { type PresetId } from './presets.js';
 import { type ThemeKey } from './locales.js';
+import { type ResolvedBackground } from './background.js';
 import { type CustomTheme, type SavedTheme } from './custom.js';
 /** Reserved menu value that switches to the user-defined theme. */
 export declare const CUSTOM_SELECTION = "custom";
@@ -24,6 +26,12 @@ export declare function ThemePanel(props: {
     /** Whether the sidebar keeps DSH's native translucency (darwin only). */
     getSidebarTransparent: () => boolean;
     setSidebarTransparent: (on: boolean) => void;
+    /**
+     * Paint the draft's wallpaper on the page while its card is open. `undefined`
+     * restores the committed background of the active entry; `null` says the open
+     * draft deliberately has none and the committed one must stay hidden.
+     */
+    onPreviewBackground: (background: ResolvedBackground | null | undefined) => void;
     saved: {
         /** Cached roster; empty until `refresh` resolves. */
         list: () => SavedTheme[];
@@ -33,10 +41,10 @@ export declare function ThemePanel(props: {
         setActive: (id: string | null) => void;
         /** Re-read the roster from the Host, migrating the legacy browser list once. */
         refresh: () => Promise<SavedTheme[]>;
-        /** Persist the current draft as a new named entry and make it active. */
-        create: (name: string) => Promise<SavedTheme[]>;
+        /** Persist a new entry (with its pre-minted id) and make it active. */
+        create: (id: string, name: string, background: ThemeBackground | null) => Promise<SavedTheme[]>;
         /** Write the current draft (and name) back to an existing entry. */
-        update: (id: string, name: string) => Promise<SavedTheme[]>;
+        update: (id: string, name: string, background: ThemeBackground | null) => Promise<SavedTheme[]>;
         remove: (id: string) => Promise<SavedTheme[]>;
     };
     t: (key: ThemeKey) => string;

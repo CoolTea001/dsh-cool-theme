@@ -20,7 +20,8 @@
 import type { StaticMap } from './css/primitives.js'
 import { PRIMITIVES_LIGHT, PRIMITIVES_DARK } from './css/primitives.js'
 import type { PresetDef } from './presets.js'
-import type { ThemeAsset } from '../contract.js'
+import type { ThemeAsset, ThemeBackground } from '../contract.js'
+import { normalizeBackground } from '../contract.js'
 import { buildScale, BLUISH_STEPS, NEUTRAL_STEPS, buildSemanticScales } from './presets/_helpers.js'
 
 export type { PresetDef }
@@ -476,10 +477,23 @@ export type SavedTheme = {
   base: string
   theme: CustomTheme
   /**
-   * Media stored beside the seeds. Empty until themes carry a background, but
-   * always carried through a rewrite so a later edit cannot drop one.
+   * Media stored beside the seeds. Only the background image uses it today, but
+   * the list is carried through every rewrite so a later media user cannot drop
+   * a file the theme still references.
    */
   assets: ThemeAsset[]
+  /** The wallpaper this theme carries, or null when it has none. */
+  background: ThemeBackground | null
+}
+
+/**
+ * Structural equality of two backgrounds, for the editor's dirty comparison.
+ * A pending upload is tracked separately by the panel; this compares only what
+ * would be written to the document.
+ */
+export function sameBackground(a: ThemeBackground | null, b: ThemeBackground | null): boolean {
+  if (a === null || b === null) return a === b
+  return a.asset === b.asset && a.opacity === b.opacity && a.fit === b.fit && a.blur === b.blur
 }
 
 /** Collision-resistant enough for a local list, and stable across reloads. */
@@ -516,6 +530,7 @@ export function decodeList(
         base,
         theme: normalizeCustom(e.theme, fallbackFor(base)),
         assets: Array.isArray(e.assets) ? e.assets : [],
+        background: normalizeBackground(e.background),
       })
     }
     return out

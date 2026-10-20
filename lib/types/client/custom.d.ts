@@ -17,7 +17,7 @@
  *   shiki    9 syntax tokens
  */
 import type { PresetDef } from './presets.js';
-import type { ThemeAsset } from '../contract.js';
+import type { ThemeAsset, ThemeBackground } from '../contract.js';
 export type { PresetDef };
 export type Mode = 'light' | 'dark';
 /** One seed colour per appearance. */
@@ -158,11 +158,20 @@ export type SavedTheme = {
     base: string;
     theme: CustomTheme;
     /**
-     * Media stored beside the seeds. Empty until themes carry a background, but
-     * always carried through a rewrite so a later edit cannot drop one.
+     * Media stored beside the seeds. Only the background image uses it today, but
+     * the list is carried through every rewrite so a later media user cannot drop
+     * a file the theme still references.
      */
     assets: ThemeAsset[];
+    /** The wallpaper this theme carries, or null when it has none. */
+    background: ThemeBackground | null;
 };
+/**
+ * Structural equality of two backgrounds, for the editor's dirty comparison.
+ * A pending upload is tracked separately by the panel; this compares only what
+ * would be written to the document.
+ */
+export declare function sameBackground(a: ThemeBackground | null, b: ThemeBackground | null): boolean;
 /** Collision-resistant enough for a local list, and stable across reloads. */
 export declare function newThemeId(): string;
 export declare function encodeList(list: SavedTheme[]): string;

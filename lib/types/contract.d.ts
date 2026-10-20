@@ -38,15 +38,80 @@ export type ThemeDocument = {
     base: string;
     theme: unknown;
     assets: ThemeAsset[];
+    /** The wallpaper this custom theme carries; null for a theme without one. */
+    background: ThemeBackground | null;
     createdAt: string;
     updatedAt: string;
 };
+/** How a background image fills its layer. */
+export declare const THEME_BACKGROUND_FITS: readonly ["cover", "contain", "tile"];
+export type ThemeBackgroundFit = (typeof THEME_BACKGROUND_FITS)[number];
+/**
+ * The background one saved custom theme may carry.
+ *
+ * It lives in the theme document rather than in a browser preference, so a
+ * theme's wallpaper follows the theme through an export, an import and a Host
+ * restart — the same reason the colours live in files. Preset themes never
+ * carry one: a preset is a palette, and only a custom theme is the user's own
+ * document to extend.
+ */
+export type ThemeBackground = {
+    /** File name inside the theme's own `assets/` directory. */
+    asset: string;
+    /**
+     * The image's own opacity, 0–100. The theme's surface colour sits *under*
+     * the image, so lowering this lets that colour show through — the panel
+     * never becomes transparent to reveal the image.
+     */
+    opacity: number;
+    fit: ThemeBackgroundFit;
+    /** Softness in px; 0 keeps the image sharp, which is the default. */
+    blur: number;
+};
+/** Where a fresh background starts: visible enough to read, calm enough for text. */
+export declare const THEME_BACKGROUND_DEFAULT_OPACITY = 40;
+/**
+ * Dark mode dims the image by multiplying the light-mode opacity. A bright
+ * wallpaper over a dark palette is otherwise far harsher than the same image
+ * over the light one, and the panel colour has to win more of the mix.
+ */
+export declare const THEME_BACKGROUND_DARK_FACTOR = 0.7;
+export declare const THEME_BACKGROUND_MAX_BLUR = 24;
+/**
+ * Bytes one uploaded image may occupy. It matches a single archive entry's
+ * uncompressed cap on purpose: an image the roster accepts must also survive
+ * an export, or sharing a theme would fail only after the fact.
+ */
+export declare const THEME_ASSET_MAX_BYTES: number;
+/**
+ * Accepted media extensions and the type each is served with. Shared by the
+ * upload route, the archive reader/writer and the asset directory scanner, so
+ * one table answers "what may a theme carry" everywhere.
+ */
+export declare const THEME_ASSET_TYPES: Record<string, {
+    kind: ThemeAssetKind;
+    mime: string;
+}>;
+/** The type of a file name, or null when a theme may not carry it. */
+export declare function assetTypeOf(name: string): {
+    kind: ThemeAssetKind;
+    mime: string;
+} | null;
+export declare function isThemeAssetName(value: unknown): value is string;
+/** Fold any stored or posted background into this build's shape, or drop it. */
+export declare function normalizeBackground(raw: unknown): ThemeBackground | null;
 /**
  * The Host's theme-file API, all below one prefix route. Kept here so the two
  * halves cannot drift on a path.
  */
 export declare const THEME_API_PREFIX = "/cool-theme/api";
 export declare const THEME_API_PATH_THEMES = "/cool-theme/api/themes";
+/** Route segment below a theme id that holds its media. */
+export declare const THEME_API_SEGMENT_ASSETS = "assets";
+/** Upload and list URL of one theme's media directory. */
+export declare function themeAssetsPath(id: string): string;
+/** Read URL of one stored asset. The name is content-hashed, so it is cacheable. */
+export declare function themeAssetUrl(id: string, name: string): string;
 /**
  * Share archive: one theme directory zipped. The document keeps the name it has
  * on disk, so an archive is a copy of the directory rather than a new format,

@@ -7,6 +7,8 @@ import {
   CUSTOM_ACTIVE_STORAGE_KEY,
   CUSTOM_MIGRATED_STORAGE_KEY,
   SIDEBAR_TRANSPARENT_STORAGE_KEY,
+  themeAssetUrl,
+  type ThemeBackground,
 } from '../contract.js'
 import { PRESETS, NOOP_PRESET_IDS, type PresetId, type PresetDef } from './presets.js'
 import { buildBaseCss, buildOverrides, buildFullCssFallback } from './tokens.js'
@@ -19,10 +21,14 @@ import {
   encodeCustom,
   decodeList,
   extractSeeds,
-  newThemeId,
   normalizeCustom,
   parseEnvelope,
 } from './custom.js'
+import {
+  BACKGROUND_CSS,
+  createBackgroundLayer,
+  type ResolvedBackground,
+} from './background.js'
 import { THEME_NAV_MARKUP } from './icons.js'
 import {
   fetchThemes,
@@ -177,6 +183,32 @@ const BASE_CSS = [
   // `.outline` rule whatever order the two stylesheets are inserted in, and
   // rebinding the hover token on the element is DSH's own delete-button recipe.
   'button.ct-danger{color:var(--dsw-alias-state-error-primary);border-color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent);--dsw-alias-interactive-bg-hover:color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent);}',
+  // --- background image section (inside the custom editor) -----------------
+  // It sits below the colour rows, separated by the same hairline the row list
+  // uses, and owns only its own controls: the switch, buttons, segmented control
+  // and tooltip are the shell's.
+  '.ct-bg-section{margin-top:4px;padding-top:12px;border-top:1px solid var(--dsw-alias-border-l2);display:flex;flex-direction:column;gap:8px;}',
+  '.ct-bg-head{display:flex;align-items:center;}',
+  '.ct-bg-body{display:flex;flex-direction:column;gap:6px;}',
+  '.ct-bg-preview{display:flex;align-items:center;gap:12px;padding:2px 0 6px;}',
+  // The thumbnail is the picked file's own object URL before Save, and the
+  // stored asset after it, so the same face answers both states.
+  '.ct-bg-thumb{width:88px;height:56px;flex:none;border:1px solid var(--dsw-alias-border-l3);border-radius:10px;background-color:var(--dsw-alias-bg-module-platform);background-size:cover;background-position:center;}',
+  '.ct-bg-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}',
+  '.ct-bg-field{display:flex;align-items:center;gap:16px;}',
+  '.ct-bg-field-label{flex:0 0 auto;min-width:96px;padding-left:3px;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);}',
+  '.ct-bg-value{flex:none;width:44px;text-align:right;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums;}',
+  // Aligned under the track, not under the label: 96px label + 16px gap + the
+  // label's own 3px lead-in.
+  '.ct-bg-note{padding-left:115px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);}',
+  '.ct-bg-fit{flex:1 1 auto;min-width:0;}',
+  // The shell's control package has no slider, so the two background sliders are
+  // a plain range input wearing the theme's own track, thumb and focus ring.
+  '.ct-range{flex:1 1 auto;min-width:0;height:20px;margin:0;padding:0;appearance:none;-webkit-appearance:none;background:transparent;cursor:pointer;}',
+  '.ct-range::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:var(--dsw-alias-border-l3);}',
+  '.ct-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;margin-top:-5px;border:none;border-radius:50%;background:var(--dsw-alias-brand-primary);box-shadow:0 0 0 1px var(--dsw-alias-bg-layer-2);}',
+  '.ct-range:focus-visible{outline:none;}',
+  '.ct-range:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 3px var(--dsw-alias-border-l3);}',
 ].join('\n')
 
 function isValidSelection(v: string | null): v is Selection {
@@ -205,7 +237,20 @@ export function registerTheme(ctx: any) {
   }
 
   const injector = createStyleInjector()
-  const pluginCssDisposer = injector.insert(BASE_CSS)
+  const pluginCssDisposer = injector.insert(`${BASE_CSS}\n\n${BACKGROUND_CSS}`)
+  const backgroundLayer = createBackgroundLayer()
+  // The background the editor is previewing, which outranks the committed one
+  // until the draft is saved or discarded. Kept here rather than in the panel so
+  // a palette rebuild (a colour drag) keeps painting it. `previewActive` has to
+  // be separate from the value: a draft with no background is a deliberate
+  // "nothing" that must hide the active entry's committed image, not fall back
+  // to it.
+  let previewActive = false
+  let previewBackground: ResolvedBackground | null = null
+  /** The last selection applied, so a preview change can rebuild the same one. */
+  let lastApplied: Selection | PresetDef | null = null
+  /** The custom preset currently painted, for its two surface colours. */
+  let lastCustom: PresetDef | null = null
   let baselineDisposer: (() => void) | null = null
   let overrideDispose: (() => void) | null = null
   let fallbackDispose: (() => void) | null = null
@@ -329,19 +374,31 @@ export function registerTheme(ctx: any) {
    * token from `body`, so the whole page falls back to the base palette and
    * repaints before the new layer lands — twice the DOM work and a visible
    * flash per change, which is exactly what a dragged colour slider produces.
+   *
+   * A custom theme that carries a background is the one case that also makes
+   * the two canvas tokens transparent: the picture lives in a layer below the
+   * shell, and an opaque surface would hide it.
    */
   function apply(src: Selection | PresetDef) {
+    lastApplied = src
+    const isCustom = src === CUSTOM_SELECTION || typeof src !== 'string'
     const target: PresetId | PresetDef = src === CUSTOM_SELECTION ? buildCustomPreset(loadCustom().theme) : src
+    // Presets never carry media; a background only exists on a custom theme.
+    const bg = isCustom ? selectedBackground() : null
+    lastCustom = isCustom && typeof target !== 'string' ? (target as PresetDef) : null
 
     if (typeof target === 'string' && NOOP_PRESET_IDS.has(target)) {
       // The base stylesheets are the theme again, so the layer has to go.
       overrideDispose = release(overrideDispose)
       fallbackDispose = release(fallbackDispose)
       ensureBaseline(false)
+      backgroundLayer.render(null, null)
       return
     }
     ensureBaseline(true)
-    const overrides = buildOverrides(target)
+    renderBackground(bg)
+    const options = { transparentBase: bg !== null }
+    const overrides = buildOverrides(target, options)
     if (theme?.overrideTokens) {
       try {
         overrideDispose = theme.overrideTokens('dsh-cool-theme', overrides)
@@ -352,7 +409,50 @@ export function registerTheme(ctx: any) {
     }
     overrideDispose = release(overrideDispose)
     fallbackDispose = release(fallbackDispose)
-    fallbackDispose = injector.insert(buildFullCssFallback(target))
+    fallbackDispose = injector.insert(buildFullCssFallback(target, options))
+  }
+
+  /**
+   * The background a custom theme actually carries: the committed one on the
+   * active entry. The draft's colours may be unsaved, but its wallpaper is not
+   * previewed through here — the panel sets `previewBackground` for that.
+   */
+  function resolveActiveBackground(): ResolvedBackground | null {
+    const id = readActiveId()
+    if (id === null) return null
+    const entry = readList().find((item) => item.id === id)
+    const background = entry?.background
+    if (!background) return null
+    return {
+      url: themeAssetUrl(id, background.asset),
+      opacity: background.opacity,
+      fit: background.fit,
+      blur: background.blur,
+    }
+  }
+
+  /**
+   * The background on screen: the open editor's preview when one is active,
+   * else the active entry's committed one. An active preview with a null value
+   * means "this draft deliberately has no wallpaper".
+   */
+  function selectedBackground(): ResolvedBackground | null {
+    return previewActive ? previewBackground : resolveActiveBackground()
+  }
+
+  /**
+   * Paint the layer with the current custom palette's own surface colours. The
+   * image is composited over those colours, so the panel colour is what shows
+   * through when the image opacity is lowered.
+   */
+  function renderBackground(bg: ResolvedBackground | null) {
+    if (bg === null || lastCustom === null) {
+      backgroundLayer.render(null, null)
+      return
+    }
+    const light = lastCustom.light['--dsw-static-neutral-bluish-00'] ?? '#FFFFFF'
+    const dark = lastCustom.dark['--dsw-static-neutral-bluish-950'] ?? '#151517'
+    backgroundLayer.render(bg, { light, dark })
   }
 
   /**
@@ -410,6 +510,39 @@ export function registerTheme(ctx: any) {
       return
     }
     if (applyTimer === null) applyTimer = setTimeout(flushApply, APPLY_INTERVAL_MS - elapsed)
+  }
+
+  /**
+   * Re-run the last selection. Used when something outside the palette changes
+   * whether the canvas is transparent — a background preview, or the roster
+   * arriving with the active theme's background.
+   */
+  function reapply() {
+    if (lastApplied === null) return
+    const src = lastApplied
+    scheduleApply(() => apply(src))
+  }
+
+  /**
+   * Preview a background while the editor is open, or clear the preview when it
+   * closes. `undefined` means "no preview, show the committed background";
+   * `null` means "the open draft has no background", which must hide the
+   * committed one too. A change that only moves opacity, fit or blur repaints
+   * the layer alone; one that turns the layer on or off also has to add or
+   * remove the transparent tokens, so that case goes through the coalesced
+   * palette rebuild.
+   */
+  function setBackgroundPreview(next: ResolvedBackground | null | undefined) {
+    const wasOn = previewActive && previewBackground !== null
+    previewActive = next !== undefined
+    previewBackground = next ?? null
+    if (lastApplied === null) return
+    const nowOn = previewActive && previewBackground !== null
+    if (nowOn !== wasOn) {
+      reapply()
+      return
+    }
+    renderBackground(selectedBackground())
   }
 
   function setSelection(id: Selection) {
@@ -480,6 +613,9 @@ export function registerTheme(ctx: any) {
   /** Re-read the roster from the Host, migrating the legacy list on first load. */
   async function refreshSaved(): Promise<SavedTheme[]> {
     themeCache = await migrateLegacyThemes(await fetchThemes(fallbackForBase))
+    // The active theme's background lives in this roster, so the first answer
+    // can change what the canvas has to paint even though no palette moved.
+    reapply()
     return themeCache
   }
 
@@ -504,26 +640,31 @@ export function registerTheme(ctx: any) {
       writeRaw(CUSTOM_ACTIVE_STORAGE_KEY, id)
     },
     refresh: refreshSaved,
-    /** Persist the current draft as a new named entry and make it active. */
-    async create(name: string): Promise<SavedTheme[]> {
+    /**
+     * Persist the current draft as a named entry and make it active. The id is
+     * the panel's because a background image is uploaded to the theme's own
+     * directory, and that upload needs the id before the document is written.
+     */
+    async create(id: string, name: string, background: ThemeBackground | null): Promise<SavedTheme[]> {
       const draft = loadCustom()
       const entry: SavedTheme = {
-        id: newThemeId(),
+        id,
         name,
         base: draft.base,
         theme: draft.theme,
         assets: [],
+        background,
       }
       await pushThemes([entry], fallbackForBase)
       writeRaw(CUSTOM_ACTIVE_STORAGE_KEY, entry.id)
       return refreshSaved()
     },
     /** Write the current draft (and a new name) back to an existing entry. */
-    async update(id: string, name: string): Promise<SavedTheme[]> {
+    async update(id: string, name: string, background: ThemeBackground | null): Promise<SavedTheme[]> {
       const entry = readList().find((e) => e.id === id)
       if (!entry) return readList()
       const draft = loadCustom()
-      await pushThemes([{ ...entry, name, theme: draft.theme }], fallbackForBase)
+      await pushThemes([{ ...entry, name, theme: draft.theme, background }], fallbackForBase)
       return refreshSaved()
     },
     async remove(id: string): Promise<SavedTheme[]> {
@@ -551,6 +692,11 @@ export function registerTheme(ctx: any) {
   apply(initialSelection)
   // Restore the sidebar switch before the panel is ever opened.
   applySidebarOpaque(!sidebarTransparent())
+  // A background lives in the roster, not in localStorage, so a custom theme
+  // that was active before a reload only gets its wallpaper once the files have
+  // been read. Load them at startup rather than waiting for Settings to open;
+  // the panel's own refresh then finds the cache warm.
+  void refreshSaved().catch(() => {})
 
   ctx.effect(() => () => {
     // A coalesced application must not outlive the fiber: firing after this
@@ -562,6 +708,7 @@ export function registerTheme(ctx: any) {
     overrideDispose = release(overrideDispose)
     fallbackDispose = release(fallbackDispose)
     sidebarOpaqueDisposer = release(sidebarOpaqueDisposer)
+    backgroundLayer.dispose()
     injector.disposeAll()
   })
 
@@ -581,6 +728,9 @@ export function registerTheme(ctx: any) {
         saved,
         getSidebarTransparent: sidebarTransparent,
         setSidebarTransparent,
+        // Preview the draft's wallpaper on the page while its card is open.
+        // Clearing it restores the committed background of the active entry.
+        onPreviewBackground: setBackgroundPreview,
         // The shell's close seat. Absent on a host that does not offer it, which
         // also disables the unsaved-draft guard: without a way to leave, blocking
         // the close would strand the user.

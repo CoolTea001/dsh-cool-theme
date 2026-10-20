@@ -5,7 +5,7 @@
  * shape, so the rest of the client keeps working with plain `SavedTheme`
  * records. Every call is same-origin against the Host's own prefix route.
  */
-import type { ThemeDocument } from '../contract.js';
+import type { ThemeAsset, ThemeDocument } from '../contract.js';
 import { type CustomTheme, type SavedTheme } from './custom.js';
 /** Repair one stored document against the preset its seeds derive from. */
 export declare function documentToSaved(doc: ThemeDocument, fallbackFor: (base: string) => CustomTheme): SavedTheme;
@@ -39,6 +39,12 @@ export declare function importTheme(file: File): Promise<{
     id: string;
     name: string;
 }>;
+/**
+ * Upload one prepared image as the theme's background asset. The body is the
+ * image itself; the Host reads its type from those bytes and answers with the
+ * content-hashed name to record in the document.
+ */
+export declare function uploadThemeAsset(themeId: string, image: Blob): Promise<ThemeAsset>;
 /**
  * The themes a browser saved before files became the store, minus those the
  * Host already has.

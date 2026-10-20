@@ -13,6 +13,8 @@ import {
   THEME_ARCHIVE_EXTENSION,
   THEME_ARCHIVE_MAX_BYTES,
   THEME_FILE_VERSION,
+  normalizeBackground,
+  themeAssetsPath,
 } from '../contract.js'
 import type { ThemeAsset, ThemeDocument } from '../contract.js'
 import { normalizeCustom, type CustomTheme, type SavedTheme } from './custom.js'
@@ -28,6 +30,7 @@ export function documentToSaved(
     base: doc.base,
     theme: normalizeCustom(doc.theme, fallbackFor(doc.base)),
     assets: Array.isArray(doc.assets) ? doc.assets : [],
+    background: normalizeBackground(doc.background),
   }
 }
 
@@ -40,6 +43,7 @@ export function savedToDocument(entry: SavedTheme): Record<string, unknown> {
     base: entry.base,
     theme: entry.theme,
     assets: entry.assets satisfies ThemeAsset[],
+    background: entry.background,
   }
 }
 
@@ -103,6 +107,7 @@ function payloadThemes(
           base: typeof doc.base === 'string' ? doc.base : '',
           theme: doc.theme,
           assets: Array.isArray(doc.assets) ? (doc.assets as ThemeAsset[]) : [],
+          background: normalizeBackground(doc.background),
           createdAt: '',
           updatedAt: '',
         },
@@ -215,6 +220,34 @@ export async function importTheme(file: File): Promise<{ id: string; name: strin
       body: file,
     }),
   )
+}
+
+/**
+ * Upload one prepared image as the theme's background asset. The body is the
+ * image itself; the Host reads its type from those bytes and answers with the
+ * content-hashed name to record in the document.
+ */
+export async function uploadThemeAsset(themeId: string, image: Blob): Promise<ThemeAsset> {
+  const payload = await callApi(themeAssetsPath(themeId), {
+    method: 'POST',
+    headers: { 'content-type': 'application/octet-stream' },
+    body: image,
+  })
+  const asset = isRecord(payload.asset) ? payload.asset : null
+  if (
+    !asset
+    || typeof asset.name !== 'string'
+    || typeof asset.mime !== 'string'
+    || typeof asset.bytes !== 'number'
+  ) {
+    throw new Error('the Host did not report a stored asset')
+  }
+  return {
+    name: asset.name,
+    kind: asset.kind === 'video' ? 'video' : 'image',
+    mime: asset.mime,
+    bytes: asset.bytes,
+  }
 }
 
 /**

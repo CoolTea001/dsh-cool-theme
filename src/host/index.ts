@@ -5,6 +5,11 @@
  * roster change travels over one same-origin prefix route below
  * {@link THEME_API_PREFIX}. The route is the whole host surface — no service is
  * provided, and nothing here interprets the theme payload beyond moving it.
+ *
+ * Media has two routes of its own below a theme id: one accepts the bytes of a
+ * background image, one serves a stored file back. Everything else about a
+ * theme — its document, its colours, its background reference — travels through
+ * the roster route.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -12,15 +17,26 @@ import {
   THEME_API_PATH_IMPORT,
   THEME_API_PATH_THEMES,
   THEME_API_PREFIX,
+  THEME_API_SEGMENT_ASSETS,
   THEME_API_SEGMENT_EXPORT,
   THEME_ARCHIVE_MAX_BYTES,
   THEME_ARCHIVE_MIME,
+  THEME_ASSET_MAX_BYTES,
   archiveFileName,
   freeThemeName,
+  isThemeAssetName,
 } from '../contract.js'
-import type { ThemeDocument } from '../contract.js'
+import type { ThemeBackground, ThemeDocument } from '../contract.js'
 import { isKnownBase } from '../presets-ids.js'
-import { deleteTheme, isThemeId, listThemes, newThemeId, putTheme } from './theme-files.js'
+import { AssetError, readAsset, saveImageAsset, writeAssetFile } from './assets.js'
+import {
+  deleteTheme,
+  isThemeId,
+  listThemes,
+  newThemeId,
+  putTheme,
+  themeExists,
+} from './theme-files.js'
 import { ArchiveError, packTheme, unpackTheme } from './theme-share.js'
 
 export const name = 'dsh-cool-theme'
@@ -62,7 +78,7 @@ async function readBody(req: IncomingMessage, limit = 1_000_000): Promise<string
   return (await readBuffer(req, limit)).toString('utf8')
 }
 
-/** Read a bounded binary body; the archive route needs the bytes themselves. */
+/** Read a bounded binary body; the archive and image routes need the bytes themselves. */
 async function readBuffer(req: IncomingMessage, limit: number): Promise<Buffer> {
   const chunks: Buffer[] = []
   let size = 0
@@ -79,14 +95,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-/** The roster, newest first, as the browser half reads it. */
+/** The roster, oldest first, as the browser half reads it. */
 async function handleList(res: ServerResponse): Promise<void> {
   sendJson(res, 200, { ok: true, themes: await listThemes() })
 }
 
 /**
  * Upsert the posted documents. The browser half sends exactly the entries it
- * changed, so one round trip covers save, rename and duplicate.
+ * changed, so one round trip covers save, rename and background change. Media
+ * bytes have their own route; this one only records which asset a theme uses.
  */
 async function handlePut(req: IncomingMessage, res: ServerResponse): Promise<void> {
   let payload: unknown
@@ -121,7 +138,7 @@ async function handlePut(req: IncomingMessage, res: ServerResponse): Promise<voi
         name: raw.name,
         base: raw.base,
         theme: raw.theme,
-        assets: Array.isArray(raw.assets) ? (raw.assets as ThemeDocument['assets']) : [],
+        background: raw.background as ThemeBackground | null,
       }),
     )
   }
@@ -151,13 +168,67 @@ async function handleExport(res: ServerResponse, id: string): Promise<void> {
 }
 
 /**
+ * Accept one background image. The body is the image itself rather than JSON:
+ * base64 in a JSON string would inflate the file by a third and force the whole
+ * thing through a parser for no gain. The type comes from the bytes, never from
+ * the request.
+ */
+async function handleAssetUpload(req: IncomingMessage, res: ServerResponse, id: string): Promise<void> {
+  if (!(await themeExists(id))) {
+    sendJson(res, 404, { ok: false, error: 'unknown theme' })
+    return
+  }
+  let bytes: Buffer
+  try {
+    bytes = await readBuffer(req, THEME_ASSET_MAX_BYTES)
+  } catch (error) {
+    sendJson(res, 413, {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return
+  }
+  try {
+    sendJson(res, 200, { ok: true, asset: await saveImageAsset(id, bytes) })
+  } catch (error) {
+    if (!(error instanceof AssetError)) throw error
+    sendJson(res, 400, { ok: false, error: error.message })
+  }
+}
+
+/**
+ * Serve one stored asset. Names are content-hashed, so the response is
+ * immutable: the same URL always means the same bytes. The CSP header makes the
+ * file inert if a browser ever navigates to it directly, and `nosniff` keeps a
+ * mislabelled file from being reinterpreted.
+ */
+async function handleAssetRead(res: ServerResponse, id: string, name: string): Promise<void> {
+  if (!isThemeAssetName(name)) {
+    sendJson(res, 400, { ok: false, error: 'asset name must be a safe file name' })
+    return
+  }
+  const asset = await readAsset(id, name)
+  if (asset === null) {
+    sendJson(res, 404, { ok: false, error: 'unknown asset' })
+    return
+  }
+  res.writeHead(200, {
+    'content-type': asset.mime,
+    'content-length': asset.bytes.byteLength,
+    'cache-control': 'public, max-age=31536000, immutable',
+    'x-content-type-options': 'nosniff',
+    'content-security-policy': "default-src 'none'",
+  })
+  res.end(asset.bytes)
+}
+
+/**
  * Read an uploaded archive back into a theme and store it.
  *
- * The Host owns the whole import: it validates the archive, names the theme and
- * writes it, so an import is one file write that cannot half-happen. The client
- * only learns what was stored, which keeps the roster's own writes — which
- * rebuild a document from the current draft — from having to grow a second path
- * just for imports.
+ * The Host owns the whole import: it validates the archive, writes its media,
+ * names the theme and writes the document, so an import cannot half-happen in
+ * the client. The client only learns what was stored, which keeps the roster's
+ * own writes from having to grow a second path just for imports.
  */
 async function handleImport(req: IncomingMessage, res: ServerResponse): Promise<void> {
   let archive: Buffer
@@ -182,15 +253,30 @@ async function handleImport(req: IncomingMessage, res: ServerResponse): Promise<
   // A shared theme is meant to arrive, not to replace what is already here, so
   // it gets its own id and a free name; the archive's own id is only a hint
   // about where it came from.
+  const id = newThemeId()
   const taken = existing.map((doc) => doc.name)
+  // Media lands before the document: `putTheme` prunes assets the document does
+  // not reference, so the background image has to exist when it is recorded.
+  for (const asset of unpacked.assets) {
+    await writeAssetFile(id, asset.name, asset.bytes)
+  }
   const stored = await putTheme({
-    id: newThemeId(),
+    id,
     name: freeThemeName(unpacked.document.name, taken),
     base: isKnownBase(unpacked.document.base) ? unpacked.document.base : 'dsh',
     theme: unpacked.document.theme,
-    assets: [],
+    background: unpacked.document.background,
   })
   sendJson(res, 200, { ok: true, theme: stored })
+}
+
+/** Decode one path segment, treating a malformed escape as no match. */
+function decodeSegment(segment: string): string | null {
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return null
+  }
 }
 
 export function apply(ctx: any): void {
@@ -222,24 +308,40 @@ export function apply(ctx: any): void {
           if (!methodAllowed(req, res, ['POST'])) return
           return await handleImport(req, res)
         }
+
         const rest = pathname.startsWith(`${THEME_API_PATH_THEMES}/`)
           ? pathname.slice(THEME_API_PATH_THEMES.length + 1)
           : null
-        const segment = rest?.indexOf('/') ?? -1
-        // `themes/import` has no slash of its own, so it would otherwise read as
-        // a theme whose id happens to be "import".
-        if (rest !== null && rest !== 'import' && isThemeId(rest)) {
-          if (!methodAllowed(req, res, ['DELETE'])) return
-          return await handleDelete(res, rest)
+        const parts = rest === null ? [] : rest.split('/')
+        // `themes/import` has no slash of its own, so it must be recognised
+        // before the id branch reads it as a theme whose id is "import".
+        if (parts.length === 1 && parts[0] === 'import') {
+          if (!methodAllowed(req, res, ['POST'])) return
+          return await handleImport(req, res)
         }
-        if (rest !== null && segment > 0 && rest.slice(segment + 1) === THEME_API_SEGMENT_EXPORT) {
-          const id = rest.slice(0, segment)
-          if (!isThemeId(id)) {
-            sendJson(res, 400, { ok: false, error: 'theme id must be a safe slug' })
-            return
+        const id = parts.length > 0 ? decodeSegment(parts[0]) : null
+        if (id !== null && isThemeId(id)) {
+          if (parts.length === 1) {
+            if (!methodAllowed(req, res, ['DELETE'])) return
+            return await handleDelete(res, id)
           }
-          if (!methodAllowed(req, res, ['GET'])) return
-          return await handleExport(res, id)
+          if (parts.length === 2 && parts[1] === THEME_API_SEGMENT_EXPORT) {
+            if (!methodAllowed(req, res, ['GET'])) return
+            return await handleExport(res, id)
+          }
+          if (parts.length === 2 && parts[1] === THEME_API_SEGMENT_ASSETS) {
+            if (!methodAllowed(req, res, ['POST'])) return
+            return await handleAssetUpload(req, res, id)
+          }
+          if (parts.length === 3 && parts[1] === THEME_API_SEGMENT_ASSETS) {
+            if (!methodAllowed(req, res, ['GET'])) return
+            const name = decodeSegment(parts[2])
+            if (name === null) {
+              sendJson(res, 400, { ok: false, error: 'asset name must be a safe file name' })
+              return
+            }
+            return await handleAssetRead(res, id, name)
+          }
         }
         sendJson(res, 404, { ok: false, error: 'unknown route' })
       } catch (error) {

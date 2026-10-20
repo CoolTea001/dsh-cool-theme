@@ -2,17 +2,20 @@
  * Theme sharing: packing one stored theme into an archive and reading one back.
  *
  * An archive is the theme directory itself — the same `theme.json` and `assets/`
- * a theme occupies on disk — so sharing never invents a second format. The Host
- * owns both halves because the browser can neither read the theme's files nor
- * decompress an archive on its behalf.
+ * a theme occupies on disk — so sharing never invents a second format, and a
+ * theme's background image travels with it automatically. The Host owns both
+ * halves because the browser can neither read the theme's files nor decompress
+ * an archive on its behalf.
  *
  * Reading is deliberately strict: an archive either validates as one of ours or
  * is refused with a reason. Nothing half-valid is ever handed to the client to
  * repair, because a foreign or damaged file must not be able to seed the roster.
  */
-import type { ThemeAsset, ThemeDocument } from '../contract.js';
+import type { ThemeAsset, ThemeBackground, ThemeDocument } from '../contract.js';
 /** The document as it is packed; the timestamps are the Host's own bookkeeping. */
-type PackedDocument = Pick<ThemeDocument, 'id' | 'name' | 'base' | 'theme' | 'assets'>;
+type PackedDocument = Pick<ThemeDocument, 'id' | 'name' | 'base' | 'theme' | 'assets'> & {
+    background: ThemeBackground | null;
+};
 /** A share refused for a reason worth showing the user. */
 export declare class ArchiveError extends Error {
 }

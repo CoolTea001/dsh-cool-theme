@@ -4,10 +4,30 @@
 
 import * as React from 'react'
 import { HexAlphaColorPicker, HexColorInput, HexColorPicker } from 'react-colorful'
-import { CUSTOM_PRESET_ID, THEME_ARCHIVE_EXTENSION } from '../contract.js'
+import {
+  CUSTOM_PRESET_ID,
+  THEME_ARCHIVE_EXTENSION,
+  THEME_ASSET_MAX_BYTES,
+  themeAssetUrl,
+  type ThemeBackground,
+  type ThemeBackgroundFit,
+} from '../contract.js'
 import { type PresetId, presetOptions } from './presets.js'
 import { type ThemeKey } from './locales.js'
-import { ThemeApiUnavailableError, exportTheme, importTheme } from './theme-files.js'
+import {
+  ThemeApiUnavailableError,
+  exportTheme,
+  importTheme,
+  uploadThemeAsset,
+} from './theme-files.js'
+import {
+  BACKGROUND_ACCEPT,
+  DEFAULT_BACKGROUND,
+  darkOpacity,
+  isSupportedImage,
+  prepareBackgroundImage,
+  type ResolvedBackground,
+} from './background.js'
 import {
   type BorderSeed,
   type CustomTheme,
@@ -17,7 +37,9 @@ import {
   type SeedPair,
   SHIKI_KEYS,
   borderCss,
+  newThemeId,
   nextThemeName,
+  sameBackground,
 } from './custom.js'
 import { IconDelete, IconEdit, IconExport, IconImport, IconPlus } from './icons.js'
 // The shell's own controls, resolved at runtime from the frozen platform module
@@ -154,6 +176,10 @@ type Editing = {
   originName: string
   /** Committed seeds of the entry being edited, for the dirty comparison. */
   originTheme: CustomTheme
+  /** Committed wallpaper of the entry being edited; null when it had none. */
+  originBackground: ThemeBackground | null
+  /** The wallpaper draft this card is editing. */
+  background: ThemeBackground | null
   /**
    * Appearance preference in force when editing began. The mode toggle previews
    * the other appearance on the whole page, so leaving the editor has to put
@@ -205,11 +231,23 @@ function neutralEndForRole(mode: Mode, role: NeutralRole): 'lightest' | 'darkest
 /**
  * Whether the open editor holds work a close would throw away. A brand-new
  * theme has never been committed, so it always counts as unsaved; a reopened
- * entry is dirty only once its name or one of its seeds actually moved.
+ * entry is dirty only once its name, one of its seeds or its wallpaper moved.
+ * A picked image that has not been uploaded counts too: it lives only in this
+ * panel's memory until Save uploads it.
  */
-function isDirty(open: Editing, current: CustomTheme): boolean {
+function isDirty(
+  open: Editing,
+  current: CustomTheme,
+  currentBackground: ThemeBackground | null,
+  hasPendingImage: boolean,
+): boolean {
   if (open.id === null) return true
-  return open.name.trim() !== open.originName.trim() || !sameSeeds(current, open.originTheme)
+  return (
+    open.name.trim() !== open.originName.trim()
+    || !sameSeeds(current, open.originTheme)
+    || !sameBackground(currentBackground, open.originBackground)
+    || hasPendingImage
+  )
 }
 
 /**
@@ -341,6 +379,22 @@ function toastKeyFor(error: unknown): ThemeKey {
 }
 
 /**
+ * Which banner a failed background upload deserves. The Host and the browser
+ * answer with different words for the same three causes — an unsupported file,
+ * an oversized one, and a route that is not mounted — so the message selects
+ * the localized text by its shape and keeps anything unrecognised verbatim.
+ */
+function backgroundFailureMessage(t: (key: ThemeKey) => string, error: unknown): string {
+  if (error instanceof ThemeApiUnavailableError) return t('custom.toast.unavailable')
+  const message = error instanceof Error ? error.message : String(error)
+  if (/too large|larger than|413/i.test(message)) {
+    return t('background.tooLarge').replace('{0}', String(THEME_ASSET_MAX_BYTES / (1024 * 1024)))
+  }
+  if (/unsupported|decode|encode|format/i.test(message)) return t('background.badType')
+  return t('background.uploadFailed')
+}
+
+/**
  * One collapsed saved-theme card: the name activates the theme, and the trailing
  * controls export it, open the editor or delete it. The card as a whole is a
  * click target too, but its controls own their clicks.
@@ -469,6 +523,12 @@ export function ThemePanel(props: {
   /** Whether the sidebar keeps DSH's native translucency (darwin only). */
   getSidebarTransparent: () => boolean
   setSidebarTransparent: (on: boolean) => void
+  /**
+   * Paint the draft's wallpaper on the page while its card is open. `undefined`
+   * restores the committed background of the active entry; `null` says the open
+   * draft deliberately has none and the committed one must stay hidden.
+   */
+  onPreviewBackground: (background: ResolvedBackground | null | undefined) => void
   saved: {
     /** Cached roster; empty until `refresh` resolves. */
     list: () => SavedTheme[]
@@ -478,10 +538,10 @@ export function ThemePanel(props: {
     setActive: (id: string | null) => void
     /** Re-read the roster from the Host, migrating the legacy browser list once. */
     refresh: () => Promise<SavedTheme[]>
-    /** Persist the current draft as a new named entry and make it active. */
-    create: (name: string) => Promise<SavedTheme[]>
+    /** Persist a new entry (with its pre-minted id) and make it active. */
+    create: (id: string, name: string, background: ThemeBackground | null) => Promise<SavedTheme[]>
     /** Write the current draft (and name) back to an existing entry. */
-    update: (id: string, name: string) => Promise<SavedTheme[]>
+    update: (id: string, name: string, background: ThemeBackground | null) => Promise<SavedTheme[]>
     remove: (id: string) => Promise<SavedTheme[]>
   }
   t: (key: ThemeKey) => string
@@ -503,6 +563,7 @@ export function ThemePanel(props: {
     saved,
     getSidebarTransparent,
     setSidebarTransparent,
+    onPreviewBackground,
     t,
     onRequestClose,
   } = props
@@ -539,6 +600,11 @@ export function ThemePanel(props: {
   const [importing, setImporting] = React.useState(false)
   /** The hidden picker the import button opens. */
   const importInputRef = React.useRef<HTMLInputElement | null>(null)
+  /** The hidden picker the background editor opens. */
+  const backgroundInputRef = React.useRef<HTMLInputElement | null>(null)
+  // An image picked for the open draft, before Save uploads it. Its object URL
+  // is the preview; `file` is what gets compressed and uploaded.
+  const [pendingImage, setPendingImage] = React.useState<{ file: File; url: string } | null>(null)
   // The card open in the editor. Null means every card is collapsed and only the
   // "add" button is showing, which is the state the panel opens in.
   const [editing, setEditing] = React.useState<Editing | null>(null)
@@ -564,7 +630,9 @@ export function ThemePanel(props: {
   // The close guard runs from document listeners that outlive a single render,
   // so every fact it consults is mirrored into a ref.
   const dirtyRef = React.useRef(false)
-  dirtyRef.current = editing !== null && isDirty(editing, custom)
+  dirtyRef.current =
+    editing !== null
+    && isDirty(editing, custom, editing.background, pendingImage !== null)
   const confirmCloseRef = React.useRef(false)
   confirmCloseRef.current = confirmClose
   const pendingLeaveRef = React.useRef<{ entry: SavedTheme | null; edit: boolean } | null>(null)
@@ -584,6 +652,70 @@ export function ThemePanel(props: {
     toastSeq.current += 1
     setToast({ seq: toastSeq.current, text })
   }
+
+  // --- background image -----------------------------------------------------
+  //
+  // A picked file is not uploaded until Save: the editor previews it from an
+  // object URL, and cancelling has to leave the theme's directory untouched.
+  // The ref mirrors the state for the unmount cleanup, which must revoke the
+  // URL even when the panel closes mid-edit.
+  const pendingRef = React.useRef<{ file: File; url: string } | null>(null)
+  pendingRef.current = pendingImage
+
+  React.useEffect(
+    () => () => {
+      const pending = pendingRef.current
+      if (pending) URL.revokeObjectURL(pending.url)
+    },
+    [],
+  )
+
+  /** Replace the pending pick, revoking the URL it supersedes. */
+  function replacePending(file: File | null) {
+    const previous = pendingRef.current
+    if (previous) URL.revokeObjectURL(previous.url)
+    setPendingImage(file ? { file, url: URL.createObjectURL(file) } : null)
+  }
+
+  /**
+   * What the editor paints: the pending pick when there is one, otherwise the
+   * stored asset of the entry being edited. Every field the preview reads is in
+   * the key, so a slider move repaints without rebuilding the palette.
+   */
+  const backgroundKey =
+    editing === null
+      ? ''
+      : `${editing.id ?? 'new'}|${editing.background?.asset ?? ''}|${String(editing.background?.opacity ?? '')}|${editing.background?.fit ?? ''}|${String(editing.background?.blur ?? '')}|${pendingImage?.url ?? ''}`
+
+  React.useEffect(() => {
+    if (!editing) {
+      // No editor: hand the page back to the active entry's committed image.
+      onPreviewBackground(undefined)
+      return
+    }
+    if (!editing.background) {
+      // The draft deliberately has no wallpaper; the committed one must not
+      // show through behind it.
+      onPreviewBackground(null)
+      return
+    }
+    const stored =
+      editing.id && editing.background.asset
+        ? themeAssetUrl(editing.id, editing.background.asset)
+        : null
+    const url = pendingImage?.url ?? stored
+    if (!url) {
+      onPreviewBackground(null)
+      return
+    }
+    onPreviewBackground({
+      url,
+      opacity: editing.background.opacity,
+      fit: editing.background.fit,
+      blur: editing.background.blur,
+    })
+    // `backgroundKey` names every input of this effect.
+  }, [backgroundKey])
 
   // --- colour picker popover ------------------------------------------------
   //
@@ -738,7 +870,13 @@ export function ThemePanel(props: {
   }
 
   /** Snapshot the state an edit must return to when it is cancelled. */
-  function beginEditing(id: string | null, name: string, originName: string, originTheme: CustomTheme): Editing {
+  function beginEditing(
+    id: string | null,
+    name: string,
+    originName: string,
+    originTheme: CustomTheme,
+    originBackground: ThemeBackground | null,
+  ): Editing {
     return {
       id,
       name,
@@ -746,6 +884,8 @@ export function ThemePanel(props: {
       originDraft: getCustom().theme,
       originName,
       originTheme,
+      originBackground,
+      background: originBackground,
       originScheme: schemeRef.current,
     }
   }
@@ -815,6 +955,9 @@ export function ThemePanel(props: {
         setCustom(open.originDraft)
         saved.setActive(null)
       }
+      // The draft's wallpaper preview must not outlive the panel; the committed
+      // background of the entry restored above is what should stay on screen.
+      onPreviewBackground(undefined)
     },
     // Store handles are stable for the life of the plugin.
     [],
@@ -958,6 +1101,8 @@ export function ThemePanel(props: {
     // The popover belongs to the editor card; a stale key must not resurface it
     // inside the next card the user opens.
     closePicker()
+    // A pick left over from a previous card must not attach to the new draft.
+    replacePending(null)
     // Snapshot the previous draft before `resetCustom` overwrites it, so cancel
     // can put the user back on the theme they had. The preset is only the seed
     // for a brand-new theme, so it is stamped as the new theme's base here.
@@ -966,6 +1111,7 @@ export function ThemePanel(props: {
       nextThemeName(t('custom.defaultName'), list.map((e) => e.name)),
       '',
       getCustom().theme,
+      null,
     )
     setCustomBase(shownPreset)
     const draft = resetCustom()
@@ -976,7 +1122,9 @@ export function ThemePanel(props: {
   /** Open an existing card for editing; it also becomes the previewed theme. */
   function startEdit(entry: SavedTheme) {
     closePicker()
-    const next = beginEditing(entry.id, entry.name, entry.name, entry.theme)
+    // A pick left over from a previous card must not attach to this one.
+    replacePending(null)
+    const next = beginEditing(entry.id, entry.name, entry.name, entry.theme, entry.background)
     setEditing(next)
     onLoadSaved(entry.id)
   }
@@ -986,6 +1134,7 @@ export function ThemePanel(props: {
     if (!editing) return
     closePicker()
     revertEditing(editing)
+    replacePending(null)
     setEditing(null)
     syncSaved()
   }
@@ -1052,22 +1201,104 @@ export function ThemePanel(props: {
     if (file) void importArchive(file)
   }
 
+  /** Open the background picker, clearing the previous choice. */
+  function startBackgroundPick() {
+    const input = backgroundInputRef.current
+    if (!input) return
+    input.value = ''
+    input.click()
+  }
+
+  function onBackgroundPicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !editing) return
+    if (!isSupportedImage(file)) {
+      showToast(t('background.badType'))
+      return
+    }
+    // A cheap sanity gate before decoding: the picker can hand over a RAW image
+    // of hundreds of megabytes, and there is no point decoding one that is
+    // already far past the upload cap.
+    if (file.size > THEME_ASSET_MAX_BYTES * 4) {
+      showToast(t('background.tooLarge').replace('{0}', String(THEME_ASSET_MAX_BYTES / (1024 * 1024))))
+      return
+    }
+    replacePending(file)
+    setEditing((cur) =>
+      cur
+        ? {
+            ...cur,
+            background: cur.background ?? { asset: '', ...DEFAULT_BACKGROUND },
+          }
+        : cur,
+    )
+  }
+
+  /** Push one field of the background draft; only a present background has fields. */
+  function updateBackground(patch: Partial<ThemeBackground>) {
+    setEditing((cur) =>
+      cur?.background ? { ...cur, background: { ...cur.background, ...patch } } : cur,
+    )
+  }
+
+  /** Drop the wallpaper from this draft; Save then removes the stored file too. */
+  function removeBackground() {
+    replacePending(null)
+    setEditing((cur) => (cur ? { ...cur, background: null } : cur))
+  }
+
   /** Commit the open editor: create a new entry, or update the one being edited. */
   async function saveEdit() {
     if (!editing) return
     closePicker()
-    const name = editing.name.trim() || t('custom.defaultName')
-    const id = editing.id
+    const open = editing
+    const name = open.name.trim() || t('custom.defaultName')
+    // A brand-new theme needs its id before the image can be uploaded to its
+    // directory, so the panel mints it here and the Host stores the document
+    // under that id.
+    const id = open.id ?? newThemeId()
+    const draftBackground = open.background
+    // A draft whose asset is still empty is a picked file that has not been
+    // uploaded yet; it must not be written as a background.
+    const committed = draftBackground && draftBackground.asset !== '' ? draftBackground : null
+    const pending = pendingImage
+
     savingRef.current = true
-    const next = await mutate(() => (id === null ? saved.create(name) : saved.update(id, name)))
-    savingRef.current = false
-    if (next === null) return
-    setEditing(null)
-    // Saving commits the colours, not the appearance the preview borrowed.
-    restoreAppearance(editing)
-    syncSaved()
-    setCustomState(getCustom().theme)
-    showToast(t('custom.toast.saved'))
+    try {
+      const next = await mutate(() =>
+        open.id === null ? saved.create(id, name, committed) : saved.update(id, name, committed),
+      )
+      if (next === null) return
+
+      // The document is stored either way; a failed image upload only costs the
+      // wallpaper, so it is reported without undoing the save.
+      let failure: string | null = null
+      if (pending) {
+        try {
+          const bytes = await prepareBackgroundImage(pending.file)
+          const asset = await uploadThemeAsset(id, bytes)
+          const withAsset: ThemeBackground = {
+            ...(draftBackground ?? { asset: '', ...DEFAULT_BACKGROUND }),
+            asset: asset.name,
+          }
+          const updated = await saved.update(id, name, withAsset)
+          if (updated === null) failure = t('custom.toast.failed')
+        } catch (error) {
+          failure = backgroundFailureMessage(t, error)
+        }
+      }
+
+      setEditing(null)
+      replacePending(null)
+      // Saving commits the colours, not the appearance the preview borrowed.
+      restoreAppearance(open)
+      syncSaved()
+      setCustomState(getCustom().theme)
+      showToast(failure ?? t('custom.toast.saved'))
+    } finally {
+      savingRef.current = false
+    }
   }
 
   async function onConfirmDelete() {
@@ -1459,6 +1690,137 @@ export function ThemePanel(props: {
           )
         : null
 
+    const backgroundDraft = editing?.background ?? null
+    const backgroundPreviewUrl =
+      pendingImage?.url
+      ?? (editing?.id && backgroundDraft?.asset
+        ? themeAssetUrl(editing.id, backgroundDraft.asset)
+        : null)
+
+    /** One slider row: name, track, value. */
+    const backgroundRange = (
+      key: string,
+      label: string,
+      value: number,
+      max: number,
+      suffix: string,
+      onChange: (next: number) => void,
+    ) =>
+      React.createElement(
+        'div',
+        { className: 'ct-bg-field', key },
+        React.createElement('div', { className: 'ct-bg-field-label' }, label),
+        React.createElement('input', {
+          className: 'ct-range',
+          type: 'range',
+          min: 0,
+          max,
+          value,
+          'aria-label': label,
+          onChange: (e: React.ChangeEvent<HTMLInputElement>) => onChange(Number(e.target.value)),
+        }),
+        React.createElement('span', { className: 'ct-bg-value' }, `${String(value)}${suffix}`),
+      )
+
+    // The wallpaper controls belong to the custom editor: a preset has no
+    // document of its own to carry one, and the panel only shows this card
+    // inside custom mode.
+    const backgroundSection = React.createElement(
+      'div',
+      { className: 'ct-bg-section' },
+      React.createElement(
+        'div',
+        { className: 'ct-bg-head' },
+        React.createElement(
+          'div',
+          { className: 'ct-row-main' },
+          React.createElement('div', { className: 'ct-row-title' }, t('background.title')),
+          React.createElement('div', { className: 'ct-row-desc' }, t('background.desc')),
+        ),
+      ),
+      backgroundDraft
+        ? React.createElement(
+            'div',
+            { className: 'ct-bg-body' },
+            React.createElement(
+              'div',
+              { className: 'ct-bg-preview' },
+              React.createElement('div', {
+                className: 'ct-bg-thumb',
+                'aria-hidden': 'true',
+                style: backgroundPreviewUrl
+                  ? { backgroundImage: `url("${backgroundPreviewUrl}")` }
+                  : undefined,
+              }),
+              React.createElement(
+                'div',
+                { className: 'ct-bg-actions' },
+                React.createElement(
+                  Button,
+                  { variant: 'outline', size: 'sm', onClick: startBackgroundPick },
+                  t('background.replace'),
+                ),
+                React.createElement(
+                  Button,
+                  { variant: 'ghost', size: 'sm', onClick: removeBackground },
+                  t('background.remove'),
+                ),
+              ),
+            ),
+            backgroundRange(
+              'bg-opacity',
+              t('background.opacity'),
+              backgroundDraft.opacity,
+              100,
+              '%',
+              (v) => updateBackground({ opacity: v }),
+            ),
+            React.createElement(
+              'div',
+              { className: 'ct-bg-note' },
+              t('background.darkHint').replace('{0}', String(darkOpacity(backgroundDraft.opacity))),
+            ),
+            React.createElement(
+              'div',
+              { className: 'ct-bg-field', key: 'bg-fit' },
+              React.createElement('div', { className: 'ct-bg-field-label' }, t('background.fit')),
+              React.createElement(SegmentedControl, {
+                id: 'ct-bg-fit',
+                value: backgroundDraft.fit,
+                options: [
+                  { value: 'cover', label: t('background.fit.cover') },
+                  { value: 'contain', label: t('background.fit.contain') },
+                  { value: 'tile', label: t('background.fit.tile') },
+                ],
+                onChange: (v: string) => updateBackground({ fit: v as ThemeBackgroundFit }),
+                label: t('background.fit'),
+                className: 'ct-bg-fit',
+              }),
+            ),
+            backgroundRange(
+              'bg-blur',
+              t('background.blur'),
+              backgroundDraft.blur,
+              24,
+              'px',
+              (v) => updateBackground({ blur: v }),
+            ),
+          )
+        : React.createElement(
+            'button',
+            { type: 'button', className: 'ct-add-btn', onClick: startBackgroundPick },
+            React.createElement(IconPlus, { size: ICON_SIZE }),
+            t('background.add'),
+          ),
+      React.createElement('input', {
+        ref: backgroundInputRef,
+        type: 'file',
+        accept: BACKGROUND_ACCEPT,
+        style: { display: 'none' },
+        onChange: onBackgroundPicked,
+      }),
+    )
+
     const editorCard = (key: string) =>
       React.createElement(
         'div',
@@ -1486,6 +1848,7 @@ export function ThemePanel(props: {
           dotRow('seeds', t('custom.group.seeds'), seedDots),
           dotRow('shiki', t('custom.group.shiki'), shikiDots),
         ),
+        backgroundSection,
         editorActions,
         pickerPop,
       )
