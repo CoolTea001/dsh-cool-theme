@@ -19,7 +19,7 @@ export const zh = {
   'background.replace': '替换图片',
   'background.remove': '移除',
   'background.opacity': '透明度',
-  'background.blur': '模糊',
+  'background.blur': '模糊度',
   'background.badType': '仅支持 PNG / JPEG / WebP / AVIF / GIF',
   'background.tooLarge': '图片超过 {0} MB，请换一张',
   'background.uploadFailed': '主题已保存，背景图片上传失败',

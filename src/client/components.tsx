@@ -1706,7 +1706,13 @@ export function ThemePanel(props: {
       React.createElement(
         'div',
         { className: 'ct-bg-field', key },
-        React.createElement('div', { className: 'ct-bg-field-label' }, label),
+        // The value rides with the label (`透明度 · 40%`), so the slider owns
+        // the whole right-hand side and the row has one reading order.
+        React.createElement(
+          'div',
+          { className: 'ct-bg-field-label' },
+          `${label} · ${String(value)}${suffix}`,
+        ),
         React.createElement('input', {
           className: 'ct-range',
           type: 'range',
@@ -1716,7 +1722,6 @@ export function ThemePanel(props: {
           'aria-label': label,
           onChange: (e: React.ChangeEvent<HTMLInputElement>) => onChange(Number(e.target.value)),
         }),
-        React.createElement('span', { className: 'ct-bg-value' }, `${String(value)}${suffix}`),
       )
 
     // The wallpaper controls belong to the custom editor: a preset has no
@@ -1785,7 +1790,7 @@ export function ThemePanel(props: {
                 t('background.blur'),
                 backgroundDraft.blur,
                 24,
-                'px',
+                ' px',
                 (v) => updateBackground({ blur: v }),
               ),
             ),
