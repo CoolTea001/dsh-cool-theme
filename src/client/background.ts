@@ -71,6 +71,11 @@ export const BACKGROUND_CSS = [
   'html:not([data-platform="darwin"]).ct-bg-on #root > [class*="frame"]{background:transparent !important;}',
   // The status row does not overlay the transcript, so it can clear too.
   'html.ct-bg-on [class*="bottomRow"]{background:transparent !important;}',
+  // The trajectory view (`data-conversation-composer-overlay` is its own hook,
+  // and the only element that carries it) paints its whole canvas with layer-1.
+  // Clearing that token inside it keeps the wallpaper visible under the table,
+  // while the layer-2 timeline strip and the sticky table header keep theirs.
+  'html.ct-bg-on [data-conversation-composer-overlay]{--dsw-alias-bg-layer-1:transparent;}',
   // The composer overlays the transcript: keep its seat transparent and let a
   // pseudo-element repaint the very same wallpaper over it. `background-
   // attachment: fixed` anchors both layers to the viewport, which is exactly
