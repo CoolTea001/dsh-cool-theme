@@ -65,5 +65,6 @@ export declare function isSupportedImage(file: File): boolean;
 export declare const DEFAULT_BACKGROUND: {
     opacity: number;
     blur: number;
+    enabled: boolean;
 };
 //# sourceMappingURL=background.d.ts.map

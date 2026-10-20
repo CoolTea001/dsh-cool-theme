@@ -487,7 +487,7 @@ export type SavedTheme = {
  */
 export function sameBackground(a: ThemeBackground | null, b: ThemeBackground | null): boolean {
   if (a === null || b === null) return a === b
-  return a.asset === b.asset && a.opacity === b.opacity && a.blur === b.blur
+  return a.asset === b.asset && a.opacity === b.opacity && a.blur === b.blur && a.enabled === b.enabled
 }
 
 /** Serialize the saved list with its schema version. */

@@ -70,6 +70,14 @@ export type ThemeBackground = {
     opacity: number;
     /** Softness in px; 0 keeps the image sharp, which is the default. */
     blur: number;
+    /**
+     * Whether the theme actually paints the image. A disabled background keeps
+     * every other field — and the stored file — intact, so switching it back on
+     * restores exactly what was there: it is a switch, not a removal. An absent
+     * flag reads as on, which is what every document written before it existed
+     * meant.
+     */
+    enabled: boolean;
 };
 /** Where a fresh background starts: visible enough to read, calm enough for text. */
 export declare const THEME_BACKGROUND_DEFAULT_OPACITY = 40;

@@ -16,7 +16,7 @@ DeepSeek Harness theme plugin — supports dark/light appearance switching, ship
 2. **34 preset themes:** 34 built-in presets, each adapted to both dark and light appearance: Aura, Ayu, Catppuccin, Catppuccin Frappe, Catppuccin Macchiato, Cobalt2, Cursor, DSH, Dracula, Everforest, Flexoki, GitHub, Gruvbox, Kanagawa, Lucent Orng, Material, Matrix, Mercury, Monokai, Night Owl, Nord, One Dark, OpenCode, Orng, Osaka Jade, Palenight, Rosé Pine, Solarized, Synthwave 84, System, Tokyo Night, Vercel, Vesper, Zenburn
 3. **Sidebar transparency:** A switch controls the sidebar panel transparency on macOS
 4. **Custom themes:** Turn on custom themes to create your own (colors inherit from the currently selected preset)
-5. **Per-theme background image:** Each custom theme can set its own background image, and support for adjusting the transparency of the background image and Blur effect
+5. **Per-theme background image:** Each custom theme can set its own background image, with adjustable transparency and Blur effect — and a switch that turns the image off without deleting it
 6. **Sharing themes:** Share custom themes you have created, or import custom themes shared by others — a theme's background image travels with it
 
 ## Installation

@@ -267,4 +267,5 @@ export function isSupportedImage(file: File): boolean {
 export const DEFAULT_BACKGROUND = {
   opacity: THEME_BACKGROUND_DEFAULT_OPACITY,
   blur: 0,
+  enabled: true,
 }

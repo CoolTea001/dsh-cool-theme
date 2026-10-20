@@ -195,6 +195,10 @@ const BASE_CSS = [
   // stored asset after it, so the same face answers both states.
   '.ct-bg-thumb{width:88px;height:56px;flex:none;border:1px solid var(--dsw-alias-border-l3);border-radius:10px;background-color:var(--dsw-alias-bg-module-platform);background-size:cover;background-position:center;}',
   '.ct-bg-actions{display:flex;align-items:center;gap:4px;margin-left:auto;}',
+  // The switch closes that group and is its only control that is not a ghost
+  // button: the group's own 4px gap is the icon-button rhythm, and a bare track
+  // against a text button reads as cramped.
+  '.ct-bg-switch{margin-left:8px;}',
   '.ct-bg-field{display:flex;align-items:center;gap:16px;}',
   '.ct-bg-field-label{flex:0 0 auto;min-width:108px;padding-left:3px;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);white-space:nowrap;font-variant-numeric:tabular-nums;}',
   // Aligned under the track, not under the label: 96px label + 16px gap + the
@@ -421,13 +425,18 @@ export function registerTheme(ctx: any) {
    * The background a custom theme actually carries: the committed one on the
    * active entry. The draft's colours may be unsaved, but its wallpaper is not
    * previewed through here — the panel sets `previewBackground` for that.
+   *
+   * A switched-off background resolves to nothing at all, which is what lets
+   * every consumer stay unaware of the flag: no layer is mounted, so the canvas
+   * keeps its own opaque surfaces and the sidebar switch works again, exactly as
+   * on a theme that never had an image.
    */
   function resolveActiveBackground(): ResolvedBackground | null {
     const id = readActiveId()
     if (id === null) return null
     const entry = readList().find((item) => item.id === id)
     const background = entry?.background
-    if (!background) return null
+    if (!background || !background.enabled) return null
     return {
       url: themeAssetUrl(id, background.asset),
       opacity: background.opacity,

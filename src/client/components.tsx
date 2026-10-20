@@ -697,13 +697,20 @@ export function ThemePanel(props: {
 
   /**
    * What the editor paints: the pending pick when there is one, otherwise the
-   * stored asset of the entry being edited. Every field the preview reads is in
-   * the key, so a slider move repaints without rebuilding the palette.
+   * stored asset of the entry being edited. Every input of the preview effect is
+   * in the key, so a slider move repaints without rebuilding the palette.
    */
   const backgroundKey =
     editing === null
       ? ''
-      : `${editing.id ?? 'new'}|${editing.background?.asset ?? ''}|${String(editing.background?.opacity ?? '')}|${String(editing.background?.blur ?? '')}|${pendingImage?.url ?? ''}`
+      : [
+          editing.id ?? 'new',
+          editing.background?.asset ?? '',
+          String(editing.background?.opacity ?? ''),
+          String(editing.background?.blur ?? ''),
+          String(editing.background?.enabled ?? ''),
+          pendingImage?.url ?? '',
+        ].join('|')
 
   React.useEffect(() => {
     if (!editing) {
@@ -714,6 +721,12 @@ export function ThemePanel(props: {
     if (!editing.background) {
       // The draft deliberately has no wallpaper; the committed one must not
       // show through behind it.
+      onPreviewBackground(null)
+      return
+    }
+    if (!editing.background.enabled) {
+      // Switched off. The image stays in the draft, but nothing paints, so the
+      // committed wallpaper of the active entry must not show through either.
       onPreviewBackground(null)
       return
     }
@@ -1774,6 +1787,17 @@ export function ThemePanel(props: {
                   { key: 'remove', variant: 'ghost', size: 'sm', onClick: removeBackground },
                   t('background.remove'),
                 ),
+                // The image's own switch, and the reason "remove" is not the
+                // only way out of one: off keeps the file and the settings, so
+                // the theme can go back to plain surfaces without losing the
+                // wallpaper it was set up with.
+                React.createElement(Switch, {
+                  key: 'enabled',
+                  className: 'ct-bg-switch',
+                  checked: backgroundDraft.enabled,
+                  label: t('background.title'),
+                  onChange: (on: boolean) => updateBackground({ enabled: on }),
+                }),
               ]
             : React.createElement(
                 Button,
