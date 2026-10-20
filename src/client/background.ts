@@ -71,6 +71,11 @@ export const BACKGROUND_CSS = [
   'html:not([data-platform="darwin"]).ct-bg-on #root > [class*="frame"]{background:transparent !important;}',
   // The status row does not overlay the transcript, so it can clear too.
   'html.ct-bg-on [class*="bottomRow"]{background:transparent !important;}',
+  // The right sidebar is a dock: its column and the tab host inside it both
+  // paint `bg-base`, which is why the panel stayed solid. Clearing that token
+  // inside the column reveals the wallpaper behind it; the panel's cards and
+  // entries keep their layer-1 surfaces.
+  'html.ct-bg-on [data-rightbar-col]{--dsw-alias-bg-base:transparent;}',
   // The trajectory view (`data-conversation-composer-overlay` is its own hook,
   // and the only element that carries it) paints its whole canvas with layer-1.
   // Clearing that token inside it keeps the wallpaper visible under the table,
