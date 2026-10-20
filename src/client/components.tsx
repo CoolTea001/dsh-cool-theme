@@ -1762,32 +1762,32 @@ export function ThemePanel(props: {
         ? React.createElement(
             'div',
             { className: 'ct-bg-body' },
+            React.createElement('div', {
+              className: 'ct-bg-thumb',
+              'aria-hidden': 'true',
+              style: backgroundPreviewUrl
+                ? { backgroundImage: `url("${backgroundPreviewUrl}")` }
+                : undefined,
+            }),
             React.createElement(
               'div',
-              { className: 'ct-bg-preview' },
-              React.createElement('div', {
-                className: 'ct-bg-thumb',
-                'aria-hidden': 'true',
-                style: backgroundPreviewUrl
-                  ? { backgroundImage: `url("${backgroundPreviewUrl}")` }
-                  : undefined,
-              }),
-            ),
-            backgroundRange(
-              'bg-opacity',
-              t('background.opacity'),
-              backgroundDraft.opacity,
-              100,
-              '%',
-              (v) => updateBackground({ opacity: v }),
-            ),
-            backgroundRange(
-              'bg-blur',
-              t('background.blur'),
-              backgroundDraft.blur,
-              24,
-              'px',
-              (v) => updateBackground({ blur: v }),
+              { className: 'ct-bg-controls' },
+              backgroundRange(
+                'bg-opacity',
+                t('background.opacity'),
+                backgroundDraft.opacity,
+                100,
+                '%',
+                (v) => updateBackground({ opacity: v }),
+              ),
+              backgroundRange(
+                'bg-blur',
+                t('background.blur'),
+                backgroundDraft.blur,
+                24,
+                'px',
+                (v) => updateBackground({ blur: v }),
+              ),
             ),
           )
         : null,

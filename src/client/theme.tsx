@@ -189,8 +189,8 @@ const BASE_CSS = [
   // and tooltip are the shell's.
   '.ct-bg-section{margin-top:4px;padding-top:12px;border-top:1px solid var(--dsw-alias-border-l2);display:flex;flex-direction:column;gap:8px;}',
   '.ct-bg-head{display:flex;align-items:center;}',
-  '.ct-bg-body{display:flex;flex-direction:column;gap:6px;}',
-  '.ct-bg-preview{display:flex;align-items:center;gap:12px;padding:2px 0 6px;}',
+  '.ct-bg-body{display:flex;align-items:center;gap:16px;}',
+  '.ct-bg-controls{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px;}',
   // The thumbnail is the picked file's own object URL before Save, and the
   // stored asset after it, so the same face answers both states.
   '.ct-bg-thumb{width:88px;height:56px;flex:none;border:1px solid var(--dsw-alias-border-l3);border-radius:10px;background-color:var(--dsw-alias-bg-module-platform);background-size:cover;background-position:center;}',
