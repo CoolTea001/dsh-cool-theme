@@ -184,10 +184,11 @@ const BASE_CSS = [
   // rebinding the hover token on the element is DSH's own delete-button recipe.
   'button.ct-danger{color:var(--dsw-alias-state-error-primary);border-color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent);--dsw-alias-interactive-bg-hover:color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent);}',
   // --- background image section (inside the custom editor) -----------------
-  // It sits below the colour rows, separated by the same hairline the row list
-  // uses, and owns only its own controls: the switch, buttons, segmented control
-  // and tooltip are the shell's.
-  '.ct-bg-section{margin-top:4px;padding-top:12px;border-top:1px solid var(--dsw-alias-border-l2);display:flex;flex-direction:column;gap:8px;}',
+  // It sits below the colour rows and owns only its own controls: the switch,
+  // buttons, segmented control and tooltip are the shell's. No hairline above
+  // it — the spacing alone separates it from the rows, and a rule there only cut
+  // the card in two.
+  '.ct-bg-section{margin-top:4px;padding-top:12px;display:flex;flex-direction:column;gap:8px;}',
   '.ct-bg-head{display:flex;align-items:center;}',
   '.ct-bg-body{display:flex;align-items:center;gap:16px;}',
   '.ct-bg-controls{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px;}',
