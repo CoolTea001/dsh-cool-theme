@@ -706,8 +706,10 @@ export function ThemePanel(props: {
       : [
           editing.id ?? 'new',
           editing.background?.asset ?? '',
-          String(editing.background?.opacity ?? ''),
-          String(editing.background?.blur ?? ''),
+          String(editing.background?.opacity.light ?? ''),
+          String(editing.background?.opacity.dark ?? ''),
+          String(editing.background?.blur.light ?? ''),
+          String(editing.background?.blur.dark ?? ''),
           String(editing.background?.enabled ?? ''),
           pendingImage?.url ?? '',
         ].join('|')
@@ -1272,6 +1274,24 @@ export function ThemePanel(props: {
     )
   }
 
+  /**
+   * Push one appearance's opacity or blur. The editor's light/dark toggle picks
+   * the half being tuned, so a slider only ever moves the appearance on show.
+   */
+  function updateBackgroundValue(field: 'opacity' | 'blur', value: number) {
+    setEditing((cur) =>
+      cur?.background
+        ? {
+            ...cur,
+            background: {
+              ...cur.background,
+              [field]: { ...cur.background[field], [seedMode]: value },
+            },
+          }
+        : cur,
+    )
+  }
+
   /** Drop the wallpaper from this draft; Save then removes the stored file too. */
   function removeBackground() {
     replacePending(null)
@@ -1725,6 +1745,10 @@ export function ThemePanel(props: {
       ?? (editing?.id && backgroundDraft?.asset
         ? themeAssetUrl(editing.id, backgroundDraft.asset)
         : null)
+    // The wallpaper's opacity and blur are stored per appearance, so the two
+    // sliders below tune the half the editor's own toggle is on — the same
+    // control that previews that appearance on the page.
+    const backgroundModeName = t(`custom.seed.${seedMode}`)
 
     /** One slider row: name, track, value. */
     const backgroundRange = (
@@ -1738,8 +1762,10 @@ export function ThemePanel(props: {
       React.createElement(
         'div',
         { className: 'ct-bg-field', key },
-        // The value rides with the label (`透明度 · 40%`), so the slider owns
-        // the whole right-hand side and the row has one reading order.
+        // The value rides with the label (`浅色 · 透明度 · 40%`), so the slider
+        // owns the whole right-hand side and the row has one reading order. The
+        // leading appearance is the editor's own light/dark toggle: both sliders
+        // tune whichever half it is on.
         React.createElement(
           'div',
           { className: 'ct-bg-field-label' },
@@ -1835,19 +1861,19 @@ export function ThemePanel(props: {
               { className: 'ct-bg-controls' },
               backgroundRange(
                 'bg-opacity',
-                t('background.opacity'),
-                backgroundDraft.opacity,
+                `${backgroundModeName} · ${t('background.opacity')}`,
+                backgroundDraft.opacity[seedMode],
                 100,
                 '%',
-                (v) => updateBackground({ opacity: v }),
+                (v) => updateBackgroundValue('opacity', v),
               ),
               backgroundRange(
                 'bg-blur',
-                t('background.blur'),
-                backgroundDraft.blur,
+                `${backgroundModeName} · ${t('background.blur')}`,
+                backgroundDraft.blur[seedMode],
                 THEME_BACKGROUND_MAX_BLUR,
                 ' px',
-                (v) => updateBackground({ blur: v }),
+                (v) => updateBackgroundValue('blur', v),
               ),
             ),
           )

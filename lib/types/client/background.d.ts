@@ -22,13 +22,15 @@
  * that anything is being covered. Content cards keep their own opaque surfaces
  * on top of the layer.
  */
+import { type ThemeAppearancePair } from '../contract.js';
 /** What the input accepts and what the Host will store. */
 export declare const BACKGROUND_ACCEPT = "image/png,image/jpeg,image/webp,image/avif,image/gif";
 /** One background as the renderer needs it: where the bytes are, and how to paint them. */
 export type ResolvedBackground = {
     url: string;
-    opacity: number;
-    blur: number;
+    /** Opacity 0–100 and blur in px, one value per appearance. */
+    opacity: ThemeAppearancePair;
+    blur: ThemeAppearancePair;
 };
 /** The two surface colours the image is composited over, per appearance. */
 export type BackgroundSurfaceColors = {
@@ -38,11 +40,10 @@ export type BackgroundSurfaceColors = {
 /**
  * The layer's own stylesheet. Opacity and blur are custom properties so a
  * slider can move them without rebuilding the theme's token layer: the shell
- * never sees a `theme/change` while the user drags.
+ * never sees a `theme/change` while the user drags. Each has one property per
+ * appearance, so the light and dark values are independent.
  */
 export declare const BACKGROUND_CSS: string;
-/** The opacity the dark appearance actually paints, derived from the light one. */
-export declare function darkOpacity(lightOpacity: number): number;
 export declare function createBackgroundLayer(): {
     render: (bg: ResolvedBackground | null, colors: BackgroundSurfaceColors | null) => void;
     unmount: () => void;
@@ -61,10 +62,20 @@ export type BackgroundLayer = ReturnType<typeof createBackgroundLayer>;
 export declare function prepareBackgroundImage(file: File): Promise<Blob>;
 /** Whether the picker's file is one of the types the Host may store. */
 export declare function isSupportedImage(file: File): boolean;
-/** A fresh background's first settings: what a picker should start from. */
+/**
+ * A fresh background's first settings: what a picker should start from. The two
+ * pairs are copied rather than referenced, so a draft can never write back into
+ * the module constants.
+ */
 export declare const DEFAULT_BACKGROUND: {
-    opacity: number;
-    blur: number;
+    opacity: {
+        light: number;
+        dark: number;
+    };
+    blur: {
+        light: number;
+        dark: number;
+    };
     enabled: boolean;
 };
 //# sourceMappingURL=background.d.ts.map

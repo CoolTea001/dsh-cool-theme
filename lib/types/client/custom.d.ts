@@ -17,9 +17,10 @@
  *   shiki    9 syntax tokens
  */
 import type { PresetDef } from './presets.js';
-import type { ThemeAsset, ThemeBackground } from '../contract.js';
+import type { ThemeAppearance, ThemeAsset, ThemeBackground } from '../contract.js';
 export type { PresetDef };
-export type Mode = 'light' | 'dark';
+/** The contract names the light/dark axis; the editor has always called it `Mode`. */
+export type Mode = ThemeAppearance;
 /** One seed colour per appearance. */
 export type SeedPair = {
     light: string;

@@ -48,8 +48,12 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * Documents are one directory each — `<root>/<id>/theme.json` — so a theme can
  * later carry media beside its seeds without changing this contract.
+ *
+ * v2 split the background's opacity and blur per appearance. A v1 document's
+ * flat numbers still read: they are the light half, with the dark half derived
+ * exactly as that build derived it (see {@link normalizeBackground}).
  */
-export const THEME_FILE_VERSION = 1
+export const THEME_FILE_VERSION = 2
 
 /**
  * A fresh theme id. Both halves mint ids in the same shape, so an id never says
@@ -95,6 +99,12 @@ export type ThemeDocument = {
 // Theme background
 // ---------------------------------------------------------------------------
 
+/** The two appearances a background is tuned for, in the editor's own order. */
+export type ThemeAppearance = 'light' | 'dark'
+
+/** One number per appearance, keyed the way the editor's light/dark toggle is. */
+export type ThemeAppearancePair = Record<ThemeAppearance, number>
+
 /**
  * The background one saved custom theme may carry.
  *
@@ -108,13 +118,16 @@ export type ThemeBackground = {
   /** File name inside the theme's own `assets/` directory. */
   asset: string
   /**
-   * The image's own opacity, 0–100. The theme's surface colour sits *under*
-   * the image, so lowering this lets that colour show through — the panel
-   * never becomes transparent to reveal the image.
+   * The image's own opacity, 0–100, per appearance. The theme's surface colour
+   * sits *under* the image, so lowering this lets that colour show through —
+   * the panel never becomes transparent to reveal the image.
    */
-  opacity: number
-  /** Softness in px; 0 keeps the image sharp, which is the default. */
-  blur: number
+  opacity: ThemeAppearancePair
+  /**
+   * Softness in px, per appearance; 0 keeps the image sharp, which is the
+   * default in both.
+   */
+  blur: ThemeAppearancePair
   /**
    * Whether the theme actually paints the image. A disabled background keeps
    * every other field — and the stored file — intact, so switching it back on
@@ -125,15 +138,23 @@ export type ThemeBackground = {
   enabled: boolean
 }
 
-/** Where a fresh background starts: visible enough to read, calm enough for text. */
-export const THEME_BACKGROUND_DEFAULT_OPACITY = 40
+/**
+ * Where a fresh background starts, per appearance: visible enough to read,
+ * calm enough for text. Dark starts lower because a bright wallpaper over a
+ * dark palette is harsher than the same image over the light one, and the
+ * panel colour has to win more of the mix.
+ */
+export const THEME_BACKGROUND_DEFAULT_OPACITY: ThemeAppearancePair = { light: 40, dark: 30 }
+
+/** A fresh background is sharp in both appearances. */
+export const THEME_BACKGROUND_DEFAULT_BLUR: ThemeAppearancePair = { light: 0, dark: 0 }
 
 /**
- * Dark mode dims the image by multiplying the light-mode opacity. A bright
- * wallpaper over a dark palette is otherwise far harsher than the same image
- * over the light one, and the panel colour has to win more of the mix.
+ * How much a background written before the split dims in dark mode. Only
+ * {@link legacyDarkOpacity} reads it: a current background stores its dark
+ * opacity outright, so nothing derives it any more.
  */
-export const THEME_BACKGROUND_DARK_FACTOR = 0.7
+export const THEME_BACKGROUND_LEGACY_DARK_FACTOR = 0.7
 
 export const THEME_BACKGROUND_MAX_BLUR = 24
 
@@ -145,6 +166,15 @@ export function clampBackgroundOpacity(value: number): number {
 /** Fold a blur radius into the 0–{@link THEME_BACKGROUND_MAX_BLUR} px a background stores. */
 export function clampBackgroundBlur(value: number): number {
   return Math.max(0, Math.min(THEME_BACKGROUND_MAX_BLUR, Math.round(value)))
+}
+
+/**
+ * The dark opacity a pre-split background paints: its light value dimmed by
+ * {@link THEME_BACKGROUND_LEGACY_DARK_FACTOR}. Migration-only, so an existing
+ * wallpaper keeps the exact look it had rather than jumping to a new default.
+ */
+export function legacyDarkOpacity(lightOpacity: number): number {
+  return clampBackgroundOpacity(clampBackgroundOpacity(lightOpacity) * THEME_BACKGROUND_LEGACY_DARK_FACTOR)
 }
 
 /**
@@ -187,19 +217,52 @@ export function isThemeAssetName(value: unknown): value is string {
   return typeof value === 'string' && ASSET_NAME_PATTERN.test(value)
 }
 
+/**
+ * One appearance-tagged background value.
+ *
+ * A document written before the split stores one flat number for both
+ * appearances; it is the light value, and `deriveDark` reproduces the dark
+ * value that build painted from it, so an existing wallpaper keeps the exact
+ * look it had. The pair form is read as stored: each half falls back to its own
+ * default only when it is missing or not a real number (`Number(null)` is 0,
+ * which would turn a malformed document into an invisible image).
+ */
+function readAppearancePair(
+  raw: unknown,
+  clamp: (value: number) => number,
+  fallback: ThemeAppearancePair,
+  deriveDark: (light: number) => number,
+): ThemeAppearancePair {
+  const read = (value: unknown): number | null =>
+    typeof value === 'number' && Number.isFinite(value) ? clamp(value) : null
+  if (typeof raw === 'number') {
+    const light = read(raw)
+    return light === null ? { ...fallback } : { light, dark: clamp(deriveDark(light)) }
+  }
+  if (isRecord(raw)) {
+    return {
+      light: read(raw.light) ?? fallback.light,
+      dark: read(raw.dark) ?? fallback.dark,
+    }
+  }
+  return { ...fallback }
+}
+
 /** Fold any stored or posted background into this build's shape, or drop it. */
 export function normalizeBackground(raw: unknown): ThemeBackground | null {
   if (!isRecord(raw)) return null
   if (!isThemeAssetName(raw.asset)) return null
   if (!assetTypeOf(raw.asset)) return null
-  // Only a real number counts: `Number(null)` is 0, which would turn a
-  // malformed document into an invisible image instead of the default.
-  const opacity = typeof raw.opacity === 'number' ? raw.opacity : Number.NaN
-  const blur = typeof raw.blur === 'number' ? raw.blur : Number.NaN
   return {
     asset: raw.asset,
-    opacity: Number.isFinite(opacity) ? clampBackgroundOpacity(opacity) : THEME_BACKGROUND_DEFAULT_OPACITY,
-    blur: Number.isFinite(blur) ? clampBackgroundBlur(blur) : 0,
+    opacity: readAppearancePair(
+      raw.opacity,
+      clampBackgroundOpacity,
+      THEME_BACKGROUND_DEFAULT_OPACITY,
+      legacyDarkOpacity,
+    ),
+    // Blur was shared by both appearances, so a flat value is the dark one too.
+    blur: readAppearancePair(raw.blur, clampBackgroundBlur, THEME_BACKGROUND_DEFAULT_BLUR, (light) => light),
     // Only an explicit `false` disables the image: a document written before the
     // flag existed, or one whose value is malformed, keeps its wallpaper on.
     enabled: raw.enabled !== false,

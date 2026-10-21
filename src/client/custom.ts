@@ -20,13 +20,14 @@
 import type { StaticMap } from './css/primitives.js'
 import { PRIMITIVES_LIGHT, PRIMITIVES_DARK } from './css/primitives.js'
 import type { PresetDef } from './presets.js'
-import type { ThemeAsset, ThemeBackground } from '../contract.js'
+import type { ThemeAppearance, ThemeAppearancePair, ThemeAsset, ThemeBackground } from '../contract.js'
 import { isRecord, normalizeBackground } from '../contract.js'
 import { buildScale, BLUISH_STEPS, NEUTRAL_STEPS, buildSemanticScales } from './presets/_helpers.js'
 
 export type { PresetDef }
 
-export type Mode = 'light' | 'dark'
+/** The contract names the light/dark axis; the editor has always called it `Mode`. */
+export type Mode = ThemeAppearance
 
 /** One seed colour per appearance. */
 export type SeedPair = { light: string; dark: string }
@@ -480,6 +481,11 @@ export type SavedTheme = {
   background: ThemeBackground | null
 }
 
+/** Structural equality of one per-appearance background value. */
+function sameAppearancePair(a: ThemeAppearancePair, b: ThemeAppearancePair): boolean {
+  return a.light === b.light && a.dark === b.dark
+}
+
 /**
  * Structural equality of two backgrounds, for the editor's dirty comparison.
  * A pending upload is tracked separately by the panel; this compares only what
@@ -487,7 +493,12 @@ export type SavedTheme = {
  */
 export function sameBackground(a: ThemeBackground | null, b: ThemeBackground | null): boolean {
   if (a === null || b === null) return a === b
-  return a.asset === b.asset && a.opacity === b.opacity && a.blur === b.blur && a.enabled === b.enabled
+  return (
+    a.asset === b.asset
+    && a.enabled === b.enabled
+    && sameAppearancePair(a.opacity, b.opacity)
+    && sameAppearancePair(a.blur, b.blur)
+  )
 }
 
 /** Serialize the saved list with its schema version. */

@@ -14,8 +14,12 @@ export declare function isRecord(value: unknown): value is Record<string, unknow
 /**
  * Documents are one directory each — `<root>/<id>/theme.json` — so a theme can
  * later carry media beside its seeds without changing this contract.
+ *
+ * v2 split the background's opacity and blur per appearance. A v1 document's
+ * flat numbers still read: they are the light half, with the dark half derived
+ * exactly as that build derived it (see {@link normalizeBackground}).
  */
-export declare const THEME_FILE_VERSION = 1;
+export declare const THEME_FILE_VERSION = 2;
 /**
  * A fresh theme id. Both halves mint ids in the same shape, so an id never says
  * which half created it; the Host is the side that validates the pattern.
@@ -50,6 +54,10 @@ export type ThemeDocument = {
     createdAt: string;
     updatedAt: string;
 };
+/** The two appearances a background is tuned for, in the editor's own order. */
+export type ThemeAppearance = 'light' | 'dark';
+/** One number per appearance, keyed the way the editor's light/dark toggle is. */
+export type ThemeAppearancePair = Record<ThemeAppearance, number>;
 /**
  * The background one saved custom theme may carry.
  *
@@ -63,13 +71,16 @@ export type ThemeBackground = {
     /** File name inside the theme's own `assets/` directory. */
     asset: string;
     /**
-     * The image's own opacity, 0–100. The theme's surface colour sits *under*
-     * the image, so lowering this lets that colour show through — the panel
-     * never becomes transparent to reveal the image.
+     * The image's own opacity, 0–100, per appearance. The theme's surface colour
+     * sits *under* the image, so lowering this lets that colour show through —
+     * the panel never becomes transparent to reveal the image.
      */
-    opacity: number;
-    /** Softness in px; 0 keeps the image sharp, which is the default. */
-    blur: number;
+    opacity: ThemeAppearancePair;
+    /**
+     * Softness in px, per appearance; 0 keeps the image sharp, which is the
+     * default in both.
+     */
+    blur: ThemeAppearancePair;
     /**
      * Whether the theme actually paints the image. A disabled background keeps
      * every other field — and the stored file — intact, so switching it back on
@@ -79,19 +90,32 @@ export type ThemeBackground = {
      */
     enabled: boolean;
 };
-/** Where a fresh background starts: visible enough to read, calm enough for text. */
-export declare const THEME_BACKGROUND_DEFAULT_OPACITY = 40;
 /**
- * Dark mode dims the image by multiplying the light-mode opacity. A bright
- * wallpaper over a dark palette is otherwise far harsher than the same image
- * over the light one, and the panel colour has to win more of the mix.
+ * Where a fresh background starts, per appearance: visible enough to read,
+ * calm enough for text. Dark starts lower because a bright wallpaper over a
+ * dark palette is harsher than the same image over the light one, and the
+ * panel colour has to win more of the mix.
  */
-export declare const THEME_BACKGROUND_DARK_FACTOR = 0.7;
+export declare const THEME_BACKGROUND_DEFAULT_OPACITY: ThemeAppearancePair;
+/** A fresh background is sharp in both appearances. */
+export declare const THEME_BACKGROUND_DEFAULT_BLUR: ThemeAppearancePair;
+/**
+ * How much a background written before the split dims in dark mode. Only
+ * {@link legacyDarkOpacity} reads it: a current background stores its dark
+ * opacity outright, so nothing derives it any more.
+ */
+export declare const THEME_BACKGROUND_LEGACY_DARK_FACTOR = 0.7;
 export declare const THEME_BACKGROUND_MAX_BLUR = 24;
 /** Fold an opacity into the 0–100 percentage a background stores. */
 export declare function clampBackgroundOpacity(value: number): number;
 /** Fold a blur radius into the 0–{@link THEME_BACKGROUND_MAX_BLUR} px a background stores. */
 export declare function clampBackgroundBlur(value: number): number;
+/**
+ * The dark opacity a pre-split background paints: its light value dimmed by
+ * {@link THEME_BACKGROUND_LEGACY_DARK_FACTOR}. Migration-only, so an existing
+ * wallpaper keeps the exact look it had rather than jumping to a new default.
+ */
+export declare function legacyDarkOpacity(lightOpacity: number): number;
 /**
  * Bytes one uploaded image may occupy. It matches a single archive entry's
  * uncompressed cap on purpose: an image the roster accepts must also survive
