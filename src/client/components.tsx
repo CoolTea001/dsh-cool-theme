@@ -1747,7 +1747,10 @@ export function ThemePanel(props: {
         : null)
     // The wallpaper's opacity and blur are stored per appearance, so the two
     // sliders below tune the half the editor's own toggle is on — the same
-    // control that previews that appearance on the page.
+    // control that previews that appearance on the page. The label stays plain
+    // (`透明度 · 40%`): which half is being tuned is the toggle's own state, and
+    // repeating it on every row only crowds the reading order. A screen reader
+    // gets it in the accessible name instead, where there is no toggle to see.
     const backgroundModeName = t(`custom.seed.${seedMode}`)
 
     /** One slider row: name, track, value. */
@@ -1758,14 +1761,13 @@ export function ThemePanel(props: {
       max: number,
       suffix: string,
       onChange: (next: number) => void,
+      ariaLabel: string = label,
     ) =>
       React.createElement(
         'div',
         { className: 'ct-bg-field', key },
-        // The value rides with the label (`浅色 · 透明度 · 40%`), so the slider
-        // owns the whole right-hand side and the row has one reading order. The
-        // leading appearance is the editor's own light/dark toggle: both sliders
-        // tune whichever half it is on.
+        // The value rides with the label (`透明度 · 40%`), so the slider owns
+        // the whole right-hand side and the row has one reading order.
         React.createElement(
           'div',
           { className: 'ct-bg-field-label' },
@@ -1777,7 +1779,7 @@ export function ThemePanel(props: {
           min: 0,
           max,
           value,
-          'aria-label': label,
+          'aria-label': ariaLabel,
           onChange: (e: React.ChangeEvent<HTMLInputElement>) => onChange(Number(e.target.value)),
         }),
       )
@@ -1861,19 +1863,21 @@ export function ThemePanel(props: {
               { className: 'ct-bg-controls' },
               backgroundRange(
                 'bg-opacity',
-                `${backgroundModeName} · ${t('background.opacity')}`,
+                t('background.opacity'),
                 backgroundDraft.opacity[seedMode],
                 100,
                 '%',
                 (v) => updateBackgroundValue('opacity', v),
+                `${backgroundModeName} ${t('background.opacity')}`,
               ),
               backgroundRange(
                 'bg-blur',
-                `${backgroundModeName} · ${t('background.blur')}`,
+                t('background.blur'),
                 backgroundDraft.blur[seedMode],
                 THEME_BACKGROUND_MAX_BLUR,
                 ' px',
                 (v) => updateBackgroundValue('blur', v),
+                `${backgroundModeName} ${t('background.blur')}`,
               ),
             ),
           )
