@@ -8,6 +8,7 @@ import {
   CUSTOM_MIGRATED_STORAGE_KEY,
   SIDEBAR_TRANSPARENT_STORAGE_KEY,
   themeAssetUrl,
+  type ThemeAppearance,
   type ThemeBackground,
 } from '../contract.js'
 import { PRESETS, NOOP_PRESET_IDS, isBuiltinPresetId, type PresetId, type PresetDef } from './presets.js'
@@ -26,8 +27,10 @@ import {
 } from './custom.js'
 import {
   BACKGROUND_CSS,
+  backgroundHasImage,
   createBackgroundLayer,
   type ResolvedBackground,
+  type ResolvedBackgroundSide,
 } from './background.js'
 import { THEME_NAV_MARKUP } from './icons.js'
 import {
@@ -433,22 +436,26 @@ export function registerTheme(ctx: any) {
    * active entry. The draft's colours may be unsaved, but its wallpaper is not
    * previewed through here — the panel sets `previewBackground` for that.
    *
-   * A switched-off background resolves to nothing at all, which is what lets
-   * every consumer stay unaware of the flag: no layer is mounted, so the canvas
-   * keeps its own opaque surfaces and the sidebar switch works again, exactly as
-   * on a theme that never had an image.
+   * Each appearance resolves on its own: a side that is switched off or carries
+   * no image simply paints nothing, and only when neither side paints is the
+   * whole background nothing at all. That is what lets every consumer stay
+   * unaware of the per-side flags: no layer is mounted, so the canvas keeps its
+   * own opaque surfaces and the sidebar switch works again, exactly as on a
+   * theme that never had an image.
    */
   function resolveActiveBackground(): ResolvedBackground | null {
     const id = readActiveId()
     if (id === null) return null
     const entry = readList().find((item) => item.id === id)
     const background = entry?.background
-    if (!background || !background.enabled) return null
-    return {
-      url: themeAssetUrl(id, background.asset),
-      opacity: background.opacity,
-      blur: background.blur,
+    if (!background) return null
+    const side = (appearance: ThemeAppearance): ResolvedBackgroundSide => {
+      const half = background[appearance]
+      if (!half.enabled || half.asset === '') return { url: null, opacity: 0, blur: 0 }
+      return { url: themeAssetUrl(id, half.asset), opacity: half.opacity, blur: half.blur }
     }
+    const resolved: ResolvedBackground = { light: side('light'), dark: side('dark') }
+    return backgroundHasImage(resolved) ? resolved : null
   }
 
   /**

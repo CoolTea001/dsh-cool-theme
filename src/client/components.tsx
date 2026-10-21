@@ -6,12 +6,15 @@ import * as React from 'react'
 import { HexAlphaColorPicker, HexColorInput, HexColorPicker } from 'react-colorful'
 import {
   CUSTOM_PRESET_ID,
+  THEME_APPEARANCES,
   THEME_ARCHIVE_EXTENSION,
   THEME_ASSET_MAX_BYTES,
   THEME_BACKGROUND_MAX_BLUR,
+  emptyBackgroundSide,
   newThemeId,
   themeAssetUrl,
   type ThemeBackground,
+  type ThemeBackgroundSide,
 } from '../contract.js'
 import { type PresetId, presetOptions } from './presets.js'
 import { type ThemeKey } from './locales.js'
@@ -23,10 +26,11 @@ import {
 } from './theme-files.js'
 import {
   BACKGROUND_ACCEPT,
-  DEFAULT_BACKGROUND,
+  backgroundHasImage,
   isSupportedImage,
   prepareBackgroundImage,
   type ResolvedBackground,
+  type ResolvedBackgroundSide,
 } from './background.js'
 import {
   type BorderSeed,
@@ -620,9 +624,21 @@ export function ThemePanel(props: {
   const importInputRef = React.useRef<HTMLInputElement | null>(null)
   /** The hidden picker the background editor opens. */
   const backgroundInputRef = React.useRef<HTMLInputElement | null>(null)
-  // An image picked for the open draft, before Save uploads it. Its object URL
-  // is the preview; `file` is what gets compressed and uploaded.
-  const [pendingImage, setPendingImage] = React.useState<{ file: File; url: string } | null>(null)
+  /**
+   * The appearance the picker was opened for. The picker is one shared input, so
+   * the side a file belongs to is recorded when the dialog opens rather than
+   * read from the toggle when it closes — the user may switch the toggle while
+   * the browser's file dialog holds the screen.
+   */
+  const pickModeRef = React.useRef<Mode>('light')
+  // An image picked for the open draft, one per appearance, before Save uploads
+  // it. The object URL is the preview; `file` is what gets compressed.
+  const [pending, setPending] = React.useState<Record<Mode, { file: File; url: string } | null>>({
+    light: null,
+    dark: null,
+  })
+  /** Whether any appearance has a file waiting to be uploaded by Save. */
+  const hasPendingPick = THEME_APPEARANCES.some((mode) => pending[mode] !== null)
   // The card open in the editor. Null means every card is collapsed and only the
   // "add" button is showing, which is the state the panel opens in.
   const [editing, setEditing] = React.useState<Editing | null>(null)
@@ -650,7 +666,7 @@ export function ThemePanel(props: {
   const dirtyRef = React.useRef(false)
   dirtyRef.current =
     editing !== null
-    && isDirty(editing, custom, editing.background, pendingImage !== null)
+    && isDirty(editing, custom, editing.background, hasPendingPick)
   const confirmCloseRef = React.useRef(false)
   confirmCloseRef.current = confirmClose
   const pendingLeaveRef = React.useRef<{ entry: SavedTheme | null; edit: boolean } | null>(null)
@@ -675,43 +691,65 @@ export function ThemePanel(props: {
   //
   // A picked file is not uploaded until Save: the editor previews it from an
   // object URL, and cancelling has to leave the theme's directory untouched.
-  // The ref mirrors the state for the unmount cleanup, which must revoke the
-  // URL even when the panel closes mid-edit.
-  const pendingRef = React.useRef<{ file: File; url: string } | null>(null)
-  pendingRef.current = pendingImage
+  // One pick is held per appearance, because the two sides are edited and saved
+  // independently. The ref mirrors the state for the unmount cleanup, which must
+  // revoke every URL even when the panel closes mid-edit.
+  const pendingRef = React.useRef<Record<Mode, { file: File; url: string } | null>>({
+    light: null,
+    dark: null,
+  })
+  pendingRef.current = pending
 
   React.useEffect(
     () => () => {
-      const pending = pendingRef.current
-      if (pending) URL.revokeObjectURL(pending.url)
+      for (const mode of THEME_APPEARANCES) {
+        const pick = pendingRef.current[mode]
+        if (pick) URL.revokeObjectURL(pick.url)
+      }
     },
     [],
   )
 
-  /** Replace the pending pick, revoking the URL it supersedes. */
-  function replacePending(file: File | null) {
-    const previous = pendingRef.current
+  /** Replace one appearance's pending pick, revoking the URL it supersedes. */
+  function replacePending(mode: Mode, file: File | null) {
+    const previous = pendingRef.current[mode]
     if (previous) URL.revokeObjectURL(previous.url)
-    setPendingImage(file ? { file, url: URL.createObjectURL(file) } : null)
+    const next: Record<Mode, { file: File; url: string } | null> = {
+      ...pendingRef.current,
+      [mode]: file ? { file, url: URL.createObjectURL(file) } : null,
+    }
+    // The ref is written here rather than waiting for the next render: two picks
+    // in one tick must not revoke the same URL twice or leak the second's.
+    pendingRef.current = next
+    setPending(next)
+  }
+
+  /** Drop every pending pick; the card that owned them is going away. */
+  function clearPending() {
+    for (const mode of THEME_APPEARANCES) replacePending(mode, null)
+  }
+
+  /** One side's inputs, folded into a string the preview effect can compare. */
+  function backgroundSideKey(side: ThemeBackgroundSide | undefined): string {
+    return side ? `${side.asset}:${String(side.opacity)}:${String(side.blur)}:${String(side.enabled)}` : ''
   }
 
   /**
    * What the editor paints: the pending pick when there is one, otherwise the
-   * stored asset of the entry being edited. Every input of the preview effect is
-   * in the key, so a slider move repaints without rebuilding the palette.
+   * stored asset of the entry being edited — resolved per appearance, because
+   * each side has its own image and its own switch. Every input of the preview
+   * effect is in the key, so a slider move repaints without rebuilding the
+   * palette.
    */
   const backgroundKey =
     editing === null
       ? ''
       : [
           editing.id ?? 'new',
-          editing.background?.asset ?? '',
-          String(editing.background?.opacity.light ?? ''),
-          String(editing.background?.opacity.dark ?? ''),
-          String(editing.background?.blur.light ?? ''),
-          String(editing.background?.blur.dark ?? ''),
-          String(editing.background?.enabled ?? ''),
-          pendingImage?.url ?? '',
+          backgroundSideKey(editing.background?.light),
+          backgroundSideKey(editing.background?.dark),
+          pending.light?.url ?? '',
+          pending.dark?.url ?? '',
         ].join('|')
 
   React.useEffect(() => {
@@ -720,32 +758,20 @@ export function ThemePanel(props: {
       onPreviewBackground(undefined)
       return
     }
-    if (!editing.background) {
-      // The draft deliberately has no wallpaper; the committed one must not
-      // show through behind it.
-      onPreviewBackground(null)
-      return
+    const background = editing.background
+    const resolve = (mode: Mode): ResolvedBackgroundSide => {
+      const side = background?.[mode]
+      // Switched off, or nothing picked for this appearance: this side paints
+      // nothing, and must not let the committed wallpaper show through either.
+      if (!side || !side.enabled) return { url: null, opacity: 0, blur: 0 }
+      const stored = editing.id && side.asset ? themeAssetUrl(editing.id, side.asset) : null
+      const url = pending[mode]?.url ?? stored
+      return url ? { url, opacity: side.opacity, blur: side.blur } : { url: null, opacity: 0, blur: 0 }
     }
-    if (!editing.background.enabled) {
-      // Switched off. The image stays in the draft, but nothing paints, so the
-      // committed wallpaper of the active entry must not show through either.
-      onPreviewBackground(null)
-      return
-    }
-    const stored =
-      editing.id && editing.background.asset
-        ? themeAssetUrl(editing.id, editing.background.asset)
-        : null
-    const url = pendingImage?.url ?? stored
-    if (!url) {
-      onPreviewBackground(null)
-      return
-    }
-    onPreviewBackground({
-      url,
-      opacity: editing.background.opacity,
-      blur: editing.background.blur,
-    })
+    const resolved: ResolvedBackground = { light: resolve('light'), dark: resolve('dark') }
+    // A draft with no image on either side is a draft with no wallpaper: pass
+    // null so the committed one is hidden rather than showing through.
+    onPreviewBackground(backgroundHasImage(resolved) ? resolved : null)
     // `backgroundKey` names every input of this effect.
   }, [backgroundKey])
 
@@ -1134,7 +1160,7 @@ export function ThemePanel(props: {
     // inside the next card the user opens.
     closePicker()
     // A pick left over from a previous card must not attach to the new draft.
-    replacePending(null)
+    clearPending()
     // Snapshot the previous draft before `resetCustom` overwrites it, so cancel
     // can put the user back on the theme they had. The preset is only the seed
     // for a brand-new theme, so it is stamped as the new theme's base here.
@@ -1155,7 +1181,7 @@ export function ThemePanel(props: {
   function startEdit(entry: SavedTheme) {
     closePicker()
     // A pick left over from a previous card must not attach to this one.
-    replacePending(null)
+    clearPending()
     const next = beginEditing(entry.id, entry.name, entry.name, entry.theme, entry.background)
     setEditing(next)
     onLoadSaved(entry.id)
@@ -1166,7 +1192,7 @@ export function ThemePanel(props: {
     if (!editing) return
     closePicker()
     revertEditing(editing)
-    replacePending(null)
+    clearPending()
     setEditing(null)
     syncSaved()
   }
@@ -1233,10 +1259,13 @@ export function ThemePanel(props: {
     if (file) void importArchive(file)
   }
 
-  /** Open the background picker, clearing the previous choice. */
+  /** Open the background picker for the appearance currently on show. */
   function startBackgroundPick() {
     const input = backgroundInputRef.current
     if (!input) return
+    // Record the side now: the dialog holds the screen, and the toggle may be
+    // switched before the file comes back.
+    pickModeRef.current = seedMode
     input.value = ''
     input.click()
   }
@@ -1256,46 +1285,62 @@ export function ThemePanel(props: {
       showToast(t('background.tooLarge').replace('{0}', THEME_ASSET_MAX_MB))
       return
     }
-    replacePending(file)
-    setEditing((cur) =>
-      cur
-        ? {
-            ...cur,
-            background: cur.background ?? { asset: '', ...DEFAULT_BACKGROUND },
-          }
-        : cur,
-    )
-  }
-
-  /** Push one field of the background draft; only a present background has fields. */
-  function updateBackground(patch: Partial<ThemeBackground>) {
-    setEditing((cur) =>
-      cur?.background ? { ...cur, background: { ...cur.background, ...patch } } : cur,
-    )
+    const mode = pickModeRef.current
+    replacePending(mode, file)
+    setEditing((cur) => {
+      if (!cur) return cur
+      const background = cur.background
+      return {
+        ...cur,
+        // Both sides are materialized so the draft always has the shape the
+        // document will be written with; only the picked one is switched on.
+        background: {
+          light: background?.light ?? emptyBackgroundSide('light'),
+          dark: background?.dark ?? emptyBackgroundSide('dark'),
+          [mode]: { ...(background?.[mode] ?? emptyBackgroundSide(mode)), enabled: true },
+        },
+      }
+    })
   }
 
   /**
-   * Push one appearance's opacity or blur. The editor's light/dark toggle picks
-   * the half being tuned, so a slider only ever moves the appearance on show.
+   * Push one field of the appearance on show. The editor's light/dark toggle
+   * picks the side being edited, so a control only ever moves that side — which
+   * is the whole point of the split: the light image and the dark image are
+   * separate, not one image with two sets of numbers.
    */
-  function updateBackgroundValue(field: 'opacity' | 'blur', value: number) {
-    setEditing((cur) =>
-      cur?.background
-        ? {
-            ...cur,
-            background: {
-              ...cur.background,
-              [field]: { ...cur.background[field], [seedMode]: value },
-            },
-          }
-        : cur,
-    )
+  function updateBackgroundSide(patch: Partial<ThemeBackgroundSide>) {
+    setEditing((cur) => {
+      if (!cur) return cur
+      const background = cur.background
+      return {
+        ...cur,
+        background: {
+          light: background?.light ?? emptyBackgroundSide('light'),
+          dark: background?.dark ?? emptyBackgroundSide('dark'),
+          [seedMode]: { ...(background?.[seedMode] ?? emptyBackgroundSide(seedMode)), ...patch },
+        },
+      }
+    })
   }
 
-  /** Drop the wallpaper from this draft; Save then removes the stored file too. */
+  /**
+   * Drop the wallpaper from the appearance on show; Save then removes the
+   * stored file too. The other appearance keeps its own image and settings, and
+   * the draft only becomes "no wallpaper" once both sides are empty.
+   */
   function removeBackground() {
-    replacePending(null)
-    setEditing((cur) => (cur ? { ...cur, background: null } : cur))
+    const mode = seedMode
+    replacePending(mode, null)
+    setEditing((cur) => {
+      if (!cur?.background) return cur
+      const next: ThemeBackground = {
+        ...cur.background,
+        [mode]: { ...cur.background[mode], asset: '', enabled: false },
+      }
+      const empty = next.light.asset === '' && next.dark.asset === ''
+      return { ...cur, background: empty ? null : next }
+    })
   }
 
   /** Commit the open editor: create a new entry, or update the one being edited. */
@@ -1309,10 +1354,14 @@ export function ThemePanel(props: {
     // under that id.
     const id = open.id ?? newThemeId()
     const draftBackground = open.background
-    // A draft whose asset is still empty is a picked file that has not been
-    // uploaded yet; it must not be written as a background.
-    const committed = draftBackground && draftBackground.asset !== '' ? draftBackground : null
-    const pending = pendingImage
+    // A side whose asset is still empty is a picked file that has not been
+    // uploaded yet; a draft with no stored file on either side is written as no
+    // background at all, and the upload below fills in whichever side it can.
+    const committed =
+      draftBackground && (draftBackground.light.asset !== '' || draftBackground.dark.asset !== '')
+        ? draftBackground
+        : null
+    const picks = THEME_APPEARANCES.filter((mode) => pending[mode] !== null)
 
     savingRef.current = true
     try {
@@ -1321,26 +1370,34 @@ export function ThemePanel(props: {
       )
       if (next === null) return
 
-      // The document is stored either way; a failed image upload only costs the
-      // wallpaper, so it is reported without undoing the save.
+      // The document is stored either way; a failed image upload only costs that
+      // side's wallpaper, so it is reported without undoing the save. The sides
+      // are uploaded one by one: one bad file must not discard the other's.
       let failure: string | null = null
-      if (pending) {
+      let uploaded: ThemeBackground | null = committed
+      for (const mode of picks) {
+        const pick = pending[mode]
+        if (!pick) continue
         try {
-          const bytes = await prepareBackgroundImage(pending.file)
+          const bytes = await prepareBackgroundImage(pick.file)
           const asset = await uploadThemeAsset(id, bytes)
-          const withAsset: ThemeBackground = {
-            ...(draftBackground ?? { asset: '', ...DEFAULT_BACKGROUND }),
-            asset: asset.name,
+          const base: ThemeBackground = uploaded ?? {
+            light: emptyBackgroundSide('light'),
+            dark: emptyBackgroundSide('dark'),
           }
-          const updated = await saved.update(id, name, withAsset)
-          if (updated === null) failure = t('custom.toast.failed')
+          uploaded = { ...base, [mode]: { ...base[mode], asset: asset.name, enabled: true } }
         } catch (error) {
           failure = backgroundFailureMessage(t, error)
         }
       }
+      // Only a side that actually landed changes the stored document.
+      if (uploaded !== committed) {
+        const updated = await saved.update(id, name, uploaded)
+        if (updated === null) failure = failure ?? t('custom.toast.failed')
+      }
 
       setEditing(null)
-      replacePending(null)
+      clearPending()
       // Saving commits the colours, not the appearance the preview borrowed.
       restoreAppearance(open)
       syncSaved()
@@ -1739,18 +1796,24 @@ export function ThemePanel(props: {
           )
         : null
 
-    const backgroundDraft = editing?.background ?? null
+    // The wallpaper is edited one appearance at a time, following the editor's
+    // own light/dark toggle. Each side carries its own image, its own switch and
+    // its own numbers, so everything below describes the side on show — picking
+    // a dark image while the light one stays untouched is the whole point.
+    const backgroundSide = editing?.background?.[seedMode] ?? null
+    const backgroundPending = pending[seedMode]
     const backgroundPreviewUrl =
-      pendingImage?.url
-      ?? (editing?.id && backgroundDraft?.asset
-        ? themeAssetUrl(editing.id, backgroundDraft.asset)
+      backgroundPending?.url
+      ?? (editing?.id && backgroundSide?.asset
+        ? themeAssetUrl(editing.id, backgroundSide.asset)
         : null)
-    // The wallpaper's opacity and blur are stored per appearance, so the two
-    // sliders below tune the half the editor's own toggle is on — the same
-    // control that previews that appearance on the page. The label stays plain
-    // (`透明度 · 40%`): which half is being tuned is the toggle's own state, and
-    // repeating it on every row only crowds the reading order. A screen reader
-    // gets it in the accessible name instead, where there is no toggle to see.
+    // Whether this side has anything to paint or to turn on: a stored asset, or
+    // a file picked and waiting for Save to upload it.
+    const backgroundSideHasImage =
+      backgroundSide !== null && (backgroundSide.asset !== '' || backgroundPending !== null)
+    // Which side the toggle is on is the segmented control's own state, so the
+    // labels stay plain (`透明度 · 40%`) rather than repeating it on every row;
+    // a screen reader gets it in the accessible name, where there is no toggle.
     const backgroundModeName = t(`custom.seed.${seedMode}`)
 
     /** One slider row: name, track, value. */
@@ -1789,7 +1852,7 @@ export function ThemePanel(props: {
     // the switch is its fixed last item: whatever the state, the section always
     // shows one.
     const backgroundActions: React.ReactNode[] = []
-    if (backgroundDraft === null) {
+    if (!backgroundSideHasImage) {
       backgroundActions.push(
         React.createElement(
           'button',
@@ -1797,7 +1860,7 @@ export function ThemePanel(props: {
           t('background.add'),
         ),
       )
-    } else if (backgroundDraft.enabled) {
+    } else if (backgroundSide?.enabled) {
       // Off hides every command but the switch: with nothing painted there is
       // nothing to replace, remove or tune until the image comes back on.
       backgroundActions.push(
@@ -1816,16 +1879,17 @@ export function ThemePanel(props: {
     backgroundActions.push(
       // Also the reason "remove" is not the only way out of a wallpaper: off
       // keeps the file and the settings, so the theme can go back to plain
-      // surfaces without losing the image it was set up with. A theme with no
+      // surfaces without losing the image it was set up with. A side with no
       // image at all is simply the same switch in its off state, waiting until
-      // there is something to turn on.
+      // there is something to turn on. The switch is per appearance: turning the
+      // light image off leaves the dark one painting.
       React.createElement(Switch, {
         key: 'enabled',
         className: 'ct-bg-switch',
-        checked: backgroundDraft?.enabled ?? false,
-        disabled: backgroundDraft === null,
+        checked: backgroundSide?.enabled ?? false,
+        disabled: !backgroundSideHasImage,
         label: t('background.title'),
-        onChange: (on: boolean) => updateBackground({ enabled: on }),
+        onChange: (on: boolean) => updateBackgroundSide({ enabled: on }),
       }),
     )
 
@@ -1847,7 +1911,7 @@ export function ThemePanel(props: {
       ),
       // The thumbnail and both sliders describe the image that is painted, so
       // they belong to the on state with it.
-      backgroundDraft?.enabled
+      backgroundSide?.enabled && backgroundSideHasImage
         ? React.createElement(
             'div',
             { className: 'ct-bg-body' },
@@ -1864,19 +1928,19 @@ export function ThemePanel(props: {
               backgroundRange(
                 'bg-opacity',
                 t('background.opacity'),
-                backgroundDraft.opacity[seedMode],
+                backgroundSide.opacity,
                 100,
                 '%',
-                (v) => updateBackgroundValue('opacity', v),
+                (v) => updateBackgroundSide({ opacity: v }),
                 `${backgroundModeName} ${t('background.opacity')}`,
               ),
               backgroundRange(
                 'bg-blur',
                 t('background.blur'),
-                backgroundDraft.blur[seedMode],
+                backgroundSide.blur,
                 THEME_BACKGROUND_MAX_BLUR,
                 ' px',
-                (v) => updateBackgroundValue('blur', v),
+                (v) => updateBackgroundSide({ blur: v }),
                 `${backgroundModeName} ${t('background.blur')}`,
               ),
             ),

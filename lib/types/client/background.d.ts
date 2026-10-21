@@ -22,17 +22,25 @@
  * that anything is being covered. Content cards keep their own opaque surfaces
  * on top of the layer.
  */
-import { type ThemeAppearancePair } from '../contract.js';
+import { type ThemeAppearance } from '../contract.js';
 /** What the input accepts and what the Host will store. */
 export declare const BACKGROUND_ACCEPT = "image/png,image/jpeg,image/webp,image/avif,image/gif";
-/** One background as the renderer needs it: where the bytes are, and how to paint them. */
-export type ResolvedBackground = {
-    url: string;
-    /** Opacity 0–100 and blur in px, one value per appearance. */
-    opacity: ThemeAppearancePair;
-    blur: ThemeAppearancePair;
+/** One appearance's wallpaper as the renderer needs it: a URL, or none at all. */
+export type ResolvedBackgroundSide = {
+    /** null when this appearance paints no image of its own. */
+    url: string | null;
+    /** Opacity 0–100, and blur in px, for this appearance's own image. */
+    opacity: number;
+    blur: number;
 };
-/** The two surface colours the image is composited over, per appearance. */
+/**
+ * The wallpaper pair the layer paints. The two appearances are independent
+ * images, so this is a side each rather than one URL with two sets of numbers.
+ */
+export type ResolvedBackground = Record<ThemeAppearance, ResolvedBackgroundSide>;
+/** Whether either appearance has an image; a pair with none is not worth mounting. */
+export declare function backgroundHasImage(background: ResolvedBackground): boolean;
+/** The two surface colours the images are composited over, per appearance. */
 export type BackgroundSurfaceColors = {
     light: string;
     dark: string;
@@ -40,8 +48,8 @@ export type BackgroundSurfaceColors = {
 /**
  * The layer's own stylesheet. Opacity and blur are custom properties so a
  * slider can move them without rebuilding the theme's token layer: the shell
- * never sees a `theme/change` while the user drags. Each has one property per
- * appearance, so the light and dark values are independent.
+ * never sees a `theme/change` while the user drags. Image, opacity and blur all
+ * have one property per appearance, so each side is fully independent.
  */
 export declare const BACKGROUND_CSS: string;
 export declare function createBackgroundLayer(): {
@@ -62,20 +70,4 @@ export type BackgroundLayer = ReturnType<typeof createBackgroundLayer>;
 export declare function prepareBackgroundImage(file: File): Promise<Blob>;
 /** Whether the picker's file is one of the types the Host may store. */
 export declare function isSupportedImage(file: File): boolean;
-/**
- * A fresh background's first settings: what a picker should start from. The two
- * pairs are copied rather than referenced, so a draft can never write back into
- * the module constants.
- */
-export declare const DEFAULT_BACKGROUND: {
-    opacity: {
-        light: number;
-        dark: number;
-    };
-    blur: {
-        light: number;
-        dark: number;
-    };
-    enabled: boolean;
-};
 //# sourceMappingURL=background.d.ts.map

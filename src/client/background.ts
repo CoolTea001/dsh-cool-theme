@@ -24,13 +24,12 @@
  */
 
 import {
+  THEME_APPEARANCES,
   THEME_ASSET_MAX_BYTES,
-  THEME_BACKGROUND_DEFAULT_BLUR,
-  THEME_BACKGROUND_DEFAULT_OPACITY,
   assetTypeOf,
   clampBackgroundBlur,
   clampBackgroundOpacity,
-  type ThemeAppearancePair,
+  type ThemeAppearance,
 } from '../contract.js'
 
 /** What the input accepts and what the Host will store. */
@@ -45,28 +44,42 @@ const BACKGROUND_KEEP_ORIGINAL_BYTES = 1.5 * 1024 * 1024
 /** Encoder qualities tried in order until the re-encoded image fits the upload cap. */
 const BACKGROUND_ENCODE_QUALITIES = [0.85, 0.7, 0.55] as const
 
-/** One background as the renderer needs it: where the bytes are, and how to paint them. */
-export type ResolvedBackground = {
-  url: string
-  /** Opacity 0–100 and blur in px, one value per appearance. */
-  opacity: ThemeAppearancePair
-  blur: ThemeAppearancePair
+/** One appearance's wallpaper as the renderer needs it: a URL, or none at all. */
+export type ResolvedBackgroundSide = {
+  /** null when this appearance paints no image of its own. */
+  url: string | null
+  /** Opacity 0–100, and blur in px, for this appearance's own image. */
+  opacity: number
+  blur: number
 }
 
-/** The two surface colours the image is composited over, per appearance. */
+/**
+ * The wallpaper pair the layer paints. The two appearances are independent
+ * images, so this is a side each rather than one URL with two sets of numbers.
+ */
+export type ResolvedBackground = Record<ThemeAppearance, ResolvedBackgroundSide>
+
+/** Whether either appearance has an image; a pair with none is not worth mounting. */
+export function backgroundHasImage(background: ResolvedBackground): boolean {
+  return background.light.url !== null || background.dark.url !== null
+}
+
+/** The two surface colours the images are composited over, per appearance. */
 export type BackgroundSurfaceColors = { light: string; dark: string }
 
 /**
  * The layer's own stylesheet. Opacity and blur are custom properties so a
  * slider can move them without rebuilding the theme's token layer: the shell
- * never sees a `theme/change` while the user drags. Each has one property per
- * appearance, so the light and dark values are independent.
+ * never sees a `theme/change` while the user drags. Image, opacity and blur all
+ * have one property per appearance, so each side is fully independent.
  */
 export const BACKGROUND_CSS = [
   '.ct-bg{position:fixed;inset:0;z-index:-1;pointer-events:none;background-color:var(--ct-bg-light,#fff);}',
   'html[data-ds-dark-theme] .ct-bg,body[data-ds-dark-theme] .ct-bg{background-color:var(--ct-bg-dark,#151517);}',
-  '.ct-bg-image{position:absolute;inset:0;background-image:var(--ct-bg-image,none);background-position:center;background-repeat:no-repeat;background-size:cover;opacity:var(--ct-bg-opacity-light,0);filter:blur(var(--ct-bg-blur-light,0px));}',
-  'html[data-ds-dark-theme] .ct-bg-image,body[data-ds-dark-theme] .ct-bg-image{opacity:var(--ct-bg-opacity-dark,0);filter:blur(var(--ct-bg-blur-dark,0px));}',
+  // One element carries both appearances: only one is active at a time, and the
+  // per-appearance properties select which image to paint.
+  '.ct-bg-image{position:absolute;inset:0;background-image:var(--ct-bg-image-light,none);background-position:center;background-repeat:no-repeat;background-size:cover;opacity:var(--ct-bg-opacity-light,0);filter:blur(var(--ct-bg-blur-light,0px));}',
+  'html[data-ds-dark-theme] .ct-bg-image,body[data-ds-dark-theme] .ct-bg-image{background-image:var(--ct-bg-image-dark,none);opacity:var(--ct-bg-opacity-dark,0);filter:blur(var(--ct-bg-blur-dark,0px));}',
   // The canvas surfaces that clear for the layer. They are matched by class
   // substring because the hashed prefix (`_6Qf49G_centerCol`) rotates between
   // builds; the conversation root has a stable `data-phase` attribute instead.
@@ -103,22 +116,25 @@ export const BACKGROUND_CSS = [
   'html.ct-bg-on [class*="centerCol"] [data-phase="active"] [data-composer-seat]{background:transparent !important;}',
   'html.ct-bg-on [class*="centerCol"] [data-phase="active"] [data-composer-seat]::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background-image:linear-gradient(var(--ct-bg-wash,transparent),var(--ct-bg-wash,transparent)),var(--ct-bg-image,none);background-size:auto,cover;background-position:center,center;background-repeat:no-repeat;background-attachment:fixed,fixed;filter:blur(var(--ct-bg-blur,0px));-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 36px);mask-image:linear-gradient(180deg,transparent 0,#000 36px);}',
   // The wash is the panel colour at the alpha the image leaves free, and the
-  // composer copy blurs by the same radius as the layer below; both have to
-  // follow the appearance, exactly like the layer's own opacity does. One alias
-  // per property keeps the composer rule free of a second light/dark pair.
-  'html{--ct-bg-wash:var(--ct-bg-wash-light,transparent);--ct-bg-blur:var(--ct-bg-blur-light,0px);}',
-  'html[data-ds-dark-theme],body[data-ds-dark-theme]{--ct-bg-wash:var(--ct-bg-wash-dark,transparent);--ct-bg-blur:var(--ct-bg-blur-dark,0px);}',
+  // composer copy blurs by the same radius as the layer below; image, wash and
+  // blur all have to follow the appearance, exactly like the layer's own
+  // opacity does. One alias per property keeps the composer rule free of a
+  // second light/dark pair. A side with no image aliases to `none`/`transparent`,
+  // so the copy paints nothing rather than cutting a solid band out of the layer.
+  'html{--ct-bg-image:var(--ct-bg-image-light,none);--ct-bg-wash:var(--ct-bg-wash-light,transparent);--ct-bg-blur:var(--ct-bg-blur-light,0px);}',
+  'html[data-ds-dark-theme],body[data-ds-dark-theme]{--ct-bg-image:var(--ct-bg-image-dark,none);--ct-bg-wash:var(--ct-bg-wash-dark,transparent);--ct-bg-blur:var(--ct-bg-blur-dark,0px);}',
 ].join('\n')
 
 /** The layer's custom properties, all set on `<html>` so the composer can read them. */
 const BACKGROUND_VARIABLES = [
   '--ct-bg-light',
   '--ct-bg-dark',
+  '--ct-bg-image-light',
+  '--ct-bg-image-dark',
   '--ct-bg-opacity-light',
   '--ct-bg-opacity-dark',
   '--ct-bg-blur-light',
   '--ct-bg-blur-dark',
-  '--ct-bg-image',
   '--ct-bg-wash-light',
   '--ct-bg-wash-dark',
 ] as const
@@ -169,35 +185,37 @@ export function createBackgroundLayer() {
   /**
    * Paint one background, or take the layer away. `colors` are the theme's own
    * surface colours; without them there is no colour to reveal, so the layer is
-   * not shown.
+   * not shown. A pair with no image on either side is the same as no background.
    */
   function render(bg: ResolvedBackground | null, colors: BackgroundSurfaceColors | null): void {
-    if (bg === null || colors === null) {
+    if (bg === null || colors === null || !backgroundHasImage(bg)) {
       unmount()
       return
     }
     ensure()
     if (layer === null || image === null) return
-    const opacity: ThemeAppearancePair = {
-      light: clampBackgroundOpacity(bg.opacity.light),
-      dark: clampBackgroundOpacity(bg.opacity.dark),
-    }
-    const blur: ThemeAppearancePair = {
-      light: clampBackgroundBlur(bg.blur.light),
-      dark: clampBackgroundBlur(bg.blur.dark),
-    }
     // On `<html>` rather than on the layer: the composer's copy of the
     // wallpaper lives outside this element and reads the same properties.
     const style = document.documentElement.style
     style.setProperty('--ct-bg-light', colors.light)
     style.setProperty('--ct-bg-dark', colors.dark)
-    style.setProperty('--ct-bg-opacity-light', String(opacity.light / 100))
-    style.setProperty('--ct-bg-opacity-dark', String(opacity.dark / 100))
-    style.setProperty('--ct-bg-blur-light', `${String(blur.light)}px`)
-    style.setProperty('--ct-bg-blur-dark', `${String(blur.dark)}px`)
-    style.setProperty('--ct-bg-image', cssUrl(bg.url))
-    style.setProperty('--ct-bg-wash-light', surfaceWash(colors.light, opacity.light))
-    style.setProperty('--ct-bg-wash-dark', surfaceWash(colors.dark, opacity.dark))
+    for (const appearance of THEME_APPEARANCES) {
+      const side = bg[appearance]
+      if (side.url === null) {
+        // No image on this side: nothing paints, and the composer copy has to
+        // stay invisible too, or it would cut an opaque band out of the layer.
+        style.setProperty(`--ct-bg-image-${appearance}`, 'none')
+        style.setProperty(`--ct-bg-opacity-${appearance}`, '0')
+        style.setProperty(`--ct-bg-blur-${appearance}`, '0px')
+        style.setProperty(`--ct-bg-wash-${appearance}`, 'transparent')
+        continue
+      }
+      const opacity = clampBackgroundOpacity(side.opacity)
+      style.setProperty(`--ct-bg-image-${appearance}`, cssUrl(side.url))
+      style.setProperty(`--ct-bg-opacity-${appearance}`, String(opacity / 100))
+      style.setProperty(`--ct-bg-blur-${appearance}`, `${String(clampBackgroundBlur(side.blur))}px`)
+      style.setProperty(`--ct-bg-wash-${appearance}`, surfaceWash(colors[appearance], opacity))
+    }
   }
 
   return { render, unmount, dispose: unmount }
@@ -268,15 +286,4 @@ export async function prepareBackgroundImage(file: File): Promise<Blob> {
 export function isSupportedImage(file: File): boolean {
   if (/^image\/(png|jpeg|webp|avif|gif)$/i.test(file.type)) return true
   return assetTypeOf(file.name) !== null
-}
-
-/**
- * A fresh background's first settings: what a picker should start from. The two
- * pairs are copied rather than referenced, so a draft can never write back into
- * the module constants.
- */
-export const DEFAULT_BACKGROUND = {
-  opacity: { ...THEME_BACKGROUND_DEFAULT_OPACITY },
-  blur: { ...THEME_BACKGROUND_DEFAULT_BLUR },
-  enabled: true,
 }

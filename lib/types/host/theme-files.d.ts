@@ -22,9 +22,9 @@ export declare function listThemes(): Promise<ThemeDocument[]>;
  * new and the stored value when it already exists, so a later rename or edit
  * cannot rewrite when the theme was made.
  *
- * Media files are pruned here rather than by the caller: a theme can reference
- * exactly one asset (its background), so the save that commits a new background
- * is also the save that can drop the replaced file.
+ * Media files are pruned here rather than by the caller: a theme's background
+ * references at most one asset per appearance, so the save that commits a new
+ * image is also the save that can drop the file it replaced.
  */
 export declare function putTheme(input: {
     id: string;

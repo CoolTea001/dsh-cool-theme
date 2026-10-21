@@ -49,11 +49,13 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
  * Documents are one directory each — `<root>/<id>/theme.json` — so a theme can
  * later carry media beside its seeds without changing this contract.
  *
- * v2 split the background's opacity and blur per appearance. A v1 document's
- * flat numbers still read: they are the light half, with the dark half derived
+ * v2 split the background's opacity and blur per appearance; v3 split the
+ * background itself, so each appearance owns its image, switch, opacity and
+ * blur. Older documents still read: one shared asset becomes both sides' image,
+ * and a v1 flat number becomes the light value with the dark one derived
  * exactly as that build derived it (see {@link normalizeBackground}).
  */
-export const THEME_FILE_VERSION = 2
+export const THEME_FILE_VERSION = 3
 
 /**
  * A fresh theme id. Both halves mint ids in the same shape, so an id never says
@@ -105,31 +107,34 @@ export type ThemeAppearance = 'light' | 'dark'
 /** One number per appearance, keyed the way the editor's light/dark toggle is. */
 export type ThemeAppearancePair = Record<ThemeAppearance, number>
 
+/** The two appearances, in the order the editor reads them. */
+export const THEME_APPEARANCES = ['light', 'dark'] as const
+
 /**
- * The background one saved custom theme may carry.
- *
- * It lives in the theme document rather than in a browser preference, so a
- * theme's wallpaper follows the theme through an export, an import and a Host
- * restart — the same reason the colours live in files. Preset themes never
- * carry one: a preset is a palette, and only a custom theme is the user's own
- * document to extend.
+ * One appearance's wallpaper: its own image, its own switch, its own opacity
+ * and blur. The two sides of a background are fully independent, which is why
+ * a background is a pair of these rather than one image with a pair of numbers:
+ * a bright image chosen for the light appearance is exactly what does not work
+ * over a dark palette, so the dark appearance has to be able to carry a
+ * different image — or none at all.
  */
-export type ThemeBackground = {
-  /** File name inside the theme's own `assets/` directory. */
+export type ThemeBackgroundSide = {
+  /**
+   * File name inside the theme's own `assets/` directory, or '' when this
+   * appearance has no image of its own. An empty side paints nothing and lets
+   * the theme's plain surface colour show.
+   */
   asset: string
   /**
-   * The image's own opacity, 0–100, per appearance. The theme's surface colour
-   * sits *under* the image, so lowering this lets that colour show through —
-   * the panel never becomes transparent to reveal the image.
+   * The image's own opacity, 0–100. The theme's surface colour sits *under* the
+   * image, so lowering this lets that colour show through — the panel never
+   * becomes transparent to reveal the image.
    */
-  opacity: ThemeAppearancePair
+  opacity: number
+  /** Softness in px; 0 keeps the image sharp, which is the default in both. */
+  blur: number
   /**
-   * Softness in px, per appearance; 0 keeps the image sharp, which is the
-   * default in both.
-   */
-  blur: ThemeAppearancePair
-  /**
-   * Whether the theme actually paints the image. A disabled background keeps
+   * Whether this appearance actually paints its image. A disabled side keeps
    * every other field — and the stored file — intact, so switching it back on
    * restores exactly what was there: it is a switch, not a removal. An absent
    * flag reads as on, which is what every document written before it existed
@@ -139,14 +144,29 @@ export type ThemeBackground = {
 }
 
 /**
- * Where a fresh background starts, per appearance: visible enough to read,
- * calm enough for text. Dark starts lower because a bright wallpaper over a
- * dark palette is harsher than the same image over the light one, and the
- * panel colour has to win more of the mix.
+ * The background one saved custom theme may carry: one wallpaper per
+ * appearance, each with its own image, switch, opacity and blur.
+ *
+ * It lives in the theme document rather than in a browser preference, so a
+ * theme's wallpapers follow the theme through an export, an import and a Host
+ * restart — the same reason the colours live in files. Preset themes never
+ * carry one: a preset is a palette, and only a custom theme is the user's own
+ * document to extend.
+ *
+ * A document that names an image on neither side normalizes to `null`, which is
+ * the single "this theme has no wallpaper" value the rest of the plugin reads.
+ */
+export type ThemeBackground = Record<ThemeAppearance, ThemeBackgroundSide>
+
+/**
+ * Where a fresh image starts, per appearance: visible enough to read, calm
+ * enough for text. Dark starts lower because a bright wallpaper over a dark
+ * palette is harsher than the same image over the light one, and the panel
+ * colour has to win more of the mix.
  */
 export const THEME_BACKGROUND_DEFAULT_OPACITY: ThemeAppearancePair = { light: 40, dark: 30 }
 
-/** A fresh background is sharp in both appearances. */
+/** A fresh image is sharp in both appearances. */
 export const THEME_BACKGROUND_DEFAULT_BLUR: ThemeAppearancePair = { light: 0, dark: 0 }
 
 /**
@@ -175,6 +195,25 @@ export function clampBackgroundBlur(value: number): number {
  */
 export function legacyDarkOpacity(lightOpacity: number): number {
   return clampBackgroundOpacity(clampBackgroundOpacity(lightOpacity) * THEME_BACKGROUND_LEGACY_DARK_FACTOR)
+}
+
+/**
+ * A side with no image yet, carrying the defaults for its own appearance. This
+ * is where every "add an image" gesture starts: the picker fills `asset` in
+ * later, and until it does the side simply paints nothing.
+ */
+export function emptyBackgroundSide(appearance: ThemeAppearance): ThemeBackgroundSide {
+  return {
+    asset: '',
+    opacity: THEME_BACKGROUND_DEFAULT_OPACITY[appearance],
+    blur: THEME_BACKGROUND_DEFAULT_BLUR[appearance],
+    enabled: true,
+  }
+}
+
+/** Whether either side names an image; a background with none is no background. */
+export function backgroundHasAsset(background: ThemeBackground): boolean {
+  return background.light.asset !== '' || background.dark.asset !== ''
 }
 
 /**
@@ -218,7 +257,7 @@ export function isThemeAssetName(value: unknown): value is string {
 }
 
 /**
- * One appearance-tagged background value.
+ * One appearance-tagged background value, from a pre-v3 document.
  *
  * A document written before the split stores one flat number for both
  * appearances; it is the light value, and `deriveDark` reproduces the dark
@@ -248,31 +287,78 @@ function readAppearancePair(
   return { ...fallback }
 }
 
-/** Fold any stored or posted background into this build's shape, or drop it. */
-export function normalizeBackground(raw: unknown): ThemeBackground | null {
-  if (!isRecord(raw)) return null
-  if (!isThemeAssetName(raw.asset)) return null
-  if (!assetTypeOf(raw.asset)) return null
+/** A stored asset name that this build would accept, or '' when it is unusable. */
+function readAssetName(raw: unknown): string {
+  return isThemeAssetName(raw) && assetTypeOf(raw) ? raw : ''
+}
+
+/** One finite number, clamped; null when it is missing or not a real number. */
+function readNumber(raw: unknown, clamp: (value: number) => number): number | null {
+  return typeof raw === 'number' && Number.isFinite(raw) ? clamp(raw) : null
+}
+
+/**
+ * One appearance's side, read from the v3 shape. A side that names no usable
+ * file is still returned: that is "this appearance has no image", not a
+ * malformed document, and the other side must not be lost with it.
+ */
+function readBackgroundSide(raw: unknown, appearance: ThemeAppearance): ThemeBackgroundSide {
+  const fallback = emptyBackgroundSide(appearance)
+  if (!isRecord(raw)) return fallback
   return {
-    asset: raw.asset,
-    opacity: readAppearancePair(
-      raw.opacity,
-      clampBackgroundOpacity,
-      THEME_BACKGROUND_DEFAULT_OPACITY,
-      legacyDarkOpacity,
-    ),
-    // Blur was shared by both appearances, so a flat value is the dark one too.
-    blur: readAppearancePair(raw.blur, clampBackgroundBlur, THEME_BACKGROUND_DEFAULT_BLUR, (light) => light),
-    // Only an explicit `false` disables the image: a document written before the
+    asset: readAssetName(raw.asset),
+    opacity: readNumber(raw.opacity, clampBackgroundOpacity) ?? fallback.opacity,
+    blur: readNumber(raw.blur, clampBackgroundBlur) ?? fallback.blur,
+    // Only an explicit `false` disables the image: a side written before the
     // flag existed, or one whose value is malformed, keeps its wallpaper on.
     enabled: raw.enabled !== false,
   }
 }
 
 /**
- * The background a theme may keep: `raw` normalized, but only while the file it
- * names is actually stored beside the theme. A document that points at a missing
- * image drops the background rather than rendering a broken wallpaper.
+ * A pre-v3 document's two sides: it stored one asset shared by both
+ * appearances, so repeating it reproduces exactly what that build painted —
+ * each appearance keeping the opacity and blur it already had.
+ */
+function readSharedBackground(raw: Record<string, unknown>): ThemeBackground {
+  const asset = readAssetName(raw.asset)
+  const opacity = readAppearancePair(
+    raw.opacity,
+    clampBackgroundOpacity,
+    THEME_BACKGROUND_DEFAULT_OPACITY,
+    legacyDarkOpacity,
+  )
+  // Blur was shared by both appearances, so a flat value is the dark one too.
+  const blur = readAppearancePair(raw.blur, clampBackgroundBlur, THEME_BACKGROUND_DEFAULT_BLUR, (light) => light)
+  const enabled = raw.enabled !== false
+  return {
+    light: { asset, opacity: opacity.light, blur: blur.light, enabled },
+    dark: { asset, opacity: opacity.dark, blur: blur.dark, enabled },
+  }
+}
+
+/**
+ * Fold any stored or posted background into this build's shape, or drop it.
+ *
+ * Both document generations read here: a v3 background carries its two sides
+ * outright, while v1/v2 stored one asset with a shared or per-appearance
+ * opacity/blur. A background that names an image on neither side is no
+ * background, which keeps `null` the one "no wallpaper" value downstream.
+ */
+export function normalizeBackground(raw: unknown): ThemeBackground | null {
+  if (!isRecord(raw)) return null
+  const background: ThemeBackground =
+    isRecord(raw.light) || isRecord(raw.dark)
+      ? { light: readBackgroundSide(raw.light, 'light'), dark: readBackgroundSide(raw.dark, 'dark') }
+      : readSharedBackground(raw)
+  return backgroundHasAsset(background) ? background : null
+}
+
+/**
+ * The background a theme may keep: `raw` normalized, but with each side kept
+ * only while the file it names is actually stored beside the theme. A side that
+ * points at a missing image is emptied rather than rendering a broken
+ * wallpaper, and a background with no image left on either side is dropped.
  */
 export function backgroundForAssets(
   raw: unknown,
@@ -280,7 +366,11 @@ export function backgroundForAssets(
 ): ThemeBackground | null {
   const background = normalizeBackground(raw)
   if (background === null) return null
-  return assets.some((asset) => asset.name === background.asset) ? background : null
+  const stored = new Set(assets.map((asset) => asset.name))
+  const keep = (side: ThemeBackgroundSide): ThemeBackgroundSide =>
+    side.asset === '' || stored.has(side.asset) ? side : { ...side, asset: '', enabled: false }
+  const next: ThemeBackground = { light: keep(background.light), dark: keep(background.dark) }
+  return backgroundHasAsset(next) ? next : null
 }
 
 /**

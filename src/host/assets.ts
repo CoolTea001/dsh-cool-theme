@@ -129,10 +129,11 @@ export async function readAsset(
 /**
  * Delete every media file that is not in `keep`.
  *
- * A theme can only reference one asset today (its background), so a save is the
- * natural garbage-collection point: replacing an image writes a new hash, and
- * the save that follows drops the old one. Files this plugin does not recognise
- * are left alone rather than swept.
+ * A theme's background references at most one asset per appearance, so a save
+ * is the natural garbage-collection point: replacing an image writes a new
+ * hash, and the save that follows drops the old one — while the other
+ * appearance's file, still referenced, is kept. Files this plugin does not
+ * recognise are left alone rather than swept.
  */
 export async function pruneAssets(id: string, keep: readonly string[]): Promise<void> {
   const keepSet = new Set(keep)

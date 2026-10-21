@@ -20,7 +20,7 @@
 import type { StaticMap } from './css/primitives.js'
 import { PRIMITIVES_LIGHT, PRIMITIVES_DARK } from './css/primitives.js'
 import type { PresetDef } from './presets.js'
-import type { ThemeAppearance, ThemeAppearancePair, ThemeAsset, ThemeBackground } from '../contract.js'
+import type { ThemeAppearance, ThemeAsset, ThemeBackground, ThemeBackgroundSide } from '../contract.js'
 import { isRecord, normalizeBackground } from '../contract.js'
 import { buildScale, BLUISH_STEPS, NEUTRAL_STEPS, buildSemanticScales } from './presets/_helpers.js'
 
@@ -481,24 +481,20 @@ export type SavedTheme = {
   background: ThemeBackground | null
 }
 
-/** Structural equality of one per-appearance background value. */
-function sameAppearancePair(a: ThemeAppearancePair, b: ThemeAppearancePair): boolean {
-  return a.light === b.light && a.dark === b.dark
+/** Structural equality of one appearance's wallpaper. */
+function sameBackgroundSide(a: ThemeBackgroundSide, b: ThemeBackgroundSide): boolean {
+  return a.asset === b.asset && a.enabled === b.enabled && a.opacity === b.opacity && a.blur === b.blur
 }
 
 /**
  * Structural equality of two backgrounds, for the editor's dirty comparison.
  * A pending upload is tracked separately by the panel; this compares only what
- * would be written to the document.
+ * would be written to the document. Each appearance is compared on its own, so
+ * editing the dark image cannot leave the light one looking dirty.
  */
 export function sameBackground(a: ThemeBackground | null, b: ThemeBackground | null): boolean {
   if (a === null || b === null) return a === b
-  return (
-    a.asset === b.asset
-    && a.enabled === b.enabled
-    && sameAppearancePair(a.opacity, b.opacity)
-    && sameAppearancePair(a.blur, b.blur)
-  )
+  return sameBackgroundSide(a.light, b.light) && sameBackgroundSide(a.dark, b.dark)
 }
 
 /** Serialize the saved list with its schema version. */

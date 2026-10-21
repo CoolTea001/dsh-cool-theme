@@ -14,7 +14,7 @@
 
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { THEME_FILE_VERSION, backgroundForAssets, isRecord } from '../contract.js'
+import { THEME_APPEARANCES, THEME_FILE_VERSION, backgroundForAssets, isRecord } from '../contract.js'
 import type { ThemeDocument } from '../contract.js'
 import { listAssets, pruneAssets } from './assets.js'
 import { DOCUMENT_NAME, assetsDir, isThemeId, themeDir, themesRoot } from './paths.js'
@@ -111,9 +111,9 @@ export async function listThemes(): Promise<ThemeDocument[]> {
  * new and the stored value when it already exists, so a later rename or edit
  * cannot rewrite when the theme was made.
  *
- * Media files are pruned here rather than by the caller: a theme can reference
- * exactly one asset (its background), so the save that commits a new background
- * is also the save that can drop the replaced file.
+ * Media files are pruned here rather than by the caller: a theme's background
+ * references at most one asset per appearance, so the save that commits a new
+ * image is also the save that can drop the file it replaced.
  */
 export async function putTheme(input: {
   id: string
@@ -141,7 +141,12 @@ export async function putTheme(input: {
     updatedAt: now,
   }
   await writeDocument(doc)
-  await pruneAssets(input.id, background ? [background.asset] : [])
+  // Both appearances may name a file, and a side with no image names none; what
+  // the document does not reference is what this save drops.
+  const keep = background
+    ? THEME_APPEARANCES.map((appearance) => background[appearance].asset).filter((name) => name !== '')
+    : []
+  await pruneAssets(input.id, keep)
   return doc
 }
 

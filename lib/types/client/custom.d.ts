@@ -170,7 +170,8 @@ export type SavedTheme = {
 /**
  * Structural equality of two backgrounds, for the editor's dirty comparison.
  * A pending upload is tracked separately by the panel; this compares only what
- * would be written to the document.
+ * would be written to the document. Each appearance is compared on its own, so
+ * editing the dark image cannot leave the light one looking dirty.
  */
 export declare function sameBackground(a: ThemeBackground | null, b: ThemeBackground | null): boolean;
 /** Serialize the saved list with its schema version. */
