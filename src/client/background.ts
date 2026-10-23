@@ -103,6 +103,21 @@ export const BACKGROUND_CSS = [
   // The native window-controls overlay usually covers it, and in fullscreen it
   // would otherwise cut a solid band out of the wallpaper.
   'html:not([data-platform="darwin"]).ct-bg-on [data-slot="root"] > [class*="frame"]::before{background:transparent !important;}',
+  // The native window-controls overlay the frame sits under. DSH's Windows
+  // preload appends a hidden probe to `body`, measures `--dsw-specific-sidebar-
+  // fill` from it and hands that colour to the main process, which paints the
+  // caption's button rectangle with it. The frame's strip is cleared above, but
+  // the rectangle stays opaque over the wallpaper and reads as a sidebar-
+  // coloured band behind the three buttons — the most visible seam in dark mode,
+  // where the fill and the image diverge. Clear the probe's own fill, so the
+  // overlay goes transparent and the layer shows through the buttons like it
+  // does the rest of the strip. Ungated on purpose: the preload re-measures only
+  // on head/body mutations, while mounting the layer flips a class it does not
+  // watch, so a gated rule could sit unmeasured until something else touched the
+  // DOM. Transparency is also the right paint without a layer — the shell's own
+  // strip fills that band with the same sidebar colour. The probe is the only
+  // `body`-level span whose inline style names this fill.
+  'html[data-windows-titlebar] body > span[style*="--dsw-specific-sidebar-fill"]{background-color:transparent !important;}',
   // Windows desktop draws no panel edge at all: its sidebar's right border is
   // cancelled for the rounded content card and the centre column never had
   // one, so the wallpaper makes the tabbed panel fuse into the image. Outline
