@@ -91,9 +91,30 @@ export const BACKGROUND_CSS = [
   // The sidebar column and its own root both paint with the sidebar fill, so
   // the token is cleared on the column and inherited by everything under it.
   'html.ct-bg-on body [class*="sidebarCol"]{--dsw-specific-sidebar-fill:transparent;background:transparent !important;}',
-  // The drawer's own opaque frame, which the sidebar setting would otherwise
-  // keep painting over the layer on Windows and Linux.
-  'html:not([data-platform="darwin"]).ct-bg-on #root > [class*="frame"]{background:transparent !important;}',
+  // The desktop drawer's own opaque frame, which the sidebar setting would
+  // otherwise keep painting over the layer on Windows and Linux. It is the root
+  // slot occupant, so it is a CHILD of the renderer's `[data-slot="root"]`
+  // anchor (`display: contents`), not of `#root` itself — matching `#root >`
+  // never hit and the frame stayed opaque on Windows, hiding the whole layer.
+  // macOS is unaffected: its shell already paints the frame with `background:
+  // 0 0` for vibrancy, so the wallpaper shows there either way.
+  'html:not([data-platform="darwin"]).ct-bg-on [data-slot="root"] > [class*="frame"]{background:transparent !important;}',
+  // The Windows titlebar strip the same frame draws in front of that background.
+  // The native window-controls overlay usually covers it, and in fullscreen it
+  // would otherwise cut a solid band out of the wallpaper.
+  'html:not([data-platform="darwin"]).ct-bg-on [data-slot="root"] > [class*="frame"]::before{background:transparent !important;}',
+  // Windows desktop draws no panel edge at all: its sidebar's right border is
+  // cancelled for the rounded content card and the centre column never had
+  // one, so the wallpaper makes the tabbed panel fuse into the image. Outline
+  // the column itself — the same `border-l3` hairline macOS already gives its
+  // centre column, plus the top edge the Windows caption strip leaves above
+  // it. The shell's 16px top-left radius joins the two hairlines, so the panel
+  // reads as one rounded card; the header keeps its own bottom rule inside it.
+  // The left hairline is skipped while the sidebar is collapsed: no column
+  // edge is left to separate, the same call the macOS rule makes. The top one
+  // stays, because that edge is under the caption strip either way.
+  'html[data-windows-titlebar].ct-bg-on [data-slot="root"] > [class*="frame"] > [class*="centerCol"]{border-top:.5px solid var(--dsw-alias-border-l3);}',
+  'html[data-windows-titlebar].ct-bg-on [data-slot="root"] > [class*="frame"]:not([data-sidebar-collapsed]) > [class*="centerCol"]{border-left:.5px solid var(--dsw-alias-border-l3);}',
   // The status row does not overlay the transcript, so it can clear too.
   'html.ct-bg-on [class*="bottomRow"]{background:transparent !important;}',
   // The right sidebar is a dock: its column and the tab host inside it both
