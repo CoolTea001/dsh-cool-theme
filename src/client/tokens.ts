@@ -1,4 +1,4 @@
-import { PRESETS, NOOP_PRESET_IDS, type PresetId, type PresetDef } from './presets.js'
+import { PRESETS, NOOP_PRESET_IDS, isBuiltinPresetId, type PresetId, type PresetDef } from './presets.js'
 import { PRIMITIVES_LIGHT, PRIMITIVES_DARK, buildPrimitivesCss, primitiveOverrides } from './css/primitives.js'
 import { accentOverrides, buildAccentCss } from './css/accents.js'
 import { SHIKI_CSS } from './css/shiki.js'
@@ -16,7 +16,7 @@ export function resolvePreset(src: PresetId | PresetDef) {
   let preset: PresetDef | null
   if (typeof src === 'string') {
     if (NOOP_PRESET_IDS.has(src)) return null
-    preset = PRESETS[src as keyof typeof PRESETS] ?? null
+    preset = isBuiltinPresetId(src) ? PRESETS[src] : null
   } else {
     preset = src
   }

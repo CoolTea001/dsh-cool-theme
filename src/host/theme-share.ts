@@ -22,6 +22,7 @@ import {
   THEME_FILE_VERSION,
   assetTypeOf,
   backgroundForAssets,
+  errorMessage,
   isRecord,
 } from '../contract.js'
 import type { ThemeAsset, ThemeBackground, ThemeDocument } from '../contract.js'
@@ -110,7 +111,7 @@ export function unpackTheme(archive: Buffer): UnpackedTheme {
         || (name.startsWith(`${THEME_ARCHIVE_ASSETS_DIR}/`) && name.length > THEME_ARCHIVE_ASSETS_DIR.length + 1),
     })
   } catch (error) {
-    throw new ArchiveError(error instanceof Error ? error.message : String(error))
+    throw new ArchiveError(errorMessage(error))
   }
   if (entries.length > THEME_ARCHIVE_MAX_ENTRIES) {
     throw new ArchiveError('archive carries too many files')

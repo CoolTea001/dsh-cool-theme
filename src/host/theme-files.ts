@@ -17,9 +17,12 @@ import { join } from 'node:path'
 import { THEME_APPEARANCES, THEME_FILE_VERSION, backgroundForAssets, isRecord } from '../contract.js'
 import type { ThemeDocument } from '../contract.js'
 import { listAssets, pruneAssets } from './assets.js'
-import { DOCUMENT_NAME, assetsDir, isThemeId, themeDir, themesRoot } from './paths.js'
+import { DOCUMENT_NAME, isThemeId, themeDir, themesRoot } from './paths.js'
 
 export { DOCUMENT_NAME, assetsDir, harnessHome, isThemeId, themeDir, themesRoot } from './paths.js'
+
+/** Timestamp a document written without one reads as: the epoch, in ISO form. */
+const EPOCH_ISO = new Date(0).toISOString()
 
 function documentPath(id: string): string {
   return join(themeDir(id), DOCUMENT_NAME)
@@ -64,8 +67,8 @@ async function readDocument(id: string): Promise<ThemeDocument | null> {
       theme: parsed.theme,
       assets,
       background,
-      createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : new Date(0).toISOString(),
-      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date(0).toISOString(),
+      createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : EPOCH_ISO,
+      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : EPOCH_ISO,
     }
   } catch {
     return null

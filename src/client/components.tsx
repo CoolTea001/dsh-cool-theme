@@ -3,16 +3,15 @@
  */
 
 import * as React from 'react'
-import { HexAlphaColorPicker, HexColorInput, HexColorPicker } from 'react-colorful'
 import {
   CUSTOM_PRESET_ID,
   THEME_APPEARANCES,
   THEME_ARCHIVE_EXTENSION,
-  THEME_BACKGROUND_MAX_BLUR,
   THEME_IMAGE_MAX_BYTES,
   THEME_VIDEO_MAX_BYTES,
   assetTypeOf,
   emptyBackgroundSide,
+  errorMessage,
   newThemeId,
   themeAssetUrl,
   type ThemeAssetKind,
@@ -28,7 +27,6 @@ import {
   uploadThemeMedia,
 } from './theme-files.js'
 import {
-  BACKGROUND_ACCEPT,
   backgroundHasMedia,
   backgroundKindOf,
   prepareBackgroundMedia,
@@ -47,6 +45,15 @@ import {
   nextThemeName,
   sameBackground,
 } from './custom.js'
+import {
+  ALPHA_CHECKERBOARD,
+  PICKER_GAP,
+  PICKER_HEIGHT,
+  PICKER_MARGIN,
+  PICKER_WIDTH,
+  splitAlpha,
+} from './color-picker.js'
+import { BackgroundSection, ColorPopover, SeedDotRow, type SeedDot } from './custom-editor.js'
 import { IconDelete, IconEdit, IconExport, IconImport, IconPlus } from './icons.js'
 // The shell's own controls, resolved at runtime from the frozen platform module
 // table (see ui-primitives.d.ts and tsdown's `deps.neverBundle`). Reusing them
@@ -82,57 +89,10 @@ const SEED_MODE_CONTROL_ID = 'ct-seed-mode'
 /**
  * Key of the border swatch in the shared colour popover. It is the one seed that
  * is not a plain fill — it carries an opacity too — which is why its picker is
- * the alpha-aware one and one control taller (see `seedPickerHeight`).
+ * the alpha-aware one and one control taller (see `seedPickerHeight` in
+ * custom-editor.tsx).
  */
 const BORDER_SEED_KEY = 'border'
-
-/**
- * The colour popover's box. It comes in two heights: the picker itself is a
- * saturation panel plus a hue slider, and the border seed's picker carries an
- * opacity slider under those. These are estimates for choosing which side of
- * the swatch to open on — the popover is `position:fixed`, so being taller than
- * estimated only means it hangs higher.
- */
-const PICKER_WIDTH = 224
-const PICKER_HEIGHT = 240
-/** One more 24px control in the picker, one more 24px of popover. */
-const PICKER_HEIGHT_WITH_ALPHA = PICKER_HEIGHT + 24
-const PICKER_GAP = 8
-const PICKER_MARGIN = 8
-
-/**
- * The alpha checkerboard behind a translucent swatch. Both squares are the same
- * grey at different alphas, so the pattern reads on a light and a dark panel
- * alike without needing a colour per appearance.
- */
-const ALPHA_CHECKERBOARD =
-  'repeating-conic-gradient(rgba(128, 128, 128, .45) 0% 25%, rgba(128, 128, 128, .18) 0% 50%)'
-
-/**
- * The picker carries opacity as an 8-bit hex channel while a seed keeps it as a
- * whole percentage, so the two have to be converted at the popover's edge. A
- * byte is finer than one percent, so every percentage a seed can hold survives
- * the round trip unchanged.
- */
-const opacityToByte = (percent: number) => Math.round((percent / 100) * 255)
-const byteToOpacity = (byte: string) => Math.round((parseInt(byte, 16) / 255) * 100)
-
-/**
- * A seed as the picker reads it: `#RRGGBB`, plus `#RRGGBBAA` when there is an
- * opacity to carry. An opaque colour stays six digits, which is the form the
- * picker itself hands back.
- */
-function withAlpha(hex: string, alpha: number): string {
-  if (alpha >= 100) return hex
-  return `${hex}${opacityToByte(alpha).toString(16).padStart(2, '0').toUpperCase()}`
-}
-
-/** A picker value back in seed shape: the opaque colour and its opacity. */
-function splitAlpha(value: string): BorderSeed {
-  const hex = value.replace(/^#/, '')
-  const color = `#${hex.slice(0, 6)}`.toUpperCase()
-  return { color, alpha: hex.length >= 8 ? byteToOpacity(hex.slice(6, 8)) : 100 }
-}
 
 /**
  * The one glyph size this panel draws at, passed explicitly by every call site.
@@ -176,7 +136,7 @@ const IMPORT_FAILURE_MATCHERS: readonly (readonly [RegExp, ThemeKey])[] = [
  * unrecognised failure keeps the Host's own words rather than hiding them.
  */
 function importFailureMessage(t: (key: ThemeKey) => string, error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
+  const message = errorMessage(error)
   if (error instanceof ThemeApiUnavailableError) return t('custom.toast.unavailable')
   const key = IMPORT_FAILURE_MATCHERS.find(([pattern]) => pattern.test(message))?.[1] ?? 'custom.importFailed.other'
   return t(key).replace('{0}', message)
@@ -273,6 +233,28 @@ function isDirty(
 
 /** A picked image or video waiting for Save to upload it. */
 type PendingMedia = { file: File; url: string; kind: ThemeAssetKind }
+
+/**
+ * A draft's background with both sides materialized. A side is seeded the first
+ * time it is touched, so the shape the panel holds is always the shape the
+ * document is written with — and a save can never write half a background.
+ */
+function materializeBackground(background: ThemeBackground | null): ThemeBackground {
+  return {
+    light: background?.light ?? emptyBackgroundSide('light'),
+    dark: background?.dark ?? emptyBackgroundSide('dark'),
+  }
+}
+
+/** One side of a draft's background patched, with the other side left intact. */
+function patchBackgroundSide(
+  background: ThemeBackground | null,
+  mode: Mode,
+  patch: Partial<ThemeBackgroundSide>,
+): ThemeBackground {
+  const base = materializeBackground(background)
+  return { ...base, [mode]: { ...base[mode], ...patch } }
+}
 
 /**
  * The panel's value picker: a trigger in the row, the shell's `Menu` for the
@@ -414,7 +396,7 @@ function backgroundFailureMessage(
   kind: ThemeAssetKind,
 ): string {
   if (error instanceof ThemeApiUnavailableError) return t('custom.toast.unavailable')
-  const message = error instanceof Error ? error.message : String(error)
+  const message = errorMessage(error)
   if (/too large|larger than|413/i.test(message)) {
     return t('background.tooLarge').replace(
       '{0}',
@@ -608,7 +590,9 @@ export function ThemePanel(props: {
   try {
     const snap = theme?.getTheme?.()
     if (snap?.preference) initScheme = snap.preference
-  } catch {}
+  } catch {
+    // The Theme service is optional: without it the panel starts on `system`.
+  }
   const [scheme, setScheme] = React.useState(initScheme)
   // The appearance the dots edit. Following the appearance switch keeps the
   // editor showing the colours that are actually on screen; the toggle inside
@@ -973,7 +957,10 @@ export function ThemePanel(props: {
     setScheme(id)
     try {
       theme?.setTheme?.(id)
-    } catch {}
+    } catch {
+      // The local preference is already set; a service that refuses only means
+      // the page keeps the appearance it had.
+    }
   }
 
   /**
@@ -1026,7 +1013,10 @@ export function ThemePanel(props: {
       if (schemeRef.current !== open.originScheme) {
         try {
           theme?.setTheme?.(open.originScheme)
-        } catch {}
+        } catch {
+          // Unmount cannot report a failure, and the stored preference is the
+          // one the next mount reads, so this stays silent.
+        }
       }
       if (open.originId) saved.load(open.originId)
       else {
@@ -1313,17 +1303,9 @@ export function ThemePanel(props: {
     replacePending(mode, { file, url: URL.createObjectURL(file), kind })
     setEditing((cur) => {
       if (!cur) return cur
-      const background = cur.background
-      return {
-        ...cur,
-        // Both sides are materialized so the draft always has the shape the
-        // document will be written with; only the picked one is switched on.
-        background: {
-          light: background?.light ?? emptyBackgroundSide('light'),
-          dark: background?.dark ?? emptyBackgroundSide('dark'),
-          [mode]: { ...(background?.[mode] ?? emptyBackgroundSide(mode)), enabled: true },
-        },
-      }
+      // Both sides are materialized so the draft always has the shape the
+      // document will be written with; only the picked one is switched on.
+      return { ...cur, background: patchBackgroundSide(cur.background, mode, { enabled: true }) }
     })
   }
 
@@ -1336,15 +1318,7 @@ export function ThemePanel(props: {
   function updateBackgroundSide(patch: Partial<ThemeBackgroundSide>) {
     setEditing((cur) => {
       if (!cur) return cur
-      const background = cur.background
-      return {
-        ...cur,
-        background: {
-          light: background?.light ?? emptyBackgroundSide('light'),
-          dark: background?.dark ?? emptyBackgroundSide('dark'),
-          [seedMode]: { ...(background?.[seedMode] ?? emptyBackgroundSide(seedMode)), ...patch },
-        },
-      }
+      return { ...cur, background: patchBackgroundSide(cur.background, seedMode, patch) }
     })
   }
 
@@ -1405,11 +1379,7 @@ export function ThemePanel(props: {
         try {
           const { blob } = await prepareBackgroundMedia(pick.file)
           const asset = await uploadThemeMedia(id, blob)
-          const base: ThemeBackground = uploaded ?? {
-            light: emptyBackgroundSide('light'),
-            dark: emptyBackgroundSide('dark'),
-          }
-          uploaded = { ...base, [mode]: { ...base[mode], asset: asset.name, enabled: true } }
+          uploaded = patchBackgroundSide(uploaded, mode, { asset: asset.name, enabled: true })
         } catch (error) {
           failure = backgroundFailureMessage(t, error, pick.kind)
         }
@@ -1578,74 +1548,7 @@ export function ThemePanel(props: {
   ]
 
   if (customOn) {
-    /**
-     * One editable colour. The dot edits whichever appearance the mode toggle
-     * is on; the tooltip carries the seed's plain-language description.
-     */
-    type SeedDot = {
-      key: string
-      name: string
-      hint: string
-      /** The opaque colour: what the swatch paints and the hex field shows. */
-      value: string
-      /** A value typed into the hex field; always an opaque colour. */
-      onChange: (v: string) => void
-      /**
-       * The opacity channel, for the one seed that has one (the border). Its
-       * presence swaps the opaque picker for the alpha-aware one, which is the
-       * same saturation panel and hue slider with an opacity slider under them:
-       * `value` seeds that slider and `onPicked` receives the picker's own
-       * colour-plus-opacity value, so one gesture over either the panel or
-       * either slider writes both channels in one update.
-       */
-      alpha?: { value: number; onPicked: (v: string) => void }
-      /** Swatch paint; defaults to a flat fill of `value`. */
-      swatch?: React.CSSProperties
-    }
-
-    /**
-     * Height of the box one seed's dot opens. Only the border seed's picker
-     * carries an opacity slider, and that seed is the one that declares it, so
-     * the height follows `SeedDot.alpha` rather than a name.
-     */
-    const seedPickerHeight = (dot: SeedDot) => (dot.alpha ? PICKER_HEIGHT_WITH_ALPHA : PICKER_HEIGHT)
-
-    /** A group row: its name on the left, every seed's dot on the right. */
-    const dotRow = (key: string, label: string, dots: SeedDot[]) =>
-      React.createElement(
-        'div',
-        { className: 'ct-seed-row', key },
-        React.createElement('div', { className: 'ct-seed-label' }, label),
-        React.createElement(
-          'div',
-          { className: 'ct-seed-dots' },
-          ...dots.map((d) =>
-            React.createElement(Tooltip, {
-              key: d.key,
-              // The bubble names the token; the swatch's own accessible name
-              // keeps the fuller description, which the bubble is too small to
-              // carry.
-              label: d.name,
-              side: 'top',
-              gap: 6,
-              children: React.createElement('button', {
-                type: 'button',
-                className: 'ct-seed-dot',
-                // The button itself paints the colour — a flat fill, or the
-                // border seed's own overlay preview — and opens the popover
-                // picker anchored to it.
-                style: d.swatch ?? { background: d.value },
-                'aria-haspopup': 'dialog',
-                'aria-expanded': pickerDotKey === d.key,
-                'aria-label': `${d.name} — ${d.hint}`,
-                onClick: (e: React.MouseEvent<HTMLButtonElement>) =>
-                  togglePicker(d.key, e.currentTarget, seedPickerHeight(d)),
-              }),
-            }),
-          ),
-        ),
-      )
-
+    /** One seed pair (accent, green, amber, red), edited for the appearance on show. */
     const pair = (key: 'accent' | 'green' | 'amber' | 'red', title: ThemeKey, desc: ThemeKey): SeedDot => ({
       key,
       name: t(title),
@@ -1780,46 +1683,10 @@ export function ThemePanel(props: {
       React.createElement(Button, { variant: 'primary', onClick: () => void saveEdit() }, t('custom.save')),
     )
 
-    // The react-colorful popover for the seed whose dot is open, pinned to its
-    // swatch. Kept as a DOM child of the editor card (it is `position:fixed`,
-    // so the card's box does not clip or place it) — the dirty-draft guard
-    // passes clicks inside `[data-ct-editor]`, and every picker interaction is
-    // exactly such a click.
-    //
-    // The picker is the panel/hue/opacity stack the library lays out itself,
-    // with the hex field under it. The border seed swaps in the alpha-aware
-    // picker, which is the same stack with one more slider and one more 24px of
-    // height (`ct-color-pop-alpha`), so both popovers keep the same panel size.
+    // The seed whose popover is open, if any. `ColorPopover` draws it; the
+    // selection lives here because Escape and the outside-click guard both close
+    // it through `pickerDotKey`.
     const pickerDot = pickerDotKey ? [...seedDots, ...shikiDots].find((d) => d.key === pickerDotKey) ?? null : null
-    const pickerAlpha = pickerDot?.alpha
-    const pickerPop =
-      pickerDot && pickerPos
-        ? React.createElement(
-            'div',
-            {
-              key: 'color-picker',
-              className: pickerAlpha ? 'ct-color-pop ct-color-pop-alpha' : 'ct-color-pop',
-              ref: pickerPopRef,
-              style: { left: pickerPos.left, top: pickerPos.top },
-            },
-            React.createElement(pickerAlpha ? HexAlphaColorPicker : HexColorPicker, {
-              // The seed's colour, plus its opacity when it has one: the picker
-              // carries opacity as a hex channel, while the seed keeps it as a
-              // field of its own.
-              color: pickerAlpha ? withAlpha(pickerDot.value, pickerAlpha.value) : pickerDot.value,
-              // Dragging the panel or either slider writes colour and opacity
-              // together; typing in the hex field below only moves the colour.
-              onChange: pickerAlpha ? pickerAlpha.onPicked : (v: string) => pickerDot.onChange(v.toUpperCase()),
-            }),
-            React.createElement(HexColorInput, {
-              className: 'ct-hex-input',
-              color: pickerDot.value,
-              'aria-label': pickerDot.name,
-              onChange: (v: string) => pickerDot.onChange(v.toUpperCase()),
-            }),
-          )
-        : null
-
     // The wallpaper is edited one appearance at a time, following the editor's
     // own light/dark toggle. Each side carries its own image or video, its own
     // switch and its own numbers, so everything below describes the side on
@@ -1846,165 +1713,6 @@ export function ThemePanel(props: {
     // a screen reader gets it in the accessible name, where there is no toggle.
     const backgroundModeName = t(`custom.seed.${seedMode}`)
 
-    /** One slider row: name, track, value. */
-    const backgroundRange = (
-      key: string,
-      label: string,
-      value: number,
-      max: number,
-      suffix: string,
-      onChange: (next: number) => void,
-      ariaLabel: string = label,
-    ) =>
-      React.createElement(
-        'div',
-        { className: 'ct-bg-field', key },
-        // The value rides with the label (`透明度 · 40%`), so the slider owns
-        // the whole right-hand side and the row has one reading order.
-        React.createElement(
-          'div',
-          { className: 'ct-bg-field-label' },
-          `${label} · ${String(value)}${suffix}`,
-        ),
-        React.createElement('input', {
-          className: 'ct-range',
-          type: 'range',
-          min: 0,
-          max,
-          value,
-          'aria-label': ariaLabel,
-          onChange: (e: React.ChangeEvent<HTMLInputElement>) => onChange(Number(e.target.value)),
-        }),
-      )
-
-    // The head's action group. The wallpaper's commands are text links rather
-    // than buttons, so the section title stays the strongest thing in the row,
-    // and the switch is its fixed last item: whatever the state, the section
-    // always shows one.
-    const backgroundActions: React.ReactNode[] = []
-    if (!backgroundSideHasMedia) {
-      backgroundActions.push(
-        React.createElement(
-          'button',
-          { key: 'add', type: 'button', className: 'ct-bg-link', onClick: startBackgroundPick },
-          t('background.add'),
-        ),
-      )
-    } else if (backgroundSide?.enabled) {
-      // Off hides every command but the switch: with nothing painted there is
-      // nothing to replace, remove or tune until the media comes back on.
-      backgroundActions.push(
-        React.createElement(
-          'button',
-          { key: 'replace', type: 'button', className: 'ct-bg-link', onClick: startBackgroundPick },
-          t('background.replace'),
-        ),
-        React.createElement(
-          'button',
-          { key: 'remove', type: 'button', className: 'ct-bg-link', onClick: removeBackground },
-          t('background.remove'),
-        ),
-      )
-    }
-    backgroundActions.push(
-      // Also the reason "remove" is not the only way out of a wallpaper: off
-      // keeps the file and the settings, so the theme can go back to plain
-      // surfaces without losing the media it was set up with. A side with no
-      // media at all is simply the same switch in its off state, waiting until
-      // there is something to turn on. The switch is per appearance: turning the
-      // light image off leaves the dark video playing.
-      React.createElement(Switch, {
-        key: 'enabled',
-        className: 'ct-bg-switch',
-        checked: backgroundSide?.enabled ?? false,
-        disabled: !backgroundSideHasMedia,
-        label: t('background.title'),
-        onChange: (on: boolean) => updateBackgroundSide({ enabled: on }),
-      }),
-    )
-
-    // The wallpaper controls belong to the custom editor: a preset has no
-    // document of its own to carry one, and the panel only shows this card
-    // inside custom mode.
-    const backgroundSection = React.createElement(
-      'div',
-      { className: 'ct-bg-section' },
-      React.createElement(
-        'div',
-        { className: 'ct-bg-head' },
-        React.createElement(
-          'div',
-          { className: 'ct-row-main' },
-          React.createElement('div', { className: 'ct-row-title' }, t('background.title')),
-        ),
-        React.createElement('div', { className: 'ct-bg-actions' }, backgroundActions),
-      ),
-      // The thumbnail and both sliders describe the media that is painted, so
-      // they belong to the on state with it.
-      backgroundSide?.enabled && backgroundSideHasMedia
-        ? React.createElement(
-            'div',
-            { className: 'ct-bg-body' },
-            React.createElement(
-              'div',
-              {
-                className: 'ct-bg-thumb',
-                'aria-hidden': 'true',
-                // An image stays a CSS background; a video needs an element so
-                // its frames can move. Both fill the same thumbnail box.
-                style:
-                  backgroundPreviewUrl && backgroundPreviewKind === 'image'
-                    ? { backgroundImage: `url("${backgroundPreviewUrl}")` }
-                    : undefined,
-              },
-              backgroundPreviewUrl && backgroundPreviewKind === 'video'
-                ? React.createElement('video', {
-                    className: 'ct-bg-thumb-video',
-                    src: backgroundPreviewUrl,
-                    // The thumbnail is a live preview, so it loops muted like
-                    // the wallpaper itself.
-                    muted: true,
-                    loop: true,
-                    autoPlay: true,
-                    playsInline: true,
-                    preload: 'auto',
-                    'aria-hidden': 'true',
-                  })
-                : null,
-            ),
-            React.createElement(
-              'div',
-              { className: 'ct-bg-controls' },
-              backgroundRange(
-                'bg-opacity',
-                t('background.opacity'),
-                backgroundSide.opacity,
-                100,
-                '%',
-                (v) => updateBackgroundSide({ opacity: v }),
-                `${backgroundModeName} ${t('background.opacity')}`,
-              ),
-              backgroundRange(
-                'bg-blur',
-                t('background.blur'),
-                backgroundSide.blur,
-                THEME_BACKGROUND_MAX_BLUR,
-                ' px',
-                (v) => updateBackgroundSide({ blur: v }),
-                `${backgroundModeName} ${t('background.blur')}`,
-              ),
-            ),
-          )
-        : null,
-      React.createElement('input', {
-        ref: backgroundInputRef,
-        type: 'file',
-        accept: BACKGROUND_ACCEPT,
-        style: { display: 'none' },
-        onChange: onBackgroundPicked,
-      }),
-    )
-
     const editorCard = (key: string) =>
       React.createElement(
         'div',
@@ -2029,12 +1737,44 @@ export function ThemePanel(props: {
             id: `${SEED_MODE_CONTROL_ID}-${seedMode}-panel`,
             'aria-labelledby': `${SEED_MODE_CONTROL_ID}-${seedMode}`,
           },
-          dotRow('seeds', t('custom.group.seeds'), seedDots),
-          dotRow('shiki', t('custom.group.shiki'), shikiDots),
+          React.createElement(SeedDotRow, {
+            rowKey: 'seeds',
+            label: t('custom.group.seeds'),
+            dots: seedDots,
+            expandedKey: pickerDotKey,
+            onToggle: togglePicker,
+          }),
+          React.createElement(SeedDotRow, {
+            rowKey: 'shiki',
+            label: t('custom.group.shiki'),
+            dots: shikiDots,
+            expandedKey: pickerDotKey,
+            onToggle: togglePicker,
+          }),
         ),
-        backgroundSection,
+        React.createElement(BackgroundSection, {
+          t,
+          modeName: backgroundModeName,
+          side: backgroundSide,
+          previewUrl: backgroundPreviewUrl,
+          previewKind: backgroundPreviewKind,
+          hasMedia: backgroundSideHasMedia,
+          inputRef: backgroundInputRef,
+          onPick: startBackgroundPick,
+          onRemove: removeBackground,
+          onToggleEnabled: (on: boolean) => updateBackgroundSide({ enabled: on }),
+          onOpacity: (value: number) => updateBackgroundSide({ opacity: value }),
+          onBlur: (value: number) => updateBackgroundSide({ blur: value }),
+          onFilePicked: onBackgroundPicked,
+        }),
         editorActions,
-        pickerPop,
+        pickerDot && pickerPos
+          ? React.createElement(ColorPopover, {
+              dot: pickerDot,
+              position: pickerPos,
+              popRef: pickerPopRef,
+            })
+          : null,
       )
 
     const cards: React.ReactNode[] = list.map((entry) =>

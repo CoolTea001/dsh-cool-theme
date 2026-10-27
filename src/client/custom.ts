@@ -173,7 +173,7 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
 }
 
 const toRgbHex = (rgb: number[]) =>
-  '#' + rgb.map((n) => clamp255(n).toString(16).padStart(2, '0')).join('').toUpperCase()
+  `#${rgb.map((n) => clamp255(n).toString(16).padStart(2, '0')).join('').toUpperCase()}`
 
 /**
  * Parse a colour into `#RRGGBB`, or null when it is not a format we understand.
@@ -241,8 +241,10 @@ function pickAlpha(value: unknown, fallback: number): number {
  */
 export function borderCss(seed: BorderSeed, alpha: number = seed.alpha): string {
   const hex = toHex(seed.color)
-  const channel = (from: number) => parseInt(hex.slice(from, from + 2), 16)
-  return `rgba(${channel(1)}, ${channel(3)}, ${channel(5)}, ${clampAlpha(alpha) / 100})`
+  // Named `hexChannel` rather than `channel`: the module already has a colour
+  // channel parser, and a local of the same name would shadow it.
+  const hexChannel = (from: number) => parseInt(hex.slice(from, from + 2), 16)
+  return `rgba(${hexChannel(1)}, ${hexChannel(3)}, ${hexChannel(5)}, ${clampAlpha(alpha) / 100})`
 }
 
 /**

@@ -22,7 +22,10 @@ export function createStyleInjector() {
     const wrapped = () => {
       try {
         dispose()
-      } catch {}
+      } catch {
+        // A sheet that is already gone is still disposed of as far as the set is
+        // concerned: the entry is dropped either way.
+      }
       disposers.delete(wrapped)
     }
     disposers.add(wrapped)

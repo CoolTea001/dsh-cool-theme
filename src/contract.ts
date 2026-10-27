@@ -33,12 +33,20 @@ export const CUSTOM_MIGRATED_STORAGE_KEY = 'cool-theme-custom-migrated'
 export const SIDEBAR_TRANSPARENT_STORAGE_KEY = 'cool-theme-sidebar-transparent'
 
 // ---------------------------------------------------------------------------
-// Shared guards
+// Shared helpers
 // ---------------------------------------------------------------------------
 
 /** A plain JSON object: not null, not an array, and not a primitive. */
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * The reason behind a thrown value, for a response body or a toast. A thrown
+ * string is not an Error, so the message it carries would otherwise be lost.
+ */
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 // ---------------------------------------------------------------------------

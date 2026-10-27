@@ -23,6 +23,7 @@ import {
   THEME_ARCHIVE_MIME,
   THEME_ASSET_MAX_BYTES,
   archiveFileName,
+  errorMessage,
   freeThemeName,
   isRecord,
   isThemeAssetName,
@@ -43,6 +44,9 @@ import { ArchiveError, packTheme, unpackTheme } from './theme-share.js'
 export const name = 'dsh-cool-theme'
 
 export const inject = ['webServer']
+
+/** Cap on one JSON request body; a theme document is small by construction. */
+const THEME_DOCUMENT_MAX_BYTES = 1_000_000
 
 /** Refuse cross-site callers: this API reads and writes the user's own files. */
 function sameOrigin(req: IncomingMessage): boolean {
@@ -75,7 +79,7 @@ function methodAllowed(req: IncomingMessage, res: ServerResponse, allowed: reado
 }
 
 /** Read a bounded request body; a theme document is small by construction. */
-async function readBody(req: IncomingMessage, limit = 1_000_000): Promise<string> {
+async function readBody(req: IncomingMessage, limit = THEME_DOCUMENT_MAX_BYTES): Promise<string> {
   return (await readBuffer(req, limit)).toString('utf8')
 }
 
@@ -183,10 +187,7 @@ async function handleAssetUpload(req: IncomingMessage, res: ServerResponse, id: 
   try {
     bytes = await readBuffer(req, THEME_ASSET_MAX_BYTES)
   } catch (error) {
-    sendJson(res, 413, {
-      ok: false,
-      error: error instanceof Error ? error.message : String(error),
-    })
+    sendJson(res, 413, { ok: false, error: errorMessage(error) })
     return
   }
   try {
@@ -295,7 +296,7 @@ async function handleImport(req: IncomingMessage, res: ServerResponse): Promise<
   try {
     archive = await readBuffer(req, THEME_ARCHIVE_MAX_BYTES)
   } catch (error) {
-    sendJson(res, 413, { ok: false, error: error instanceof Error ? error.message : String(error) })
+    sendJson(res, 413, { ok: false, error: errorMessage(error) })
     return
   }
   // A malformed or foreign archive is the user's file, not a server fault, so
@@ -399,10 +400,7 @@ export function apply(ctx: any): void {
         }
         sendJson(res, 404, { ok: false, error: 'unknown route' })
       } catch (error) {
-        sendJson(res, 500, {
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-        })
+        sendJson(res, 500, { ok: false, error: errorMessage(error) })
       }
     })
     return () => { dispose() }
