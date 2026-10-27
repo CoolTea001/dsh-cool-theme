@@ -223,15 +223,15 @@ export async function importTheme(file: File): Promise<{ id: string; name: strin
 }
 
 /**
- * Upload one prepared image as the theme's background asset. The body is the
- * image itself; the Host reads its type from those bytes and answers with the
- * content-hashed name to record in the document.
+ * Upload one prepared image or video as a theme's background asset. The body is
+ * the media itself; the Host reads its type from those bytes and answers with
+ * the content-hashed name to record in the document.
  */
-export async function uploadThemeAsset(themeId: string, image: Blob): Promise<ThemeAsset> {
+export async function uploadThemeMedia(themeId: string, media: Blob): Promise<ThemeAsset> {
   const payload = await callApi(themeAssetsPath(themeId), {
     method: 'POST',
     headers: { 'content-type': 'application/octet-stream' },
-    body: image,
+    body: media,
   })
   const asset = isRecord(payload.asset) ? payload.asset : null
   if (

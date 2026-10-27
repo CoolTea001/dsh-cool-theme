@@ -3,9 +3,9 @@
  *
  * An archive is the theme directory itself — the same `theme.json` and `assets/`
  * a theme occupies on disk — so sharing never invents a second format, and a
- * theme's background image travels with it automatically. The Host owns both
- * halves because the browser can neither read the theme's files nor decompress
- * an archive on its behalf.
+ * theme's background image or video travels with it automatically. The Host owns
+ * both halves because the browser can neither read the theme's files nor
+ * decompress an archive on its behalf.
  *
  * Reading is deliberately strict: an archive either validates as one of ours or
  * is refused with a reason. Nothing half-valid is ever handed to the client to

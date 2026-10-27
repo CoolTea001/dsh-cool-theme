@@ -19,6 +19,12 @@ export type ZipEntry = {
     /** Path inside the archive, always with forward slashes. */
     name: string;
     data: Buffer;
+    /**
+     * Whether to try deflating the body. Omitted means yes; an already-compressed
+     * video opts out, because a deflate over megabytes of entropy only burns CPU
+     * to hand back the same bytes.
+     */
+    compress?: boolean;
 };
 /** How a read should select and bound the entries it inflates. */
 export type ReadZipOptions = {

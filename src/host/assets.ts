@@ -7,9 +7,9 @@
  * document can never point at a file the Host does not have.
  *
  * Uploads are accepted by content, not by name or declared type: the bytes have
- * to sniff as one of the raster formats a browser can paint. SVG is deliberately
- * absent — served from this same origin it would be an XSS surface, and a
- * wallpaper has no need for it.
+ * to sniff as one of the raster images or video containers a browser can paint.
+ * SVG is deliberately absent — served from this same origin it would be an XSS
+ * surface, and a wallpaper has no need for it.
  */
 
 import { createHash } from 'node:crypto'
@@ -21,16 +21,36 @@ import { assetsDir } from './paths.js'
 /** A refused asset, with a reason worth showing the user. */
 export class AssetError extends Error {}
 
-export type ImageType = { ext: string; mime: string; kind: ThemeAssetKind }
+export type MediaType = { ext: string; mime: string; kind: ThemeAssetKind }
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
 /**
- * The raster type of a byte string, read from its magic number rather than
- * from a file name or an upload header. Null means "this plugin will not store
- * it".
+ * ISO base media brands a browser will play as MP4. The brand list is what
+ * distinguishes a video from the still-image members of the same container
+ * (AVIF/HEIC), which share the `ftyp` box.
  */
-export function sniffImage(bytes: Buffer): ImageType | null {
+const MP4_VIDEO_BRANDS = new Set([
+  'isom',
+  'iso2',
+  'iso4',
+  'iso5',
+  'iso6',
+  'mp41',
+  'mp42',
+  'avc1',
+  'av01',
+  'vp09',
+  'dash',
+  'M4V ',
+  'MSNV',
+])
+
+/**
+ * The media type of a byte string, read from its magic number rather than from
+ * a file name or an upload header. Null means "this plugin will not store it".
+ */
+export function sniffMedia(bytes: Buffer): MediaType | null {
   if (bytes.length < 12) return null
   if (bytes.subarray(0, 8).equals(PNG_SIGNATURE)) {
     return { ext: '.png', mime: 'image/png', kind: 'image' }
@@ -50,6 +70,15 @@ export function sniffImage(bytes: Buffer): ImageType | null {
     if (brand === 'avif' || brand === 'avis') {
       return { ext: '.avif', mime: 'image/avif', kind: 'image' }
     }
+    if (MP4_VIDEO_BRANDS.has(brand)) {
+      return { ext: '.mp4', mime: 'video/mp4', kind: 'video' }
+    }
+  }
+  // WebM shares EBML with Matroska, so the magic alone is not enough: the
+  // DocType inside the header is what tells Chromium it can play it.
+  if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) {
+    const header = bytes.toString('ascii', 0, Math.min(bytes.length, 64))
+    if (header.includes('webm')) return { ext: '.webm', mime: 'video/webm', kind: 'video' }
   }
   return null
 }
@@ -72,15 +101,15 @@ export async function writeAssetFile(id: string, name: string, bytes: Buffer): P
 }
 
 /**
- * Store one uploaded image under a content-hashed name and return what the
+ * Store one uploaded media file under a content-hashed name and return what the
  * document should record. Hashing makes the read URL immutable: the same bytes
  * always resolve to the same name, and different bytes never collide, so the
  * browser can cache an asset for as long as it likes.
  */
-export async function saveImageAsset(id: string, bytes: Buffer): Promise<ThemeAsset> {
-  const type = sniffImage(bytes)
+export async function saveMediaAsset(id: string, bytes: Buffer): Promise<ThemeAsset> {
+  const type = sniffMedia(bytes)
   if (type === null) {
-    throw new AssetError('unsupported image format; use PNG, JPEG, WebP, AVIF or GIF')
+    throw new AssetError('unsupported media format; use PNG, JPEG, WebP, AVIF, GIF, MP4 or WebM')
   }
   const hash = createHash('sha256').update(bytes).digest('hex').slice(0, 16)
   const name = `bg-${hash}${type.ext}`
@@ -130,10 +159,10 @@ export async function readAsset(
  * Delete every media file that is not in `keep`.
  *
  * A theme's background references at most one asset per appearance, so a save
- * is the natural garbage-collection point: replacing an image writes a new
- * hash, and the save that follows drops the old one — while the other
- * appearance's file, still referenced, is kept. Files this plugin does not
- * recognise are left alone rather than swept.
+ * is the natural garbage-collection point: replacing a file writes a new hash,
+ * and the save that follows drops the old one — while the other appearance's
+ * file, still referenced, is kept. Files this plugin does not recognise are
+ * left alone rather than swept.
  */
 export async function pruneAssets(id: string, keep: readonly string[]): Promise<void> {
   const keepSet = new Set(keep)

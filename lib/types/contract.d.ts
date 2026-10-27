@@ -17,11 +17,14 @@ export declare function isRecord(value: unknown): value is Record<string, unknow
  *
  * v2 split the background's opacity and blur per appearance; v3 split the
  * background itself, so each appearance owns its image, switch, opacity and
- * blur. Older documents still read: one shared asset becomes both sides' image,
- * and a v1 flat number becomes the light value with the dark one derived
- * exactly as that build derived it (see {@link normalizeBackground}).
+ * blur; v4 lets either side name a video as well as an image. Older documents
+ * still read: one shared asset becomes both sides' media, and a v1 flat number
+ * becomes the light value with the dark one derived exactly as that build
+ * derived it (see {@link normalizeBackground}). The version is bumped for v4
+ * even though the document shape did not change, because a build that predates
+ * video would otherwise import a theme and silently drop its wallpaper.
  */
-export declare const THEME_FILE_VERSION = 3;
+export declare const THEME_FILE_VERSION = 4;
 /**
  * A fresh theme id. Both halves mint ids in the same shape, so an id never says
  * which half created it; the Host is the side that validates the pattern.
@@ -63,30 +66,31 @@ export type ThemeAppearancePair = Record<ThemeAppearance, number>;
 /** The two appearances, in the order the editor reads them. */
 export declare const THEME_APPEARANCES: readonly ["light", "dark"];
 /**
- * One appearance's wallpaper: its own image, its own switch, its own opacity
+ * One appearance's wallpaper: its own media, its own switch, its own opacity
  * and blur. The two sides of a background are fully independent, which is why
- * a background is a pair of these rather than one image with a pair of numbers:
+ * a background is a pair of these rather than one file with a pair of numbers:
  * a bright image chosen for the light appearance is exactly what does not work
  * over a dark palette, so the dark appearance has to be able to carry a
- * different image — or none at all.
+ * different file — or none at all.
  */
 export type ThemeBackgroundSide = {
     /**
      * File name inside the theme's own `assets/` directory, or '' when this
-     * appearance has no image of its own. An empty side paints nothing and lets
-     * the theme's plain surface colour show.
+     * appearance has no media of its own. An empty side paints nothing and lets
+     * the theme's plain surface colour show. The extension names the kind: an
+     * image paints as one, a video plays as one.
      */
     asset: string;
     /**
-     * The image's own opacity, 0–100. The theme's surface colour sits *under* the
-     * image, so lowering this lets that colour show through — the panel never
-     * becomes transparent to reveal the image.
+     * The media's own opacity, 0–100. The theme's surface colour sits *under* the
+     * media, so lowering this lets that colour show through — the panel never
+     * becomes transparent to reveal the wallpaper.
      */
     opacity: number;
-    /** Softness in px; 0 keeps the image sharp, which is the default in both. */
+    /** Softness in px; 0 keeps the media sharp, which is the default in both. */
     blur: number;
     /**
-     * Whether this appearance actually paints its image. A disabled side keeps
+     * Whether this appearance actually paints its media. A disabled side keeps
      * every other field — and the stored file — intact, so switching it back on
      * restores exactly what was there: it is a switch, not a removal. An absent
      * flag reads as on, which is what every document written before it existed
@@ -96,7 +100,7 @@ export type ThemeBackgroundSide = {
 };
 /**
  * The background one saved custom theme may carry: one wallpaper per
- * appearance, each with its own image, switch, opacity and blur.
+ * appearance, each with its own media, switch, opacity and blur.
  *
  * It lives in the theme document rather than in a browser preference, so a
  * theme's wallpapers follow the theme through an export, an import and a Host
@@ -104,7 +108,7 @@ export type ThemeBackgroundSide = {
  * carry one: a preset is a palette, and only a custom theme is the user's own
  * document to extend.
  *
- * A document that names an image on neither side normalizes to `null`, which is
+ * A document that names no media on either side normalizes to `null`, which is
  * the single "this theme has no wallpaper" value the rest of the plugin reads.
  */
 export type ThemeBackground = Record<ThemeAppearance, ThemeBackgroundSide>;
@@ -135,23 +139,38 @@ export declare function clampBackgroundBlur(value: number): number;
  */
 export declare function legacyDarkOpacity(lightOpacity: number): number;
 /**
- * A side with no image yet, carrying the defaults for its own appearance. This
+ * A side with no media yet, carrying the defaults for its own appearance. This
  * is where every "add an image" gesture starts: the picker fills `asset` in
  * later, and until it does the side simply paints nothing.
  */
 export declare function emptyBackgroundSide(appearance: ThemeAppearance): ThemeBackgroundSide;
-/** Whether either side names an image; a background with none is no background. */
+/** Whether either side names media; a background with none is no background. */
 export declare function backgroundHasAsset(background: ThemeBackground): boolean;
 /**
- * Bytes one uploaded image may occupy. It matches a single archive entry's
- * uncompressed cap on purpose: an image the roster accepts must also survive
- * an export, or sharing a theme would fail only after the fact.
+ * Bytes one uploaded image may occupy. A large image is re-encoded until it
+ * fits this cap, so it is deliberately smaller than the archive entry cap: an
+ * image that reaches the roster must also survive an export.
  */
+export declare const THEME_IMAGE_MAX_BYTES: number;
+/**
+ * Bytes one uploaded background video may occupy.
+ *
+ * A video cannot be re-encoded in the browser the way an image is, so this cap
+ * is much larger: a clip small enough for the image cap would be a few seconds
+ * at a low resolution. It is also the largest single asset the Host stores, so
+ * the upload route and the archive reader bound themselves by this value.
+ */
+export declare const THEME_VIDEO_MAX_BYTES: number;
+/** Largest single asset of any kind; the upload route's body cap. */
 export declare const THEME_ASSET_MAX_BYTES: number;
 /**
  * Accepted media extensions and the type each is served with. Shared by the
  * upload route, the archive reader/writer and the asset directory scanner, so
  * one table answers "what may a theme carry" everywhere.
+ *
+ * MP4 and WebM are the two containers a Chromium `<video>` plays without a
+ * plugin; anything else a user picks is refused rather than stored and then
+ * found unplayable.
  */
 export declare const THEME_ASSET_TYPES: Record<string, {
     kind: ThemeAssetKind;
@@ -168,15 +187,15 @@ export declare function isThemeAssetName(value: unknown): value is string;
  *
  * Both document generations read here: a v3 background carries its two sides
  * outright, while v1/v2 stored one asset with a shared or per-appearance
- * opacity/blur. A background that names an image on neither side is no
+ * opacity/blur. A background that names media on neither side is no
  * background, which keeps `null` the one "no wallpaper" value downstream.
  */
 export declare function normalizeBackground(raw: unknown): ThemeBackground | null;
 /**
  * The background a theme may keep: `raw` normalized, but with each side kept
  * only while the file it names is actually stored beside the theme. A side that
- * points at a missing image is emptied rather than rendering a broken
- * wallpaper, and a background with no image left on either side is dropped.
+ * points at a missing file is emptied rather than rendering a broken
+ * wallpaper, and a background with no media left on either side is dropped.
  */
 export declare function backgroundForAssets(raw: unknown, assets: readonly Pick<ThemeAsset, 'name'>[]): ThemeBackground | null;
 /**
@@ -202,8 +221,10 @@ export declare const THEME_ARCHIVE_ASSETS_DIR = "assets";
 export declare const THEME_ARCHIVE_MIME = "application/zip";
 export declare const THEME_ARCHIVE_EXTENSION = ".zip";
 /**
- * Import bounds. A theme is a small JSON document, so anything past these caps
- * is refused before it is parsed rather than after it has been held in memory.
+ * Import bounds. A theme is a small JSON document plus its media, so anything
+ * past these caps is refused before it is parsed rather than after it has been
+ * held in memory. The entry cap follows the largest asset the upload route
+ * accepts, and the archive cap leaves room for one video per appearance.
  */
 export declare const THEME_ARCHIVE_MAX_BYTES: number;
 export declare const THEME_ARCHIVE_MAX_ENTRIES = 256;

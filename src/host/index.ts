@@ -7,9 +7,9 @@
  * provided, and nothing here interprets the theme payload beyond moving it.
  *
  * Media has two routes of its own below a theme id: one accepts the bytes of a
- * background image, one serves a stored file back. Everything else about a
- * theme — its document, its colours, its background reference — travels through
- * the roster route.
+ * background image or video, one serves a stored file back. Everything else
+ * about a theme — its document, its colours, its background reference — travels
+ * through the roster route.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -30,7 +30,7 @@ import {
 } from '../contract.js'
 import type { ThemeDocument } from '../contract.js'
 import { isKnownBase } from '../presets-ids.js'
-import { AssetError, readAsset, saveImageAsset, writeAssetFile } from './assets.js'
+import { AssetError, readAsset, saveMediaAsset, writeAssetFile } from './assets.js'
 import {
   deleteTheme,
   isThemeId,
@@ -79,7 +79,7 @@ async function readBody(req: IncomingMessage, limit = 1_000_000): Promise<string
   return (await readBuffer(req, limit)).toString('utf8')
 }
 
-/** Read a bounded binary body; the archive and image routes need the bytes themselves. */
+/** Read a bounded binary body; the archive and media routes need the bytes themselves. */
 async function readBuffer(req: IncomingMessage, limit: number): Promise<Buffer> {
   const chunks: Buffer[] = []
   let size = 0
@@ -169,10 +169,10 @@ async function handleExport(res: ServerResponse, id: string): Promise<void> {
 }
 
 /**
- * Accept one background image. The body is the image itself rather than JSON:
- * base64 in a JSON string would inflate the file by a third and force the whole
- * thing through a parser for no gain. The type comes from the bytes, never from
- * the request.
+ * Accept one background image or video. The body is the media itself rather
+ * than JSON: base64 in a JSON string would inflate the file by a third and
+ * force the whole thing through a parser for no gain. The type comes from the
+ * bytes, never from the request.
  */
 async function handleAssetUpload(req: IncomingMessage, res: ServerResponse, id: string): Promise<void> {
   if (!(await themeExists(id))) {
@@ -190,7 +190,7 @@ async function handleAssetUpload(req: IncomingMessage, res: ServerResponse, id: 
     return
   }
   try {
-    sendJson(res, 200, { ok: true, asset: await saveImageAsset(id, bytes) })
+    sendJson(res, 200, { ok: true, asset: await saveMediaAsset(id, bytes) })
   } catch (error) {
     if (!(error instanceof AssetError)) throw error
     sendJson(res, 400, { ok: false, error: error.message })
@@ -198,12 +198,52 @@ async function handleAssetUpload(req: IncomingMessage, res: ServerResponse, id: 
 }
 
 /**
- * Serve one stored asset. Names are content-hashed, so the response is
- * immutable: the same URL always means the same bytes. The CSP header makes the
- * file inert if a browser ever navigates to it directly, and `nosniff` keeps a
- * mislabelled file from being reinterpreted.
+ * One satisfiable byte range from a `Range` header. The caller distinguishes
+ * "no header" from "unusable range" before calling, so null here means the
+ * request cannot be answered as a partial response.
  */
-async function handleAssetRead(res: ServerResponse, id: string, name: string): Promise<void> {
+function rangeOf(header: string, size: number): { start: number; end: number } | null {
+  if (size === 0) return null
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim())
+  if (!match) return null
+  const startRaw = match[1] ?? ''
+  const endRaw = match[2] ?? ''
+  if (startRaw === '' && endRaw === '') return null
+  let start: number
+  let end: number
+  if (startRaw === '') {
+    const suffix = Number(endRaw)
+    if (!Number.isSafeInteger(suffix) || suffix <= 0) return null
+    start = Math.max(0, size - suffix)
+    end = size - 1
+  } else {
+    start = Number(startRaw)
+    end = endRaw === '' ? size - 1 : Math.min(Number(endRaw), size - 1)
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= size) {
+      return null
+    }
+  }
+  return { start, end }
+}
+
+/**
+ * Serve one stored asset. Names are content-hashed, so the response is
+ * immutable: the same URL always means the same bytes.
+ *
+ * Range requests are supported because a video is the one asset the browser may
+ * seek in; a plain 200 makes Chromium buffer the whole clip before it can loop
+ * cleanly. The handler still reads the file whole — an asset is bounded by
+ * {@link THEME_ASSET_MAX_BYTES} — and answers the requested slice.
+ *
+ * The CSP header makes the file inert if a browser ever navigates to it
+ * directly, and `nosniff` keeps a mislabelled file from being reinterpreted.
+ */
+async function handleAssetRead(
+  req: IncomingMessage,
+  res: ServerResponse,
+  id: string,
+  name: string,
+): Promise<void> {
   if (!isThemeAssetName(name)) {
     sendJson(res, 400, { ok: false, error: 'asset name must be a safe file name' })
     return
@@ -213,14 +253,33 @@ async function handleAssetRead(res: ServerResponse, id: string, name: string): P
     sendJson(res, 404, { ok: false, error: 'unknown asset' })
     return
   }
-  res.writeHead(200, {
+  const total = asset.bytes.byteLength
+  const headers = {
     'content-type': asset.mime,
-    'content-length': asset.bytes.byteLength,
+    'accept-ranges': 'bytes',
     'cache-control': 'public, max-age=31536000, immutable',
     'x-content-type-options': 'nosniff',
     'content-security-policy': "default-src 'none'",
-  })
-  res.end(asset.bytes)
+  }
+  const rangeHeader = req.headers.range
+  if (rangeHeader !== undefined) {
+    const range = rangeOf(rangeHeader, total)
+    if (range === null) {
+      res.writeHead(416, { ...headers, 'content-range': `bytes */${String(total)}` })
+      res.end()
+      return
+    }
+    const slice = asset.bytes.subarray(range.start, range.end + 1)
+    res.writeHead(206, {
+      ...headers,
+      'content-range': `bytes ${String(range.start)}-${String(range.end)}/${String(total)}`,
+      'content-length': String(slice.byteLength),
+    })
+    res.end(req.method === 'HEAD' ? undefined : slice)
+    return
+  }
+  res.writeHead(200, { ...headers, 'content-length': String(total) })
+  res.end(req.method === 'HEAD' ? undefined : asset.bytes)
 }
 
 /**
@@ -257,7 +316,7 @@ async function handleImport(req: IncomingMessage, res: ServerResponse): Promise<
   const id = newThemeId()
   const taken = existing.map((doc) => doc.name)
   // Media lands before the document: `putTheme` prunes assets the document does
-  // not reference, so the background image has to exist when it is recorded.
+  // not reference, so the background media has to exist when it is recorded.
   for (const asset of unpacked.assets) {
     await writeAssetFile(id, asset.name, asset.bytes)
   }
@@ -329,13 +388,13 @@ export function apply(ctx: any): void {
             return await handleAssetUpload(req, res, id)
           }
           if (parts.length === 3 && parts[1] === THEME_API_SEGMENT_ASSETS) {
-            if (!methodAllowed(req, res, ['GET'])) return
+            if (!methodAllowed(req, res, ['GET', 'HEAD'])) return
             const name = decodeSegment(parts[2])
             if (name === null) {
               sendJson(res, 400, { ok: false, error: 'asset name must be a safe file name' })
               return
             }
-            return await handleAssetRead(res, id, name)
+            return await handleAssetRead(req, res, id, name)
           }
         }
         sendJson(res, 404, { ok: false, error: 'unknown route' })

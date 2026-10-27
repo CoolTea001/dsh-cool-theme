@@ -45,11 +45,11 @@ export declare function importTheme(file: File): Promise<{
     name: string;
 }>;
 /**
- * Upload one prepared image as the theme's background asset. The body is the
- * image itself; the Host reads its type from those bytes and answers with the
- * content-hashed name to record in the document.
+ * Upload one prepared image or video as a theme's background asset. The body is
+ * the media itself; the Host reads its type from those bytes and answers with
+ * the content-hashed name to record in the document.
  */
-export declare function uploadThemeAsset(themeId: string, image: Blob): Promise<ThemeAsset>;
+export declare function uploadThemeMedia(themeId: string, media: Blob): Promise<ThemeAsset>;
 /**
  * The themes a browser saved before files became the store, minus those the
  * Host already has.

@@ -24,7 +24,7 @@ export declare function listThemes(): Promise<ThemeDocument[]>;
  *
  * Media files are pruned here rather than by the caller: a theme's background
  * references at most one asset per appearance, so the save that commits a new
- * image is also the save that can drop the file it replaced.
+ * file is also the save that can drop the one it replaced.
  */
 export declare function putTheme(input: {
     id: string;

@@ -159,7 +159,7 @@ export type SavedTheme = {
     base: string;
     theme: CustomTheme;
     /**
-     * Media stored beside the seeds. Only the background image uses it today, but
+     * Media stored beside the seeds. Only the background image/video uses it, but
      * the list is carried through every rewrite so a later media user cannot drop
      * a file the theme still references.
      */
@@ -171,7 +171,7 @@ export type SavedTheme = {
  * Structural equality of two backgrounds, for the editor's dirty comparison.
  * A pending upload is tracked separately by the panel; this compares only what
  * would be written to the document. Each appearance is compared on its own, so
- * editing the dark image cannot leave the light one looking dirty.
+ * editing the dark side cannot leave the light one looking dirty.
  */
 export declare function sameBackground(a: ThemeBackground | null, b: ThemeBackground | null): boolean;
 /** Serialize the saved list with its schema version. */

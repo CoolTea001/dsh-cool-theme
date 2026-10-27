@@ -8,11 +8,14 @@ import {
   CUSTOM_PRESET_ID,
   THEME_APPEARANCES,
   THEME_ARCHIVE_EXTENSION,
-  THEME_ASSET_MAX_BYTES,
   THEME_BACKGROUND_MAX_BLUR,
+  THEME_IMAGE_MAX_BYTES,
+  THEME_VIDEO_MAX_BYTES,
+  assetTypeOf,
   emptyBackgroundSide,
   newThemeId,
   themeAssetUrl,
+  type ThemeAssetKind,
   type ThemeBackground,
   type ThemeBackgroundSide,
 } from '../contract.js'
@@ -22,13 +25,13 @@ import {
   ThemeApiUnavailableError,
   exportTheme,
   importTheme,
-  uploadThemeAsset,
+  uploadThemeMedia,
 } from './theme-files.js'
 import {
   BACKGROUND_ACCEPT,
-  backgroundHasImage,
-  isSupportedImage,
-  prepareBackgroundImage,
+  backgroundHasMedia,
+  backgroundKindOf,
+  prepareBackgroundMedia,
   type ResolvedBackground,
   type ResolvedBackgroundSide,
 } from './background.js'
@@ -142,15 +145,17 @@ const ICON_SIZE = 14
 
 /** Bytes in one megabyte, for naming the upload cap in the user's units. */
 const BYTES_PER_MB = 1024 * 1024
-/** The upload cap as the whole megabytes a localized message can name. */
-const THEME_ASSET_MAX_MB = String(THEME_ASSET_MAX_BYTES / BYTES_PER_MB)
+/** The upload caps as the whole megabytes a localized message can name. */
+const THEME_IMAGE_MAX_MB = String(THEME_IMAGE_MAX_BYTES / BYTES_PER_MB)
+const THEME_VIDEO_MAX_MB = String(THEME_VIDEO_MAX_BYTES / BYTES_PER_MB)
 
 /**
  * A cheap sanity gate before decoding: the picker can hand over a camera RAW of
- * hundreds of megabytes, so anything far past the upload cap is refused before
- * the browser tries to decode it.
+ * hundreds of megabytes, so an image far past the cap is refused before the
+ * browser tries to decode it. A video is never re-encoded, so it gets no such
+ * allowance and is refused as soon as it passes the upload cap itself.
  */
-const BACKGROUND_PICK_MAX_BYTES = THEME_ASSET_MAX_BYTES * 4
+const BACKGROUND_PICK_MAX_IMAGE_BYTES = THEME_IMAGE_MAX_BYTES * 4
 
 /** The failure shapes the Host reports, most specific first. */
 const IMPORT_FAILURE_MATCHERS: readonly (readonly [RegExp, ThemeKey])[] = [
@@ -248,23 +253,26 @@ function neutralEndForRole(mode: Mode, role: NeutralRole): 'lightest' | 'darkest
  * Whether the open editor holds work a close would throw away. A brand-new
  * theme has never been committed, so it always counts as unsaved; a reopened
  * entry is dirty only once its name, one of its seeds or its wallpaper moved.
- * A picked image that has not been uploaded counts too: it lives only in this
- * panel's memory until Save uploads it.
+ * A picked image or video that has not been uploaded counts too: it lives only
+ * in this panel's memory until Save uploads it.
  */
 function isDirty(
   open: Editing,
   current: CustomTheme,
   currentBackground: ThemeBackground | null,
-  hasPendingImage: boolean,
+  hasPendingMedia: boolean,
 ): boolean {
   if (open.id === null) return true
   return (
     open.name.trim() !== open.originName.trim()
     || !sameSeeds(current, open.originTheme)
     || !sameBackground(currentBackground, open.originBackground)
-    || hasPendingImage
+    || hasPendingMedia
   )
 }
+
+/** A picked image or video waiting for Save to upload it. */
+type PendingMedia = { file: File; url: string; kind: ThemeAssetKind }
 
 /**
  * The panel's value picker: a trigger in the row, the shell's `Menu` for the
@@ -400,11 +408,18 @@ function toastKeyFor(error: unknown): ThemeKey {
  * an oversized one, and a route that is not mounted — so the message selects
  * the localized text by its shape and keeps anything unrecognised verbatim.
  */
-function backgroundFailureMessage(t: (key: ThemeKey) => string, error: unknown): string {
+function backgroundFailureMessage(
+  t: (key: ThemeKey) => string,
+  error: unknown,
+  kind: ThemeAssetKind,
+): string {
   if (error instanceof ThemeApiUnavailableError) return t('custom.toast.unavailable')
   const message = error instanceof Error ? error.message : String(error)
   if (/too large|larger than|413/i.test(message)) {
-    return t('background.tooLarge').replace('{0}', THEME_ASSET_MAX_MB)
+    return t('background.tooLarge').replace(
+      '{0}',
+      kind === 'video' ? THEME_VIDEO_MAX_MB : THEME_IMAGE_MAX_MB,
+    )
   }
   if (/unsupported|decode|encode|format/i.test(message)) return t('background.badType')
   return t('background.uploadFailed')
@@ -631,14 +646,15 @@ export function ThemePanel(props: {
    * the browser's file dialog holds the screen.
    */
   const pickModeRef = React.useRef<Mode>('light')
-  // An image picked for the open draft, one per appearance, before Save uploads
-  // it. The object URL is the preview; `file` is what gets compressed.
-  const [pending, setPending] = React.useState<Record<Mode, { file: File; url: string } | null>>({
+  // An image or video picked for the open draft, one per appearance, before
+  // Save uploads it. The object URL is the preview; `file` is what gets
+  // compressed (images only) and `kind` decides how that preview is painted.
+  const [pending, setPending] = React.useState<Record<Mode, PendingMedia | null>>({
     light: null,
     dark: null,
   })
   /** Whether any appearance has a file waiting to be uploaded by Save. */
-  const hasPendingPick = THEME_APPEARANCES.some((mode) => pending[mode] !== null)
+  const hasPendingMedia = THEME_APPEARANCES.some((mode) => pending[mode] !== null)
   // The card open in the editor. Null means every card is collapsed and only the
   // "add" button is showing, which is the state the panel opens in.
   const [editing, setEditing] = React.useState<Editing | null>(null)
@@ -666,7 +682,7 @@ export function ThemePanel(props: {
   const dirtyRef = React.useRef(false)
   dirtyRef.current =
     editing !== null
-    && isDirty(editing, custom, editing.background, hasPendingPick)
+    && isDirty(editing, custom, editing.background, hasPendingMedia)
   const confirmCloseRef = React.useRef(false)
   confirmCloseRef.current = confirmClose
   const pendingLeaveRef = React.useRef<{ entry: SavedTheme | null; edit: boolean } | null>(null)
@@ -687,14 +703,14 @@ export function ThemePanel(props: {
     setToast({ seq: toastSeq.current, text })
   }
 
-  // --- background image -----------------------------------------------------
+  // --- background image/video -----------------------------------------------
   //
   // A picked file is not uploaded until Save: the editor previews it from an
   // object URL, and cancelling has to leave the theme's directory untouched.
   // One pick is held per appearance, because the two sides are edited and saved
   // independently. The ref mirrors the state for the unmount cleanup, which must
   // revoke every URL even when the panel closes mid-edit.
-  const pendingRef = React.useRef<Record<Mode, { file: File; url: string } | null>>({
+  const pendingRef = React.useRef<Record<Mode, PendingMedia | null>>({
     light: null,
     dark: null,
   })
@@ -711,12 +727,12 @@ export function ThemePanel(props: {
   )
 
   /** Replace one appearance's pending pick, revoking the URL it supersedes. */
-  function replacePending(mode: Mode, file: File | null) {
+  function replacePending(mode: Mode, pick: PendingMedia | null) {
     const previous = pendingRef.current[mode]
     if (previous) URL.revokeObjectURL(previous.url)
-    const next: Record<Mode, { file: File; url: string } | null> = {
+    const next: Record<Mode, PendingMedia | null> = {
       ...pendingRef.current,
-      [mode]: file ? { file, url: URL.createObjectURL(file) } : null,
+      [mode]: pick,
     }
     // The ref is written here rather than waiting for the next render: two picks
     // in one tick must not revoke the same URL twice or leak the second's.
@@ -737,7 +753,7 @@ export function ThemePanel(props: {
   /**
    * What the editor paints: the pending pick when there is one, otherwise the
    * stored asset of the entry being edited — resolved per appearance, because
-   * each side has its own image and its own switch. Every input of the preview
+   * each side has its own media and its own switch. Every input of the preview
    * effect is in the key, so a slider move repaints without rebuilding the
    * palette.
    */
@@ -754,7 +770,7 @@ export function ThemePanel(props: {
 
   React.useEffect(() => {
     if (!editing) {
-      // No editor: hand the page back to the active entry's committed image.
+      // No editor: hand the page back to the active entry's committed wallpaper.
       onPreviewBackground(undefined)
       return
     }
@@ -763,15 +779,19 @@ export function ThemePanel(props: {
       const side = background?.[mode]
       // Switched off, or nothing picked for this appearance: this side paints
       // nothing, and must not let the committed wallpaper show through either.
-      if (!side || !side.enabled) return { url: null, opacity: 0, blur: 0 }
+      if (!side || !side.enabled) return { url: null, kind: null, opacity: 0, blur: 0 }
       const stored = editing.id && side.asset ? themeAssetUrl(editing.id, side.asset) : null
-      const url = pending[mode]?.url ?? stored
-      return url ? { url, opacity: side.opacity, blur: side.blur } : { url: null, opacity: 0, blur: 0 }
+      const pendingMedia = pending[mode]
+      const url = pendingMedia?.url ?? stored
+      const kind = pendingMedia?.kind ?? (side.asset ? assetTypeOf(side.asset)?.kind ?? null : null)
+      return url && kind
+        ? { url, kind, opacity: side.opacity, blur: side.blur }
+        : { url: null, kind: null, opacity: 0, blur: 0 }
     }
     const resolved: ResolvedBackground = { light: resolve('light'), dark: resolve('dark') }
-    // A draft with no image on either side is a draft with no wallpaper: pass
+    // A draft with no media on either side is a draft with no wallpaper: pass
     // null so the committed one is hidden rather than showing through.
-    onPreviewBackground(backgroundHasImage(resolved) ? resolved : null)
+    onPreviewBackground(backgroundHasMedia(resolved) ? resolved : null)
     // `backgroundKey` names every input of this effect.
   }, [backgroundKey])
 
@@ -1274,19 +1294,23 @@ export function ThemePanel(props: {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file || !editing) return
-    if (!isSupportedImage(file)) {
+    const kind = backgroundKindOf(file)
+    if (kind === null) {
       showToast(t('background.badType'))
       return
     }
     // A cheap sanity gate before decoding: the picker can hand over a RAW image
     // of hundreds of megabytes, and there is no point decoding one that is
-    // already far past the upload cap.
-    if (file.size > BACKGROUND_PICK_MAX_BYTES) {
-      showToast(t('background.tooLarge').replace('{0}', THEME_ASSET_MAX_MB))
+    // already far past the upload cap. A video is never decoded by this panel
+    // before the upload, so it only has to pass its own cap.
+    const pickLimit = kind === 'video' ? THEME_VIDEO_MAX_BYTES : BACKGROUND_PICK_MAX_IMAGE_BYTES
+    if (file.size > pickLimit) {
+      const cap = kind === 'video' ? THEME_VIDEO_MAX_MB : THEME_IMAGE_MAX_MB
+      showToast(t('background.tooLarge').replace('{0}', cap))
       return
     }
     const mode = pickModeRef.current
-    replacePending(mode, file)
+    replacePending(mode, { file, url: URL.createObjectURL(file), kind })
     setEditing((cur) => {
       if (!cur) return cur
       const background = cur.background
@@ -1306,8 +1330,8 @@ export function ThemePanel(props: {
   /**
    * Push one field of the appearance on show. The editor's light/dark toggle
    * picks the side being edited, so a control only ever moves that side — which
-   * is the whole point of the split: the light image and the dark image are
-   * separate, not one image with two sets of numbers.
+   * is the whole point of the split: the light media and the dark media are
+   * separate, not one file with two sets of numbers.
    */
   function updateBackgroundSide(patch: Partial<ThemeBackgroundSide>) {
     setEditing((cur) => {
@@ -1326,7 +1350,7 @@ export function ThemePanel(props: {
 
   /**
    * Drop the wallpaper from the appearance on show; Save then removes the
-   * stored file too. The other appearance keeps its own image and settings, and
+   * stored file too. The other appearance keeps its own media and settings, and
    * the draft only becomes "no wallpaper" once both sides are empty.
    */
   function removeBackground() {
@@ -1349,7 +1373,7 @@ export function ThemePanel(props: {
     closePicker()
     const open = editing
     const name = open.name.trim() || t('custom.defaultName')
-    // A brand-new theme needs its id before the image can be uploaded to its
+    // A brand-new theme needs its id before the media can be uploaded to its
     // directory, so the panel mints it here and the Host stores the document
     // under that id.
     const id = open.id ?? newThemeId()
@@ -1370,7 +1394,7 @@ export function ThemePanel(props: {
       )
       if (next === null) return
 
-      // The document is stored either way; a failed image upload only costs that
+      // The document is stored either way; a failed media upload only costs that
       // side's wallpaper, so it is reported without undoing the save. The sides
       // are uploaded one by one: one bad file must not discard the other's.
       let failure: string | null = null
@@ -1379,15 +1403,15 @@ export function ThemePanel(props: {
         const pick = pending[mode]
         if (!pick) continue
         try {
-          const bytes = await prepareBackgroundImage(pick.file)
-          const asset = await uploadThemeAsset(id, bytes)
+          const { blob } = await prepareBackgroundMedia(pick.file)
+          const asset = await uploadThemeMedia(id, blob)
           const base: ThemeBackground = uploaded ?? {
             light: emptyBackgroundSide('light'),
             dark: emptyBackgroundSide('dark'),
           }
           uploaded = { ...base, [mode]: { ...base[mode], asset: asset.name, enabled: true } }
         } catch (error) {
-          failure = backgroundFailureMessage(t, error)
+          failure = backgroundFailureMessage(t, error, pick.kind)
         }
       }
       // Only a side that actually landed changes the stored document.
@@ -1797,9 +1821,10 @@ export function ThemePanel(props: {
         : null
 
     // The wallpaper is edited one appearance at a time, following the editor's
-    // own light/dark toggle. Each side carries its own image, its own switch and
-    // its own numbers, so everything below describes the side on show — picking
-    // a dark image while the light one stays untouched is the whole point.
+    // own light/dark toggle. Each side carries its own image or video, its own
+    // switch and its own numbers, so everything below describes the side on
+    // show — picking a dark video while the light image stays untouched is the
+    // whole point.
     const backgroundSide = editing?.background?.[seedMode] ?? null
     const backgroundPending = pending[seedMode]
     const backgroundPreviewUrl =
@@ -1807,9 +1832,14 @@ export function ThemePanel(props: {
       ?? (editing?.id && backgroundSide?.asset
         ? themeAssetUrl(editing.id, backgroundSide.asset)
         : null)
+    // The stored asset's extension decides how the thumbnail is painted; a
+    // pending pick already knows its own kind and outranks the stored one.
+    const backgroundPreviewKind =
+      backgroundPending?.kind
+      ?? (backgroundSide?.asset ? assetTypeOf(backgroundSide.asset)?.kind ?? null : null)
     // Whether this side has anything to paint or to turn on: a stored asset, or
     // a file picked and waiting for Save to upload it.
-    const backgroundSideHasImage =
+    const backgroundSideHasMedia =
       backgroundSide !== null && (backgroundSide.asset !== '' || backgroundPending !== null)
     // Which side the toggle is on is the segmented control's own state, so the
     // labels stay plain (`透明度 · 40%`) rather than repeating it on every row;
@@ -1847,12 +1877,12 @@ export function ThemePanel(props: {
         }),
       )
 
-    // The head's action group. The image's commands are text links rather than
-    // buttons, so the section title stays the strongest thing in the row, and
-    // the switch is its fixed last item: whatever the state, the section always
-    // shows one.
+    // The head's action group. The wallpaper's commands are text links rather
+    // than buttons, so the section title stays the strongest thing in the row,
+    // and the switch is its fixed last item: whatever the state, the section
+    // always shows one.
     const backgroundActions: React.ReactNode[] = []
-    if (!backgroundSideHasImage) {
+    if (!backgroundSideHasMedia) {
       backgroundActions.push(
         React.createElement(
           'button',
@@ -1862,7 +1892,7 @@ export function ThemePanel(props: {
       )
     } else if (backgroundSide?.enabled) {
       // Off hides every command but the switch: with nothing painted there is
-      // nothing to replace, remove or tune until the image comes back on.
+      // nothing to replace, remove or tune until the media comes back on.
       backgroundActions.push(
         React.createElement(
           'button',
@@ -1879,15 +1909,15 @@ export function ThemePanel(props: {
     backgroundActions.push(
       // Also the reason "remove" is not the only way out of a wallpaper: off
       // keeps the file and the settings, so the theme can go back to plain
-      // surfaces without losing the image it was set up with. A side with no
-      // image at all is simply the same switch in its off state, waiting until
+      // surfaces without losing the media it was set up with. A side with no
+      // media at all is simply the same switch in its off state, waiting until
       // there is something to turn on. The switch is per appearance: turning the
-      // light image off leaves the dark one painting.
+      // light image off leaves the dark video playing.
       React.createElement(Switch, {
         key: 'enabled',
         className: 'ct-bg-switch',
         checked: backgroundSide?.enabled ?? false,
-        disabled: !backgroundSideHasImage,
+        disabled: !backgroundSideHasMedia,
         label: t('background.title'),
         onChange: (on: boolean) => updateBackgroundSide({ enabled: on }),
       }),
@@ -1909,19 +1939,39 @@ export function ThemePanel(props: {
         ),
         React.createElement('div', { className: 'ct-bg-actions' }, backgroundActions),
       ),
-      // The thumbnail and both sliders describe the image that is painted, so
+      // The thumbnail and both sliders describe the media that is painted, so
       // they belong to the on state with it.
-      backgroundSide?.enabled && backgroundSideHasImage
+      backgroundSide?.enabled && backgroundSideHasMedia
         ? React.createElement(
             'div',
             { className: 'ct-bg-body' },
-            React.createElement('div', {
-              className: 'ct-bg-thumb',
-              'aria-hidden': 'true',
-              style: backgroundPreviewUrl
-                ? { backgroundImage: `url("${backgroundPreviewUrl}")` }
-                : undefined,
-            }),
+            React.createElement(
+              'div',
+              {
+                className: 'ct-bg-thumb',
+                'aria-hidden': 'true',
+                // An image stays a CSS background; a video needs an element so
+                // its frames can move. Both fill the same thumbnail box.
+                style:
+                  backgroundPreviewUrl && backgroundPreviewKind === 'image'
+                    ? { backgroundImage: `url("${backgroundPreviewUrl}")` }
+                    : undefined,
+              },
+              backgroundPreviewUrl && backgroundPreviewKind === 'video'
+                ? React.createElement('video', {
+                    className: 'ct-bg-thumb-video',
+                    src: backgroundPreviewUrl,
+                    // The thumbnail is a live preview, so it loops muted like
+                    // the wallpaper itself.
+                    muted: true,
+                    loop: true,
+                    autoPlay: true,
+                    playsInline: true,
+                    preload: 'auto',
+                    'aria-hidden': 'true',
+                  })
+                : null,
+            ),
             React.createElement(
               'div',
               { className: 'ct-bg-controls' },

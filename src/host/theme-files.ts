@@ -113,7 +113,7 @@ export async function listThemes(): Promise<ThemeDocument[]> {
  *
  * Media files are pruned here rather than by the caller: a theme's background
  * references at most one asset per appearance, so the save that commits a new
- * image is also the save that can drop the file it replaced.
+ * file is also the save that can drop the one it replaced.
  */
 export async function putTheme(input: {
   id: string
@@ -141,7 +141,7 @@ export async function putTheme(input: {
     updatedAt: now,
   }
   await writeDocument(doc)
-  // Both appearances may name a file, and a side with no image names none; what
+  // Both appearances may name a file, and a side with no media names none; what
   // the document does not reference is what this save drops.
   const keep = background
     ? THEME_APPEARANCES.map((appearance) => background[appearance].asset).filter((name) => name !== '')

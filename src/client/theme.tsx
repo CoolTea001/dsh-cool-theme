@@ -8,6 +8,7 @@ import {
   CUSTOM_MIGRATED_STORAGE_KEY,
   SIDEBAR_TRANSPARENT_STORAGE_KEY,
   themeAssetUrl,
+  assetTypeOf,
   type ThemeAppearance,
   type ThemeBackground,
 } from '../contract.js'
@@ -27,7 +28,7 @@ import {
 } from './custom.js'
 import {
   BACKGROUND_CSS,
-  backgroundHasImage,
+  backgroundHasMedia,
   createBackgroundLayer,
   type ResolvedBackground,
   type ResolvedBackgroundSide,
@@ -186,7 +187,7 @@ const BASE_CSS = [
   // `.outline` rule whatever order the two stylesheets are inserted in, and
   // rebinding the hover token on the element is DSH's own delete-button recipe.
   'button.ct-danger{color:var(--dsw-alias-state-error-primary);border-color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent);--dsw-alias-interactive-bg-hover:color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent);}',
-  // --- background image section (inside the custom editor) -----------------
+  // --- background image/video section (inside the custom editor) ----------------
   // It sits below the colour rows and owns only its own controls: the switch,
   // buttons, segmented control and tooltip are the shell's. No hairline above
   // it — the spacing alone separates it from the rows, and a rule there only cut
@@ -196,10 +197,12 @@ const BASE_CSS = [
   '.ct-bg-body{display:flex;align-items:center;gap:16px;}',
   '.ct-bg-controls{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px;}',
   // The thumbnail is the picked file's own object URL before Save, and the
-  // stored asset after it, so the same face answers both states.
-  '.ct-bg-thumb{width:88px;height:56px;flex:none;border:1px solid var(--dsw-alias-border-l3);border-radius:10px;background-color:var(--dsw-alias-bg-module-platform);background-size:cover;background-position:center;}',
+  // stored asset after it, so the same face answers both states. A video fills
+  // it with a clipped element rather than a CSS background.
+  '.ct-bg-thumb{box-sizing:border-box;width:88px;height:56px;flex:none;overflow:hidden;border:1px solid var(--dsw-alias-border-l3);border-radius:10px;background-color:var(--dsw-alias-bg-module-platform);background-size:cover;background-position:center;}',
+  '.ct-bg-thumb-video{display:block;width:100%;height:100%;object-fit:cover;object-position:center;}',
   '.ct-bg-actions{display:flex;align-items:center;gap:8px;margin-left:auto;}',
-  // The image's own commands are links, not buttons: DSH's link idiom, which is
+  // The wallpaper's own commands are links, not buttons: DSH's link idiom, which is
   // the accent at rest and a dotted underline once hovered or focused, so the
   // section title stays the loudest thing in the row. The accent token is also
   // the one the plugin re-hues for a custom theme, so a link never falls back to
@@ -250,7 +253,7 @@ export function registerTheme(ctx: any) {
   // until the draft is saved or discarded. Kept here rather than in the panel so
   // a palette rebuild (a colour drag) keeps painting it. `previewActive` has to
   // be separate from the value: a draft with no background is a deliberate
-  // "nothing" that must hide the active entry's committed image, not fall back
+  // "nothing" that must hide the active entry's committed wallpaper, not fall back
   // to it.
   let previewActive = false
   let previewBackground: ResolvedBackground | null = null
@@ -437,11 +440,11 @@ export function registerTheme(ctx: any) {
    * previewed through here — the panel sets `previewBackground` for that.
    *
    * Each appearance resolves on its own: a side that is switched off or carries
-   * no image simply paints nothing, and only when neither side paints is the
+   * no media simply paints nothing, and only when neither side paints is the
    * whole background nothing at all. That is what lets every consumer stay
    * unaware of the per-side flags: no layer is mounted, so the canvas keeps its
    * own opaque surfaces and the sidebar switch works again, exactly as on a
-   * theme that never had an image.
+   * theme that never had a wallpaper.
    */
   function resolveActiveBackground(): ResolvedBackground | null {
     const id = readActiveId()
@@ -451,11 +454,18 @@ export function registerTheme(ctx: any) {
     if (!background) return null
     const side = (appearance: ThemeAppearance): ResolvedBackgroundSide => {
       const half = background[appearance]
-      if (!half.enabled || half.asset === '') return { url: null, opacity: 0, blur: 0 }
-      return { url: themeAssetUrl(id, half.asset), opacity: half.opacity, blur: half.blur }
+      if (!half.enabled || half.asset === '') return { url: null, kind: null, opacity: 0, blur: 0 }
+      const type = assetTypeOf(half.asset)
+      if (type === null) return { url: null, kind: null, opacity: 0, blur: 0 }
+      return {
+        url: themeAssetUrl(id, half.asset),
+        kind: type.kind,
+        opacity: half.opacity,
+        blur: half.blur,
+      }
     }
     const resolved: ResolvedBackground = { light: side('light'), dark: side('dark') }
-    return backgroundHasImage(resolved) ? resolved : null
+    return backgroundHasMedia(resolved) ? resolved : null
   }
 
   /**
@@ -470,7 +480,7 @@ export function registerTheme(ctx: any) {
   /**
    * Paint the layer with the current custom palette's own surface colours. The
    * image is composited over those colours, so the panel colour is what shows
-   * through when the image opacity is lowered.
+   * through when the media opacity is lowered.
    */
   function renderBackground(bg: ResolvedBackground | null) {
     if (bg === null || lastCustom === null) {
@@ -669,7 +679,7 @@ export function registerTheme(ctx: any) {
     refresh: refreshSaved,
     /**
      * Persist the current draft as a named entry and make it active. The id is
-     * the panel's because a background image is uploaded to the theme's own
+     * the panel's because a background image or video is uploaded to the theme's own
      * directory, and that upload needs the id before the document is written.
      */
     async create(id: string, name: string, background: ThemeBackground | null): Promise<SavedTheme[]> {

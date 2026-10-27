@@ -7,9 +7,9 @@
  * provided, and nothing here interprets the theme payload beyond moving it.
  *
  * Media has two routes of its own below a theme id: one accepts the bytes of a
- * background image, one serves a stored file back. Everything else about a
- * theme — its document, its colours, its background reference — travels through
- * the roster route.
+ * background image or video, one serves a stored file back. Everything else
+ * about a theme — its document, its colours, its background reference — travels
+ * through the roster route.
  */
 export declare const name = "dsh-cool-theme";
 export declare const inject: string[];

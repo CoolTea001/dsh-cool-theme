@@ -3,9 +3,9 @@
  *
  * An archive is the theme directory itself — the same `theme.json` and `assets/`
  * a theme occupies on disk — so sharing never invents a second format, and a
- * theme's background image travels with it automatically. The Host owns both
- * halves because the browser can neither read the theme's files nor decompress
- * an archive on its behalf.
+ * theme's background image or video travels with it automatically. The Host owns
+ * both halves because the browser can neither read the theme's files nor
+ * decompress an archive on its behalf.
  *
  * Reading is deliberately strict: an archive either validates as one of ours or
  * is refused with a reason. Nothing half-valid is ever handed to the client to
@@ -27,7 +27,7 @@ import {
 import type { ThemeAsset, ThemeBackground, ThemeDocument } from '../contract.js'
 import { listAssets } from './assets.js'
 import { assetsDir, isThemeId, themeDir } from './paths.js'
-import { createZip, readZip } from './zip.js'
+import { createZip, readZip, type ZipEntry } from './zip.js'
 
 /** The document as it is packed; the timestamps are the Host's own bookkeeping. */
 type PackedDocument = Pick<ThemeDocument, 'id' | 'name' | 'base' | 'theme' | 'assets'> & {
@@ -50,15 +50,23 @@ export async function packTheme(id: string): Promise<{
   const doc = JSON.parse(raw) as ThemeDocument
   // Re-encoded rather than re-emitted byte for byte: an archive should carry the
   // canonical document, and a hand-edited file still packs.
-  const entries = [{ name: THEME_ARCHIVE_DOCUMENT, data: Buffer.from(`${JSON.stringify(doc, null, 2)}\n`, 'utf8') }]
+  const entries: ZipEntry[] = [
+    { name: THEME_ARCHIVE_DOCUMENT, data: Buffer.from(`${JSON.stringify(doc, null, 2)}\n`, 'utf8') },
+  ]
 
   // Media is optional and additive: whatever sits in `assets/` travels, and the
   // document's own `assets` list is rebuilt from what was actually packed so an
-  // entry can never point at a file the archive does not carry.
+  // entry can never point at a file the archive does not carry. A video is
+  // already compressed, so the archive stores it rather than spending seconds
+  // inflating it only to find the result larger.
   const assets: ThemeAsset[] = []
   for (const asset of await listAssets(id)) {
     const bytes = await readFile(join(assetsDir(id), asset.name))
-    entries.push({ name: `${THEME_ARCHIVE_ASSETS_DIR}/${asset.name}`, data: bytes })
+    entries.push({
+      name: `${THEME_ARCHIVE_ASSETS_DIR}/${asset.name}`,
+      data: bytes,
+      compress: asset.kind !== 'video',
+    })
     assets.push({ ...asset, bytes: bytes.byteLength })
   }
 

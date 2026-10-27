@@ -7,37 +7,36 @@
  * document can never point at a file the Host does not have.
  *
  * Uploads are accepted by content, not by name or declared type: the bytes have
- * to sniff as one of the raster formats a browser can paint. SVG is deliberately
- * absent — served from this same origin it would be an XSS surface, and a
- * wallpaper has no need for it.
+ * to sniff as one of the raster images or video containers a browser can paint.
+ * SVG is deliberately absent — served from this same origin it would be an XSS
+ * surface, and a wallpaper has no need for it.
  */
 import { type ThemeAsset, type ThemeAssetKind } from '../contract.js';
 /** A refused asset, with a reason worth showing the user. */
 export declare class AssetError extends Error {
 }
-export type ImageType = {
+export type MediaType = {
     ext: string;
     mime: string;
     kind: ThemeAssetKind;
 };
 /**
- * The raster type of a byte string, read from its magic number rather than
- * from a file name or an upload header. Null means "this plugin will not store
- * it".
+ * The media type of a byte string, read from its magic number rather than from
+ * a file name or an upload header. Null means "this plugin will not store it".
  */
-export declare function sniffImage(bytes: Buffer): ImageType | null;
+export declare function sniffMedia(bytes: Buffer): MediaType | null;
 /**
  * Write one file where a reader sees either the previous bytes or the next
  * ones, never a half-written file. The caller owns the name's validity.
  */
 export declare function writeAssetFile(id: string, name: string, bytes: Buffer): Promise<void>;
 /**
- * Store one uploaded image under a content-hashed name and return what the
+ * Store one uploaded media file under a content-hashed name and return what the
  * document should record. Hashing makes the read URL immutable: the same bytes
  * always resolve to the same name, and different bytes never collide, so the
  * browser can cache an asset for as long as it likes.
  */
-export declare function saveImageAsset(id: string, bytes: Buffer): Promise<ThemeAsset>;
+export declare function saveMediaAsset(id: string, bytes: Buffer): Promise<ThemeAsset>;
 /** Every media file a theme actually stores, with its size on disk. */
 export declare function listAssets(id: string): Promise<ThemeAsset[]>;
 /** One stored asset's bytes and type, or null when it is missing. */
@@ -50,10 +49,10 @@ export declare function readAsset(id: string, name: string): Promise<{
  * Delete every media file that is not in `keep`.
  *
  * A theme's background references at most one asset per appearance, so a save
- * is the natural garbage-collection point: replacing an image writes a new
- * hash, and the save that follows drops the old one — while the other
- * appearance's file, still referenced, is kept. Files this plugin does not
- * recognise are left alone rather than swept.
+ * is the natural garbage-collection point: replacing a file writes a new hash,
+ * and the save that follows drops the old one — while the other appearance's
+ * file, still referenced, is kept. Files this plugin does not recognise are
+ * left alone rather than swept.
  */
 export declare function pruneAssets(id: string, keep: readonly string[]): Promise<void>;
 //# sourceMappingURL=assets.d.ts.map

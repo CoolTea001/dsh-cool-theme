@@ -40,6 +40,12 @@ export type ZipEntry = {
   /** Path inside the archive, always with forward slashes. */
   name: string
   data: Buffer
+  /**
+   * Whether to try deflating the body. Omitted means yes; an already-compressed
+   * video opts out, because a deflate over megabytes of entropy only burns CPU
+   * to hand back the same bytes.
+   */
+  compress?: boolean
 }
 
 /** How a read should select and bound the entries it inflates. */
@@ -87,9 +93,10 @@ export function createZip(entries: ZipEntry[]): Buffer {
       throw new Error(`entry too large to archive: ${entry.name}`)
     }
     // Deflate only when it actually pays: a one-byte header either way, so an
-    // incompressible asset is stored rather than inflated.
-    const deflated = deflateRawSync(raw)
-    const stored = deflated.byteLength >= raw.byteLength
+    // incompressible asset is stored rather than inflated. `compress: false`
+    // skips the attempt entirely for media that is already compressed.
+    const deflated = entry.compress === false ? null : deflateRawSync(raw)
+    const stored = deflated === null || deflated.byteLength >= raw.byteLength
     const body = stored ? raw : deflated
     const method = stored ? METHOD_STORE : METHOD_DEFLATE
     const crc = crc32(raw)
