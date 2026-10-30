@@ -13,7 +13,7 @@
  */
 import type { ThemeAsset, ThemeBackground, ThemeDocument } from '../contract.js';
 /** The document as it is packed; the timestamps are the Host's own bookkeeping. */
-type PackedDocument = Pick<ThemeDocument, 'id' | 'name' | 'base' | 'theme' | 'assets'> & {
+type PackedDocument = Pick<ThemeDocument, 'id' | 'name' | 'base' | 'theme' | 'cssEnabled' | 'assets'> & {
     background: ThemeBackground | null;
 };
 /** A share refused for a reason worth showing the user. */
@@ -39,11 +39,14 @@ export type UnpackedTheme = {
         kind: ThemeAsset['kind'];
         mime: string;
     }[];
+    /** The optional stylesheet at the archive root, already bounds-checked. */
+    css: string | null;
 };
 /**
- * Read an archive back into a theme. Only the document and its media are
- * accepted; every path is required to be exactly one of those two shapes, so a
- * directory entry or a nested path is refused rather than normalised.
+ * Read an archive back into a theme. Only the document, its media and its
+ * optional stylesheet are accepted; every path is required to be exactly one of
+ * those shapes, so a directory entry or a nested path is refused rather than
+ * normalised.
  */
 export declare function unpackTheme(archive: Buffer): UnpackedTheme;
 export {};

@@ -10,7 +10,12 @@
 
 import * as React from 'react'
 import { HexAlphaColorPicker, HexColorInput, HexColorPicker } from 'react-colorful'
-import { THEME_BACKGROUND_MAX_BLUR, type ThemeAssetKind, type ThemeBackgroundSide } from '../contract.js'
+import {
+  THEME_BACKGROUND_MAX_BLUR,
+  type ThemeAssetKind,
+  type ThemeBackgroundSide,
+  type ThemeCssInfo,
+} from '../contract.js'
 import { BACKGROUND_ACCEPT } from './background.js'
 import { PICKER_HEIGHT, PICKER_HEIGHT_WITH_ALPHA, withAlpha } from './color-picker.js'
 import type { ThemeKey } from './locales.js'
@@ -323,5 +328,127 @@ export function BackgroundSection(props: {
       style: { display: 'none' },
       onChange: onFilePicked,
     }),
+  )
+}
+
+/**
+ * The starter stylesheet written when the user opens a theme that has none.
+ *
+ * It is comment-only, so creating the file cannot change the interface, and it
+ * names the three things a first rule usually needs: when the sheet applies,
+ * the dark-appearance marker, and how to override a token. The theme name is
+ * user data and may arrive from a shared archive, so a closing comment marker
+ * in it must not end the comment early.
+ */
+export function cssTemplate(t: (key: ThemeKey) => string, name: string, id: string): string {
+  const safeName = name.replace(/\*\//g, '* /')
+  return [
+    '/*',
+    ` * ${safeName} — ${t('custom.css.title')}`,
+    ' *',
+    ` * ${t('custom.css.template.active')}`,
+    ` * ${t('custom.css.template.dark')}`,
+    ` * ${t('custom.css.template.token')}`,
+    ` * ${t('custom.css.template.assets')} /cool-theme/api/themes/${id}/assets/<file>`,
+    ` * ${t('custom.css.template.warning')}`,
+    ' */',
+    '',
+  ].join('\n')
+}
+
+/**
+ * The stylesheet row of the open editor: its title, the on/off switch, and the
+ * action that opens the file once the switch is on. It is stateless; the panel
+ * owns the fetch, the busy state and the toast.
+ *
+ * The switch is the primary control: off by default, it creates the file when
+ * turned on, and turning it off hides the open action while keeping the file.
+ * The action is "Open stylesheet" on a loopback page, where the Host can
+ * launch a native editor, and "Copy path" elsewhere.
+ */
+export function CssSection(props: {
+  t: (key: ThemeKey) => string
+  /** Metadata of the open entry's file; null while loading or after a failure. */
+  info: ThemeCssInfo | null
+  error: 'unavailable' | 'failed' | null
+  busy: boolean
+  /** True while the card is composing a brand-new, unsaved theme. */
+  newTheme: boolean
+  onOpen: () => void
+  onCopyPath: () => void
+  onToggle: (on: boolean) => void
+}) {
+  const { t, info, error, busy, newTheme, onOpen, onCopyPath, onToggle } = props
+  const hint = newTheme
+    ? t('custom.css.newTheme')
+    : error === 'unavailable'
+      ? t('custom.toast.unavailable')
+      : error === 'failed'
+        ? t('custom.css.loadFailed')
+        : info === null
+          ? t('custom.css.loading')
+          : info.tooLarge
+            ? t('custom.css.tooLarge')
+            : info.enabled && info.css === null
+              ? t('custom.css.missingHint')
+              : ''
+  // The switch is the opt-in and the only control that creates the file; the
+  // open action exists only while it is on.
+  const showSwitch = info !== null && !newTheme && error === null
+  const action = info !== null && info.enabled && !newTheme && error === null
+    ? info.canOpen
+      ? React.createElement(
+          'button',
+          {
+            key: 'open',
+            type: 'button',
+            className: 'ct-css-link',
+            disabled: busy,
+            title: info.path,
+            onClick: onOpen,
+          },
+          t('custom.css.open'),
+        )
+      : React.createElement(
+          'button',
+          {
+            key: 'copy',
+            type: 'button',
+            className: 'ct-css-link',
+            disabled: busy,
+            title: info.path,
+            onClick: onCopyPath,
+          },
+          t('custom.css.copyPath'),
+        )
+    : null
+  return React.createElement(
+    'div',
+    { className: 'ct-css-section' },
+    React.createElement(
+      'div',
+      { className: 'ct-css-head' },
+      React.createElement(
+        'div',
+        { className: 'ct-row-main' },
+        React.createElement('div', { className: 'ct-row-title' }, t('custom.css.title')),
+        hint ? React.createElement('div', { className: 'ct-row-desc' }, hint) : null,
+      ),
+      React.createElement(
+        'div',
+        { className: 'ct-css-actions' },
+        action,
+        showSwitch && info
+          ? React.createElement(Switch, {
+              key: 'enabled',
+              className: 'ct-css-switch',
+              checked: info.enabled,
+              disabled: busy,
+              label: t('custom.css.enable'),
+              onChange: onToggle,
+            })
+          : null,
+      ),
+    ),
   )
 }

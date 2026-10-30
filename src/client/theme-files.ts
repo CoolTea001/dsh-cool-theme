@@ -16,12 +16,14 @@ import {
   isRecord,
   normalizeBackground,
   themeAssetsPath,
+  themeCssOpenPath,
+  themeCssPath,
 } from '../contract.js'
-import type { ThemeAsset, ThemeDocument } from '../contract.js'
+import type { ThemeAsset, ThemeCssInfo, ThemeDocument } from '../contract.js'
 import { normalizeCustom, type CustomTheme, type SavedTheme } from './custom.js'
 
 /** The document fields the browser owns; timestamps and asset sizes stay the Host's. */
-type DocumentPayload = Pick<ThemeDocument, 'id' | 'name' | 'base' | 'theme' | 'assets'> & {
+type DocumentPayload = Pick<ThemeDocument, 'id' | 'name' | 'base' | 'theme' | 'cssEnabled' | 'assets'> & {
   /** Repairing the background is this module's job, so the wire value stays unknown. */
   background: unknown
 }
@@ -36,6 +38,9 @@ export function documentToSaved(
     name: doc.name,
     base: doc.base,
     theme: normalizeCustom(doc.theme, fallbackFor(doc.base)),
+    // A document written before v5 has no stylesheet, so false keeps the switch
+    // off until the user opts in.
+    cssEnabled: doc.cssEnabled === true,
     assets: Array.isArray(doc.assets) ? doc.assets : [],
     background: normalizeBackground(doc.background),
   }
@@ -49,6 +54,7 @@ export function savedToDocument(entry: SavedTheme): Omit<ThemeDocument, 'created
     name: entry.name,
     base: entry.base,
     theme: entry.theme,
+    cssEnabled: entry.cssEnabled,
     assets: entry.assets,
     background: entry.background,
   }
@@ -108,6 +114,7 @@ function payloadThemes(
           name: doc.name,
           base: typeof doc.base === 'string' ? doc.base : '',
           theme: doc.theme,
+          cssEnabled: doc.cssEnabled === true,
           assets: Array.isArray(doc.assets) ? (doc.assets as ThemeAsset[]) : [],
           background: doc.background,
         },
@@ -248,6 +255,47 @@ export async function uploadThemeMedia(themeId: string, media: Blob): Promise<Th
     mime: asset.mime,
     bytes: asset.bytes,
   }
+}
+
+/** One theme's stylesheet and its metadata, as the Host reports it. */
+export async function fetchThemeCss(id: string): Promise<ThemeCssInfo> {
+  const payload = await callApi(themeCssPath(id))
+  return {
+    css: typeof payload.css === 'string' ? payload.css : null,
+    enabled: payload.enabled === true,
+    path: typeof payload.path === 'string' ? payload.path : '',
+    absolutePath: typeof payload.absolutePath === 'string' ? payload.absolutePath : '',
+    bytes: typeof payload.bytes === 'number' ? payload.bytes : 0,
+    updatedAt: typeof payload.updatedAt === 'string' ? payload.updatedAt : null,
+    canOpen: payload.canOpen === true,
+    tooLarge: payload.tooLarge === true,
+  }
+}
+
+/** Create or replace one theme's stylesheet. */
+export async function saveThemeCss(id: string, css: string): Promise<void> {
+  await callApi(themeCssPath(id), {
+    method: 'PUT',
+    headers: { 'content-type': 'text/css' },
+    body: css,
+  })
+}
+
+/** Turn one theme's stylesheet on or off, without touching the theme draft. */
+export async function setThemeCssEnabled(id: string, enabled: boolean): Promise<void> {
+  await callApi(themeCssPath(id), {
+    method: 'PUT',
+    body: JSON.stringify({ enabled }),
+  })
+}
+
+/**
+ * Ask the Host to open the stylesheet in the native text editor. The request
+ * carries no path: the Host resolves the theme's own `theme.css`. Only a
+ * loopback page is allowed to call this, and the Host enforces that too.
+ */
+export async function openThemeCss(id: string): Promise<void> {
+  await callApi(themeCssOpenPath(id), { method: 'POST' })
 }
 
 /**

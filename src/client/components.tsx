@@ -17,13 +17,18 @@ import {
   type ThemeAssetKind,
   type ThemeBackground,
   type ThemeBackgroundSide,
+  type ThemeCssInfo,
 } from '../contract.js'
 import { type PresetId, presetOptions } from './presets.js'
 import { type ThemeKey } from './locales.js'
 import {
   ThemeApiUnavailableError,
   exportTheme,
+  fetchThemeCss,
   importTheme,
+  openThemeCss,
+  saveThemeCss,
+  setThemeCssEnabled,
   uploadThemeMedia,
 } from './theme-files.js'
 import {
@@ -53,7 +58,14 @@ import {
   PICKER_WIDTH,
   splitAlpha,
 } from './color-picker.js'
-import { BackgroundSection, ColorPopover, SeedDotRow, type SeedDot } from './custom-editor.js'
+import {
+  BackgroundSection,
+  ColorPopover,
+  CssSection,
+  SeedDotRow,
+  cssTemplate,
+  type SeedDot,
+} from './custom-editor.js'
 import { IconDelete, IconEdit, IconExport, IconImport, IconPlus } from './icons.js'
 // The shell's own controls, resolved at runtime from the frozen platform module
 // table (see ui-primitives.d.ts and tsdown's `deps.neverBundle`). Reusing them
@@ -535,10 +547,15 @@ export function ThemePanel(props: {
   getSelection: () => Selection
   setSelection: (s: Selection) => void
   getCustom: () => CustomState
-  setCustom: (theme: CustomTheme) => void
+  /**
+   * Push an edited seed set. `cssId` is the saved entry the edit belongs to;
+   * null while composing a brand-new draft, whose file does not exist yet.
+   */
+  setCustom: (theme: CustomTheme, cssId?: string | null) => void
   /** Pick the preset future custom themes seed from, without applying it. */
   setCustomBase: (base: PresetId) => void
-  resetCustom: () => CustomTheme
+  /** Reseed the draft; `cssId` is the entry it belongs to, or null. */
+  resetCustom: (cssId?: string | null) => CustomTheme
   /** Whether the sidebar keeps DSH's native translucency (darwin only). */
   getSidebarTransparent: () => boolean
   setSidebarTransparent: (on: boolean) => void
@@ -642,6 +659,15 @@ export function ThemePanel(props: {
   // The card open in the editor. Null means every card is collapsed and only the
   // "add" button is showing, which is the state the panel opens in.
   const [editing, setEditing] = React.useState<Editing | null>(null)
+  /**
+   * The open entry's stylesheet metadata. It is fetched when the card opens and
+   * kept apart from the card's draft: the file is external, and the enable
+   * switch writes the theme document directly rather than through Save.
+   */
+  const [cssInfo, setCssInfo] = React.useState<ThemeCssInfo | null>(null)
+  /** Why the metadata read failed, or null: a missing API asks for a restart. */
+  const [cssError, setCssError] = React.useState<'unavailable' | 'failed' | null>(null)
+  const [cssBusy, setCssBusy] = React.useState(false)
   // The question raised when a shell close would throw an unsaved draft away.
   const [confirmClose, setConfirmClose] = React.useState(false)
   // The question raised when a gesture outside the open card would abandon it.
@@ -778,6 +804,43 @@ export function ThemePanel(props: {
     onPreviewBackground(backgroundHasMedia(resolved) ? resolved : null)
     // `backgroundKey` names every input of this effect.
   }, [backgroundKey])
+
+  // The stylesheet lives in the theme's own directory, so its metadata is read
+  // when the card opens and whenever the entry changes; a focus return re-reads
+  // it too, because the same round trip is when the user comes back from editing
+  // the file. A late answer for the previous card is dropped, the same way the
+  // background preview is.
+  React.useEffect(() => {
+    const id = editing?.id ?? null
+    if (id === null) {
+      setCssInfo(null)
+      setCssError(null)
+      return
+    }
+    let cancelled = false
+    const load = () => {
+      void fetchThemeCss(id)
+        .then((info) => {
+          if (!cancelled) {
+            setCssInfo(info)
+            setCssError(null)
+          }
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) {
+            setCssError(error instanceof ThemeApiUnavailableError ? 'unavailable' : 'failed')
+          }
+        })
+    }
+    setCssInfo(null)
+    setCssError(null)
+    load()
+    window.addEventListener('focus', load)
+    return () => {
+      cancelled = true
+      window.removeEventListener('focus', load)
+    }
+  }, [editing?.id])
 
   // --- colour picker popover ------------------------------------------------
   //
@@ -993,7 +1056,7 @@ export function ThemePanel(props: {
     restoreAppearance(open)
     if (open.originId) onLoadSaved(open.originId)
     else {
-      setCustom(open.originDraft)
+      setCustom(open.originDraft, null)
       setCustomState(open.originDraft)
       // Previewing the edited entry moved the active pointer; put it back.
       saved.setActive(null)
@@ -1020,7 +1083,7 @@ export function ThemePanel(props: {
       }
       if (open.originId) saved.load(open.originId)
       else {
-        setCustom(open.originDraft)
+        setCustom(open.originDraft, null)
         saved.setActive(null)
       }
       // The draft's wallpaper preview must not outlive the panel; the committed
@@ -1182,7 +1245,7 @@ export function ThemePanel(props: {
       null,
     )
     setCustomBase(shownPreset)
-    const draft = resetCustom()
+    const draft = resetCustom(null)
     setEditing(origin)
     setCustomState(draft)
   }
@@ -1341,6 +1404,94 @@ export function ThemePanel(props: {
     })
   }
 
+  // --- custom CSS -----------------------------------------------------------
+  //
+  // The file is external, so the row has no draft to save: "open" creates the
+  // starter file when none exists and hands it to the Host, and the switch
+  // writes the document's trust flag immediately. The apply layer re-reads the
+  // file when the window regains focus, so editing in a native editor needs no
+  // extra button.
+
+  /** Create the template when the file is confirmed absent, then open it. */
+  async function openCustomCss() {
+    const id = editing?.id
+    if (!id || cssBusy) return
+    // Only a confirmed absence creates the template. `cssInfo === null` can also
+    // mean the metadata read failed, and overwriting an existing file would lose
+    // the user's work.
+    const creating = cssInfo !== null && cssInfo.css === null && !cssInfo.tooLarge
+    let stage: 'save' | 'open' = creating ? 'save' : 'open'
+    setCssBusy(true)
+    try {
+      if (creating) {
+        const name = editing?.name.trim() || t('custom.defaultName')
+        await saveThemeCss(id, cssTemplate(t, name, id))
+        setCssInfo(await fetchThemeCss(id))
+        stage = 'open'
+      }
+      await openThemeCss(id)
+      // A created file has to reach the page; an existing one is already
+      // applied, and a focus return picks up edits made in the editor.
+      if (creating) {
+        await saved.refresh()
+        syncSaved()
+      }
+    } catch (error) {
+      const key = error instanceof ThemeApiUnavailableError
+        ? 'custom.toast.unavailable'
+        : stage === 'save'
+          ? 'custom.css.saveFailed'
+          : 'custom.css.openFailed'
+      showToast(t(key))
+    } finally {
+      setCssBusy(false)
+    }
+  }
+
+  /**
+   * The stylesheet switch. Turning it on is the gesture that creates the file
+   * (when absent) and enables it; turning it off only clears the flag, so the
+   * file survives a later re-enable. The file is written before the flag so a
+   * failed create cannot leave an enabled theme with no stylesheet.
+   */
+  async function toggleCustomCss(on: boolean) {
+    const id = editing?.id
+    if (!id || cssBusy) return
+    setCssBusy(true)
+    try {
+      if (on) {
+        if (cssInfo !== null && cssInfo.css === null && !cssInfo.tooLarge) {
+          const name = editing?.name.trim() || t('custom.defaultName')
+          await saveThemeCss(id, cssTemplate(t, name, id))
+          setCssInfo(await fetchThemeCss(id))
+        }
+        await setThemeCssEnabled(id, true)
+        setCssInfo((current) => (current ? { ...current, enabled: true } : current))
+      } else {
+        await setThemeCssEnabled(id, false)
+        setCssInfo((current) => (current ? { ...current, enabled: false } : current))
+      }
+      await saved.refresh()
+      syncSaved()
+    } catch (error) {
+      showToast(t(error instanceof ThemeApiUnavailableError ? 'custom.toast.unavailable' : 'custom.css.saveFailed'))
+    } finally {
+      setCssBusy(false)
+    }
+  }
+
+  /** Fallback for a page the Host will not open a file for. */
+  async function copyCustomCssPath() {
+    const path = cssInfo?.absolutePath
+    if (!path) return
+    try {
+      await navigator.clipboard.writeText(path)
+      showToast(t('custom.css.copied'))
+    } catch {
+      showToast(t('custom.css.copyFailed'))
+    }
+  }
+
   /** Commit the open editor: create a new entry, or update the one being edited. */
   async function saveEdit() {
     if (!editing) return
@@ -1425,7 +1576,7 @@ export function ThemePanel(props: {
     if (next.length === 0) {
       setEditing(null)
       setCustomBase(shownPreset)
-      setCustomState(resetCustom())
+      setCustomState(resetCustom(null))
     }
   }
 
@@ -1471,7 +1622,9 @@ export function ThemePanel(props: {
 
   function editCustom(next: CustomTheme) {
     setCustomState(next)
-    setCustom(next)
+    // The card's own entry owns the stylesheet; a brand-new draft has no id and
+    // must not paint the previously active entry's CSS.
+    setCustom(next, editing?.id ?? null)
   }
 
   const schemeOptions = [
@@ -1766,6 +1919,16 @@ export function ThemePanel(props: {
           onOpacity: (value: number) => updateBackgroundSide({ opacity: value }),
           onBlur: (value: number) => updateBackgroundSide({ blur: value }),
           onFilePicked: onBackgroundPicked,
+        }),
+        React.createElement(CssSection, {
+          t,
+          info: cssInfo,
+          error: cssError,
+          busy: cssBusy,
+          newTheme: editing?.id === null,
+          onOpen: () => void openCustomCss(),
+          onCopyPath: () => void copyCustomCssPath(),
+          onToggle: (on: boolean) => void toggleCustomCss(on),
         }),
         editorActions,
         pickerDot && pickerPos

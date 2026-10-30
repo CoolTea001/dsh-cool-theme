@@ -19,6 +19,8 @@ import {
   THEME_ARCHIVE_DOCUMENT,
   THEME_ARCHIVE_MAX_ENTRIES,
   THEME_ARCHIVE_MAX_ENTRY_BYTES,
+  THEME_CSS_MAX_BYTES,
+  THEME_CSS_NAME,
   THEME_FILE_VERSION,
   assetTypeOf,
   backgroundForAssets,
@@ -31,7 +33,7 @@ import { assetsDir, isThemeId, themeDir } from './paths.js'
 import { createZip, readZip, type ZipEntry } from './zip.js'
 
 /** The document as it is packed; the timestamps are the Host's own bookkeeping. */
-type PackedDocument = Pick<ThemeDocument, 'id' | 'name' | 'base' | 'theme' | 'assets'> & {
+type PackedDocument = Pick<ThemeDocument, 'id' | 'name' | 'base' | 'theme' | 'cssEnabled' | 'assets'> & {
   background: ThemeBackground | null
 }
 
@@ -49,17 +51,13 @@ export async function packTheme(id: string): Promise<{
 }> {
   const raw = await readFile(join(themeDir(id), THEME_ARCHIVE_DOCUMENT), 'utf8')
   const doc = JSON.parse(raw) as ThemeDocument
-  // Re-encoded rather than re-emitted byte for byte: an archive should carry the
-  // canonical document, and a hand-edited file still packs.
-  const entries: ZipEntry[] = [
-    { name: THEME_ARCHIVE_DOCUMENT, data: Buffer.from(`${JSON.stringify(doc, null, 2)}\n`, 'utf8') },
-  ]
 
   // Media is optional and additive: whatever sits in `assets/` travels, and the
   // document's own `assets` list is rebuilt from what was actually packed so an
   // entry can never point at a file the archive does not carry. A video is
   // already compressed, so the archive stores it rather than spending seconds
   // inflating it only to find the result larger.
+  const entries: ZipEntry[] = []
   const assets: ThemeAsset[] = []
   for (const asset of await listAssets(id)) {
     const bytes = await readFile(join(assetsDir(id), asset.name))
@@ -73,11 +71,44 @@ export async function packTheme(id: string): Promise<{
 
   const background = backgroundForAssets(doc.background, assets)
 
+  // The stylesheet travels at the archive root and compresses like the
+  // document. An absent file is simply not an entry.
+  let css: string | null = null
+  try {
+    css = await readFile(join(themeDir(id), THEME_CSS_NAME), 'utf8')
+  } catch {
+    // No stylesheet: the archive is still a complete theme.
+  }
+  if (css !== null) {
+    const cssBytes = Buffer.byteLength(css, 'utf8')
+    if (cssBytes > THEME_CSS_MAX_BYTES) {
+      throw new ArchiveError(`custom CSS is larger than ${String(THEME_CSS_MAX_BYTES)} bytes`)
+    }
+    entries.push({ name: THEME_CSS_NAME, data: Buffer.from(css, 'utf8'), compress: true })
+  }
+
+  // Re-encoded rather than re-emitted byte for byte: an archive should carry the
+  // canonical document, and a hand-edited file still packs. The version is
+  // stamped so an older build refuses a package whose CSS it would otherwise
+  // filter out and silently drop.
+  const canonical = {
+    ...doc,
+    v: THEME_FILE_VERSION,
+    cssEnabled: doc.cssEnabled === true,
+    assets,
+    background,
+  }
+  entries.unshift({
+    name: THEME_ARCHIVE_DOCUMENT,
+    data: Buffer.from(`${JSON.stringify(canonical, null, 2)}\n`, 'utf8'),
+  })
+
   const packed: PackedDocument = {
     id: doc.id,
     name: doc.name,
     base: doc.base,
     theme: doc.theme,
+    cssEnabled: doc.cssEnabled === true,
     assets,
     background,
   }
@@ -94,12 +125,15 @@ export type UnpackedTheme = {
   document: PackedDocument
   /** Media carried beside the document, already bounds-checked. */
   assets: { name: string; bytes: Buffer; kind: ThemeAsset['kind']; mime: string }[]
+  /** The optional stylesheet at the archive root, already bounds-checked. */
+  css: string | null
 }
 
 /**
- * Read an archive back into a theme. Only the document and its media are
- * accepted; every path is required to be exactly one of those two shapes, so a
- * directory entry or a nested path is refused rather than normalised.
+ * Read an archive back into a theme. Only the document, its media and its
+ * optional stylesheet are accepted; every path is required to be exactly one of
+ * those shapes, so a directory entry or a nested path is refused rather than
+ * normalised.
  */
 export function unpackTheme(archive: Buffer): UnpackedTheme {
   let entries
@@ -108,6 +142,7 @@ export function unpackTheme(archive: Buffer): UnpackedTheme {
       maxEntryBytes: THEME_ARCHIVE_MAX_ENTRY_BYTES,
       filter: (name) =>
         name === THEME_ARCHIVE_DOCUMENT
+        || name === THEME_CSS_NAME
         || (name.startsWith(`${THEME_ARCHIVE_ASSETS_DIR}/`) && name.length > THEME_ARCHIVE_ASSETS_DIR.length + 1),
     })
   } catch (error) {
@@ -142,9 +177,18 @@ export function unpackTheme(archive: Buffer): UnpackedTheme {
   if (typeof parsed.base !== 'string') throw new ArchiveError('theme base must be a string')
   if (!isRecord(parsed.theme)) throw new ArchiveError('theme colours must be an object')
 
+  // The stylesheet is a text entry at the root, not a media asset. It is
+  // bounded like the write route so an archive cannot smuggle in a stylesheet
+  // larger than the host would ever store.
+  const cssEntry = entries.find((entry) => entry.name === THEME_CSS_NAME)
+  if (cssEntry && cssEntry.data.byteLength > THEME_CSS_MAX_BYTES) {
+    throw new ArchiveError(`custom CSS is larger than ${String(THEME_CSS_MAX_BYTES)} bytes`)
+  }
+  const css = cssEntry ? cssEntry.data.toString('utf8').replace(/^\uFEFF/, '') : null
+
   const assets: UnpackedTheme['assets'] = []
   for (const entry of entries) {
-    if (entry.name === THEME_ARCHIVE_DOCUMENT) continue
+    if (entry.name === THEME_ARCHIVE_DOCUMENT || entry.name === THEME_CSS_NAME) continue
     const name = entry.name.slice(THEME_ARCHIVE_ASSETS_DIR.length + 1)
     if (name.includes('/') || name.includes('\\') || name === '' || name.startsWith('.')) {
       throw new ArchiveError(`archive contains an unusable media path: ${entry.name}`)
@@ -165,6 +209,9 @@ export function unpackTheme(archive: Buffer): UnpackedTheme {
       name: parsed.name,
       base: parsed.base,
       theme: parsed.theme,
+      // The stored value says what the author intended; the importer forces
+      // false so a shared stylesheet never applies on arrival.
+      cssEnabled: parsed.cssEnabled === true,
       assets: assets.map((asset) => ({
         name: asset.name,
         kind: asset.kind,
@@ -174,5 +221,6 @@ export function unpackTheme(archive: Buffer): UnpackedTheme {
       background,
     },
     assets,
+    css,
   }
 }

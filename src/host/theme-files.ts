@@ -2,30 +2,57 @@
  * Theme files owned by the Host.
  *
  * One directory per theme below `$DSH_HOME/cool-theme/themes/<id>/`, holding the
- * document at `theme.json` and the theme's media under `assets/`. Keeping a
- * theme a self-contained directory is what makes the export a copy of that
- * directory rather than a reassembly of scattered rows.
+ * document at `theme.json`, the optional stylesheet at `theme.css`, and the
+ * theme's media under `assets/`. Keeping a theme a self-contained directory is
+ * what makes the export a copy of that directory rather than a reassembly of
+ * scattered rows.
  *
  * The directory is the source of truth for media: `readDocument` rebuilds the
  * asset list by scanning `assets/` instead of trusting the JSON, so a document
  * can never describe files that are not there. A background is kept only while
  * the file it names is still on disk.
+ *
+ * The stylesheet is not a media asset: `assets.ts` ignores it, and the document
+ * only records whether it may apply. Its text is read and written on demand so
+ * the roster stays small.
  */
 
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import { THEME_APPEARANCES, THEME_FILE_VERSION, backgroundForAssets, isRecord } from '../contract.js'
-import type { ThemeDocument } from '../contract.js'
+import { homedir } from 'node:os'
+import { join, sep } from 'node:path'
+import {
+  THEME_APPEARANCES,
+  THEME_CSS_MAX_BYTES,
+  THEME_CSS_NAME,
+  THEME_FILE_VERSION,
+  backgroundForAssets,
+  isRecord,
+} from '../contract.js'
+import type { ThemeCssInfo, ThemeDocument } from '../contract.js'
 import { listAssets, pruneAssets } from './assets.js'
-import { DOCUMENT_NAME, isThemeId, themeDir, themesRoot } from './paths.js'
+import { DOCUMENT_NAME, cssPath, isThemeId, themeDir, themesRoot } from './paths.js'
 
-export { DOCUMENT_NAME, assetsDir, harnessHome, isThemeId, themeDir, themesRoot } from './paths.js'
+export { DOCUMENT_NAME, assetsDir, cssPath, harnessHome, isThemeId, themeDir, themesRoot } from './paths.js'
 
 /** Timestamp a document written without one reads as: the epoch, in ISO form. */
 const EPOCH_ISO = new Date(0).toISOString()
 
+/** A stylesheet refused for exceeding {@link THEME_CSS_MAX_BYTES}. */
+export class CssTooLargeError extends Error {}
+
 function documentPath(id: string): string {
   return join(themeDir(id), DOCUMENT_NAME)
+}
+
+/**
+ * The stylesheet path as the panel shows it: the user's home directory folded
+ * to `~` where possible, otherwise the absolute path. Copying the absolute
+ * path is the panel's fallback when the native open action is unavailable.
+ */
+function displayPath(id: string): string {
+  const file = cssPath(id)
+  const home = homedir()
+  return file === home || file.startsWith(`${home}${sep}`) ? `~${file.slice(home.length)}` : file
 }
 
 /** Whether a theme directory already holds a readable document. */
@@ -65,6 +92,9 @@ async function readDocument(id: string): Promise<ThemeDocument | null> {
       name: parsed.name,
       base: parsed.base,
       theme: parsed.theme,
+      // A document written before v5 has no flag and no CSS file, so `false`
+      // keeps the switch off until the user opts in.
+      cssEnabled: parsed.cssEnabled === true,
       assets,
       background,
       createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : EPOCH_ISO,
@@ -125,6 +155,12 @@ export async function putTheme(input: {
   theme: unknown
   /** Wire value from the client; repaired against the stored assets below. */
   background?: unknown
+  /**
+   * Stylesheet trust flag. It is used only when the theme is new: the CSS route
+   * owns the flag on an existing theme, and a roster save must not clobber it.
+   * A new theme starts off; the import path passes false explicitly.
+   */
+  cssEnabled?: boolean
 }): Promise<ThemeDocument> {
   const existing = await readDocument(input.id)
   const now = new Date().toISOString()
@@ -138,6 +174,7 @@ export async function putTheme(input: {
     name: input.name,
     base: input.base,
     theme: input.theme,
+    cssEnabled: existing?.cssEnabled ?? (input.cssEnabled === true),
     assets,
     background,
     createdAt: existing?.createdAt ?? now,
@@ -151,6 +188,95 @@ export async function putTheme(input: {
     : []
   await pruneAssets(input.id, keep)
   return doc
+}
+
+/**
+ * One theme's stylesheet metadata, plus its text when it is small enough to
+ * apply. A missing file is `css: null` with `bytes: 0`; a file over the cap is
+ * `css: null` with `tooLarge: true` and its real size, so the panel can still
+ * offer to open and trim it.
+ */
+export async function readThemeCss(id: string): Promise<Omit<ThemeCssInfo, 'canOpen'>> {
+  const doc = await readDocument(id)
+  if (doc === null) throw new Error('unknown theme')
+  const file = cssPath(id)
+  const describe = (
+    css: string | null,
+    bytes: number,
+    updatedAt: string | null,
+    tooLarge: boolean,
+  ): Omit<ThemeCssInfo, 'canOpen'> => ({
+    css,
+    enabled: doc.cssEnabled,
+    path: displayPath(id),
+    absolutePath: file,
+    bytes,
+    updatedAt,
+    tooLarge,
+  })
+  let info
+  try {
+    info = await stat(file)
+  } catch {
+    return describe(null, 0, null, false)
+  }
+  if (!info.isFile()) return describe(null, 0, null, false)
+  const updatedAt = info.mtime.toISOString()
+  if (info.size > THEME_CSS_MAX_BYTES) return describe(null, info.size, updatedAt, true)
+  const css = (await readFile(file, 'utf8')).replace(/^\uFEFF/, '')
+  return describe(css, info.size, updatedAt, false)
+}
+
+/** Whether one theme's stylesheet is on disk. Used by the native-open route. */
+export async function themeCssExists(id: string): Promise<boolean> {
+  try {
+    const info = await stat(cssPath(id))
+    return info.isFile()
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Write one stylesheet with the same temp-and-rename pattern as the document,
+ * so a reader never sees a half-written file. Returns its UTF-8 byte length.
+ */
+export async function writeThemeCss(id: string, css: string): Promise<number> {
+  const text = css.replace(/^\uFEFF/, '')
+  const bytes = Buffer.byteLength(text, 'utf8')
+  if (bytes > THEME_CSS_MAX_BYTES) {
+    throw new CssTooLargeError(`custom CSS is larger than ${String(THEME_CSS_MAX_BYTES)} bytes`)
+  }
+  const dir = themeDir(id)
+  await mkdir(dir, { recursive: true })
+  const temp = join(dir, `.${THEME_CSS_NAME}.${String(process.pid)}.${String(Date.now())}.tmp`)
+  await writeFile(temp, text, 'utf8')
+  await rename(temp, cssPath(id))
+  return bytes
+}
+
+/**
+ * Remove the stylesheet and turn the flag off, so a theme with no file cannot
+ * be left "enabled" in the roster. A missing file is already the goal.
+ */
+export async function deleteThemeCss(id: string): Promise<void> {
+  await rm(cssPath(id), { force: true })
+  await setThemeCssEnabled(id, false)
+}
+
+/**
+ * The stylesheet trust switch. It is deliberately its own write path: the panel
+ * toggles it without touching the card's draft, and a later roster save keeps
+ * the stored value instead of overwriting it.
+ */
+export async function setThemeCssEnabled(id: string, enabled: boolean): Promise<void> {
+  const doc = await readDocument(id)
+  if (doc === null) throw new Error('unknown theme')
+  doc.cssEnabled = enabled
+  // Stamp the current format; a v4 document that gains the flag is v5 now.
+  doc.v = THEME_FILE_VERSION
+  doc.updatedAt = new Date().toISOString()
+  await writeDocument(doc)
 }
 
 /** Remove one theme directory. A missing directory is already the goal. */

@@ -18,10 +18,13 @@ import {
   THEME_API_PATH_THEMES,
   THEME_API_PREFIX,
   THEME_API_SEGMENT_ASSETS,
+  THEME_API_SEGMENT_CSS,
   THEME_API_SEGMENT_EXPORT,
+  THEME_API_SEGMENT_OPEN,
   THEME_ARCHIVE_MAX_BYTES,
   THEME_ARCHIVE_MIME,
   THEME_ASSET_MAX_BYTES,
+  THEME_CSS_MAX_BYTES,
   archiveFileName,
   errorMessage,
   freeThemeName,
@@ -33,13 +36,21 @@ import type { ThemeDocument } from '../contract.js'
 import { isKnownBase } from '../presets-ids.js'
 import { AssetError, readAsset, saveMediaAsset, writeAssetFile } from './assets.js'
 import {
+  CssTooLargeError,
+  cssPath,
   deleteTheme,
+  deleteThemeCss,
   isThemeId,
   listThemes,
   putTheme,
+  readThemeCss,
+  setThemeCssEnabled,
+  themeCssExists,
   themeExists,
+  writeThemeCss,
 } from './theme-files.js'
 import { ArchiveError, packTheme, unpackTheme } from './theme-share.js'
+import { OpenNativeError, openNativeTextFile } from './open-native.js'
 
 export const name = 'dsh-cool-theme'
 
@@ -140,6 +151,9 @@ async function handlePut(req: IncomingMessage, res: ServerResponse): Promise<voi
         base: raw.base,
         theme: raw.theme,
         background: raw.background,
+        // Used only for a new theme; `putTheme` preserves an existing theme's
+        // flag, so a roster save cannot undo the CSS switch.
+        cssEnabled: typeof raw.cssEnabled === 'boolean' ? raw.cssEnabled : undefined,
       }),
     )
   }
@@ -284,6 +298,108 @@ async function handleAssetRead(
 }
 
 /**
+ * Whether the request reached the Host from the same machine. The native open
+ * action is a local convenience; a page served to another machine must never be
+ * able to launch an application on the Host, so the route refuses those.
+ */
+function isLoopback(req: IncomingMessage): boolean {
+  const address = req.socket.remoteAddress
+  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1'
+}
+
+/** A request's media type without parameters, lowercased. */
+function requestMediaType(req: IncomingMessage): string {
+  const header = req.headers['content-type']
+  return typeof header === 'string' ? (header.split(';')[0] ?? '').trim().toLowerCase() : ''
+}
+
+/**
+ * One theme's stylesheet. GET returns the text and metadata, including whether
+ * this request is local enough for the native-open action. PUT either replaces
+ * the text (text/css) or flips the trust flag (application/json); the two are
+ * separate writes so the switch never has to pass through the card's draft.
+ */
+async function handleCss(req: IncomingMessage, res: ServerResponse, id: string): Promise<void> {
+  if (!(await themeExists(id))) {
+    sendJson(res, 404, { ok: false, error: 'unknown theme' })
+    return
+  }
+  if (req.method === 'GET') {
+    const info = await readThemeCss(id)
+    sendJson(res, 200, { ok: true, ...info, canOpen: isLoopback(req) })
+    return
+  }
+  if (req.method === 'DELETE') {
+    await deleteThemeCss(id)
+    sendJson(res, 200, { ok: true })
+    return
+  }
+  const type = requestMediaType(req)
+  if (type === 'application/json') {
+    let payload: unknown
+    try {
+      payload = JSON.parse(await readBody(req, 4096)) as unknown
+    } catch {
+      sendJson(res, 400, { ok: false, error: 'invalid JSON body' })
+      return
+    }
+    if (!isRecord(payload) || typeof payload.enabled !== 'boolean') {
+      sendJson(res, 400, { ok: false, error: 'expected { enabled: boolean }' })
+      return
+    }
+    await setThemeCssEnabled(id, payload.enabled)
+    sendJson(res, 200, { ok: true, enabled: payload.enabled })
+    return
+  }
+  if (type !== '' && type !== 'text/css' && type !== 'text/plain') {
+    sendJson(res, 415, { ok: false, error: 'expected text/css or application/json' })
+    return
+  }
+  let css: string
+  try {
+    css = await readBody(req, THEME_CSS_MAX_BYTES)
+  } catch (error) {
+    sendJson(res, 413, { ok: false, error: errorMessage(error) })
+    return
+  }
+  try {
+    const bytes = await writeThemeCss(id, css)
+    sendJson(res, 200, { ok: true, bytes })
+  } catch (error) {
+    if (!(error instanceof CssTooLargeError)) throw error
+    sendJson(res, 413, { ok: false, error: error.message })
+  }
+}
+
+/**
+ * Open one theme's stylesheet in the native text editor. The client sends only
+ * the theme id; the Host resolves the fixed `theme.css` name, so this can never
+ * be turned into a general "open any path" endpoint.
+ */
+async function handleCssOpen(req: IncomingMessage, res: ServerResponse, id: string): Promise<void> {
+  if (!isLoopback(req)) {
+    sendJson(res, 403, { ok: false, error: 'native open is only available on the local machine' })
+    return
+  }
+  if (!(await themeExists(id))) {
+    sendJson(res, 404, { ok: false, error: 'unknown theme' })
+    return
+  }
+  if (!(await themeCssExists(id))) {
+    sendJson(res, 409, { ok: false, error: 'no custom CSS file' })
+    return
+  }
+  try {
+    await openNativeTextFile(cssPath(id))
+  } catch (error) {
+    if (!(error instanceof OpenNativeError)) throw error
+    sendJson(res, 500, { ok: false, error: error.message })
+    return
+  }
+  sendJson(res, 200, { ok: true })
+}
+
+/**
  * Read an uploaded archive back into a theme and store it.
  *
  * The Host owns the whole import: it validates the archive, writes its media,
@@ -321,12 +437,21 @@ async function handleImport(req: IncomingMessage, res: ServerResponse): Promise<
   for (const asset of unpacked.assets) {
     await writeAssetFile(id, asset.name, asset.bytes)
   }
+  // The stylesheet is not an asset and is never pruned; writing it before the
+  // document means a failed document write leaves no theme that promises CSS it
+  // does not have.
+  if (unpacked.css !== null) {
+    await writeThemeCss(id, unpacked.css)
+  }
   const stored = await putTheme({
     id,
     name: freeThemeName(unpacked.document.name, taken),
     base: isKnownBase(unpacked.document.base) ? unpacked.document.base : 'dsh',
     theme: unpacked.document.theme,
     background: unpacked.document.background,
+    // A shared stylesheet is stored, not trusted: the user reviews the file and
+    // enables it with the panel's switch.
+    cssEnabled: false,
   })
   sendJson(res, 200, { ok: true, theme: stored })
 }
@@ -383,6 +508,14 @@ export function apply(ctx: any): void {
           if (parts.length === 2 && parts[1] === THEME_API_SEGMENT_EXPORT) {
             if (!methodAllowed(req, res, ['GET'])) return
             return await handleExport(res, id)
+          }
+          if (parts.length === 2 && parts[1] === THEME_API_SEGMENT_CSS) {
+            if (!methodAllowed(req, res, ['GET', 'PUT', 'DELETE'])) return
+            return await handleCss(req, res, id)
+          }
+          if (parts.length === 3 && parts[1] === THEME_API_SEGMENT_CSS && parts[2] === THEME_API_SEGMENT_OPEN) {
+            if (!methodAllowed(req, res, ['POST'])) return
+            return await handleCssOpen(req, res, id)
           }
           if (parts.length === 2 && parts[1] === THEME_API_SEGMENT_ASSETS) {
             if (!methodAllowed(req, res, ['POST'])) return

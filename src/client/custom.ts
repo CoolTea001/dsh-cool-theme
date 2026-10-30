@@ -474,6 +474,12 @@ export type SavedTheme = {
   base: string
   theme: CustomTheme
   /**
+   * Whether the theme's optional `theme.css` may apply. The Host stores this in
+   * the theme document; every theme starts false, and the panel's switch creates
+   * the file (if needed) and enables it.
+   */
+  cssEnabled: boolean
+  /**
    * Media stored beside the seeds. Only the background image/video uses it, but
    * the list is carried through every rewrite so a later media user cannot drop
    * a file the theme still references.
@@ -533,6 +539,9 @@ export function decodeList(
         name: item.name,
         base,
         theme: normalizeCustom(item.theme, fallbackFor(base)),
+        // A browser list written before this field existed has no CSS file, so
+        // false keeps the switch off until the user opts in.
+        cssEnabled: item.cssEnabled === true,
         assets: Array.isArray(item.assets) ? (item.assets as ThemeAsset[]) : [],
         background: normalizeBackground(item.background),
       })

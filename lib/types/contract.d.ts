@@ -12,19 +12,26 @@ export declare const SIDEBAR_TRANSPARENT_STORAGE_KEY = "cool-theme-sidebar-trans
 /** A plain JSON object: not null, not an array, and not a primitive. */
 export declare function isRecord(value: unknown): value is Record<string, unknown>;
 /**
+ * The reason behind a thrown value, for a response body or a toast. A thrown
+ * string is not an Error, so the message it carries would otherwise be lost.
+ */
+export declare function errorMessage(error: unknown): string;
+/**
  * Documents are one directory each — `<root>/<id>/theme.json` — so a theme can
  * later carry media beside its seeds without changing this contract.
  *
  * v2 split the background's opacity and blur per appearance; v3 split the
  * background itself, so each appearance owns its image, switch, opacity and
- * blur; v4 lets either side name a video as well as an image. Older documents
- * still read: one shared asset becomes both sides' media, and a v1 flat number
- * becomes the light value with the dark one derived exactly as that build
- * derived it (see {@link normalizeBackground}). The version is bumped for v4
- * even though the document shape did not change, because a build that predates
- * video would otherwise import a theme and silently drop its wallpaper.
+ * blur; v4 lets either side name a video as well as an image; v5 adds the
+ * optional `theme.css` and its `cssEnabled` flag. Older documents still read:
+ * one shared asset becomes both sides' media, a v1 flat number becomes the
+ * light value with the dark one derived exactly as that build derived it (see
+ * {@link normalizeBackground}), and a document without `cssEnabled` reads as
+ * enabled. The version is bumped even when the document shape did not change
+ * for the same reason as v4: a build that predates a feature must refuse an
+ * archive that carries it rather than silently drop it.
  */
-export declare const THEME_FILE_VERSION = 4;
+export declare const THEME_FILE_VERSION = 5;
 /**
  * A fresh theme id. Both halves mint ids in the same shape, so an id never says
  * which half created it; the Host is the side that validates the pattern.
@@ -53,6 +60,13 @@ export type ThemeDocument = {
     /** Id of the preset the seeds derive from. */
     base: string;
     theme: unknown;
+    /**
+     * Whether this theme's optional `theme.css` may apply. Absent in documents
+     * written before v5, which read as false: the switch is opt-in, and a new or
+     * imported theme starts disabled. Turning it on creates the file (if needed)
+     * and enables it; turning it off keeps the file but stops applying it.
+     */
+    cssEnabled: boolean;
     assets: ThemeAsset[];
     /** The wallpaper this custom theme carries; null for a theme without one. */
     background: ThemeBackground | null;
@@ -164,6 +178,19 @@ export declare const THEME_VIDEO_MAX_BYTES: number;
 /** Largest single asset of any kind; the upload route's body cap. */
 export declare const THEME_ASSET_MAX_BYTES: number;
 /**
+ * Largest stylesheet a custom theme may carry. CSS is injected into the page,
+ * so an unbounded file would block the main thread; 256 KiB is far more than a
+ * hand-written theme needs and still small enough to read when the theme
+ * becomes active. The file is not a media asset, so it has a cap of its own.
+ */
+export declare const THEME_CSS_MAX_BYTES: number;
+/**
+ * File name of the optional stylesheet. It sits beside `theme.json` in the
+ * theme's own directory and at the archive root, so the directory stays the
+ * self-contained unit an export copies.
+ */
+export declare const THEME_CSS_NAME = "theme.css";
+/**
  * Accepted media extensions and the type each is served with. Shared by the
  * upload route, the archive reader/writer and the asset directory scanner, so
  * one table answers "what may a theme carry" everywhere.
@@ -210,6 +237,38 @@ export declare const THEME_API_SEGMENT_ASSETS = "assets";
 export declare function themeAssetsPath(id: string): string;
 /** Read URL of one stored asset. The name is content-hashed, so it is cacheable. */
 export declare function themeAssetUrl(id: string, name: string): string;
+/** Route segment below a theme id that holds its optional stylesheet. */
+export declare const THEME_API_SEGMENT_CSS = "css";
+/** Route segment below the stylesheet that opens it on the Host desktop. */
+export declare const THEME_API_SEGMENT_OPEN = "open";
+/** Read/write URL of one theme's stylesheet. */
+export declare function themeCssPath(id: string): string;
+/** Native-open URL of one theme's stylesheet. It accepts no filesystem path. */
+export declare function themeCssOpenPath(id: string): string;
+/**
+ * One theme's stylesheet as the Host reports it. The text is absent when the
+ * file is missing or exceeds {@link THEME_CSS_MAX_BYTES}; `bytes` and
+ * `tooLarge` distinguish those two states so the panel can say which one it is
+ * without reading the file again.
+ */
+export type ThemeCssInfo = {
+    /** The CSS text, or null when absent or too large to apply. */
+    css: string | null;
+    /** Whether `theme.json` allows the file to apply. */
+    enabled: boolean;
+    /** Display path, with the home directory folded to `~` where possible. */
+    path: string;
+    /** Absolute path, for the copy fallback. */
+    absolutePath: string;
+    /** File size in bytes; 0 when absent. */
+    bytes: number;
+    /** File mtime in ISO form, or null when absent. */
+    updatedAt: string | null;
+    /** True when the page is local enough for the Host to open the file. */
+    canOpen: boolean;
+    /** True when the file exists but is over {@link THEME_CSS_MAX_BYTES}. */
+    tooLarge: boolean;
+};
 /**
  * Share archive: one theme directory zipped. The document keeps the name it has
  * on disk, so an archive is a copy of the directory rather than a new format,

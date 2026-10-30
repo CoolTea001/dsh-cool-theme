@@ -22,4 +22,9 @@ export declare const DOCUMENT_NAME = "theme.json";
 export declare const ASSETS_DIR = "assets";
 /** Absolute path of a theme's media directory. */
 export declare function assetsDir(id: string): string;
+/**
+ * Absolute path of a theme's optional stylesheet. The name is fixed, so the
+ * native-open route can never be pointed at another file by the client.
+ */
+export declare function cssPath(id: string): string;
 //# sourceMappingURL=paths.d.ts.map

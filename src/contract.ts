@@ -59,14 +59,16 @@ export function errorMessage(error: unknown): string {
  *
  * v2 split the background's opacity and blur per appearance; v3 split the
  * background itself, so each appearance owns its image, switch, opacity and
- * blur; v4 lets either side name a video as well as an image. Older documents
- * still read: one shared asset becomes both sides' media, and a v1 flat number
- * becomes the light value with the dark one derived exactly as that build
- * derived it (see {@link normalizeBackground}). The version is bumped for v4
- * even though the document shape did not change, because a build that predates
- * video would otherwise import a theme and silently drop its wallpaper.
+ * blur; v4 lets either side name a video as well as an image; v5 adds the
+ * optional `theme.css` and its `cssEnabled` flag. Older documents still read:
+ * one shared asset becomes both sides' media, a v1 flat number becomes the
+ * light value with the dark one derived exactly as that build derived it (see
+ * {@link normalizeBackground}), and a document without `cssEnabled` reads as
+ * enabled. The version is bumped even when the document shape did not change
+ * for the same reason as v4: a build that predates a feature must refuse an
+ * archive that carries it rather than silently drop it.
  */
-export const THEME_FILE_VERSION = 4
+export const THEME_FILE_VERSION = 5
 
 /**
  * A fresh theme id. Both halves mint ids in the same shape, so an id never says
@@ -101,6 +103,13 @@ export type ThemeDocument = {
   /** Id of the preset the seeds derive from. */
   base: string
   theme: unknown
+  /**
+   * Whether this theme's optional `theme.css` may apply. Absent in documents
+   * written before v5, which read as false: the switch is opt-in, and a new or
+   * imported theme starts disabled. Turning it on creates the file (if needed)
+   * and enables it; turning it off keeps the file but stops applying it.
+   */
+  cssEnabled: boolean
   assets: ThemeAsset[]
   /** The wallpaper this custom theme carries; null for a theme without one. */
   background: ThemeBackground | null
@@ -247,6 +256,21 @@ export const THEME_VIDEO_MAX_BYTES = 32 * 1024 * 1024
 
 /** Largest single asset of any kind; the upload route's body cap. */
 export const THEME_ASSET_MAX_BYTES = Math.max(THEME_IMAGE_MAX_BYTES, THEME_VIDEO_MAX_BYTES)
+
+/**
+ * Largest stylesheet a custom theme may carry. CSS is injected into the page,
+ * so an unbounded file would block the main thread; 256 KiB is far more than a
+ * hand-written theme needs and still small enough to read when the theme
+ * becomes active. The file is not a media asset, so it has a cap of its own.
+ */
+export const THEME_CSS_MAX_BYTES = 256 * 1024
+
+/**
+ * File name of the optional stylesheet. It sits beside `theme.json` in the
+ * theme's own directory and at the archive root, so the directory stays the
+ * self-contained unit an export copies.
+ */
+export const THEME_CSS_NAME = 'theme.css'
 
 /**
  * Accepted media extensions and the type each is served with. Shared by the
@@ -422,6 +446,47 @@ export function themeAssetsPath(id: string): string {
 /** Read URL of one stored asset. The name is content-hashed, so it is cacheable. */
 export function themeAssetUrl(id: string, name: string): string {
   return `${themeAssetsPath(id)}/${encodeURIComponent(name)}`
+}
+
+/** Route segment below a theme id that holds its optional stylesheet. */
+export const THEME_API_SEGMENT_CSS = 'css'
+
+/** Route segment below the stylesheet that opens it on the Host desktop. */
+export const THEME_API_SEGMENT_OPEN = 'open'
+
+/** Read/write URL of one theme's stylesheet. */
+export function themeCssPath(id: string): string {
+  return `${THEME_API_PATH_THEMES}/${encodeURIComponent(id)}/${THEME_API_SEGMENT_CSS}`
+}
+
+/** Native-open URL of one theme's stylesheet. It accepts no filesystem path. */
+export function themeCssOpenPath(id: string): string {
+  return `${themeCssPath(id)}/${THEME_API_SEGMENT_OPEN}`
+}
+
+/**
+ * One theme's stylesheet as the Host reports it. The text is absent when the
+ * file is missing or exceeds {@link THEME_CSS_MAX_BYTES}; `bytes` and
+ * `tooLarge` distinguish those two states so the panel can say which one it is
+ * without reading the file again.
+ */
+export type ThemeCssInfo = {
+  /** The CSS text, or null when absent or too large to apply. */
+  css: string | null
+  /** Whether `theme.json` allows the file to apply. */
+  enabled: boolean
+  /** Display path, with the home directory folded to `~` where possible. */
+  path: string
+  /** Absolute path, for the copy fallback. */
+  absolutePath: string
+  /** File size in bytes; 0 when absent. */
+  bytes: number
+  /** File mtime in ISO form, or null when absent. */
+  updatedAt: string | null
+  /** True when the page is local enough for the Host to open the file. */
+  canOpen: boolean
+  /** True when the file exists but is over {@link THEME_CSS_MAX_BYTES}. */
+  tooLarge: boolean
 }
 
 /**

@@ -5,10 +5,10 @@
  * shape, so the rest of the client keeps working with plain `SavedTheme`
  * records. Every call is same-origin against the Host's own prefix route.
  */
-import type { ThemeAsset, ThemeDocument } from '../contract.js';
+import type { ThemeAsset, ThemeCssInfo, ThemeDocument } from '../contract.js';
 import { type CustomTheme, type SavedTheme } from './custom.js';
 /** The document fields the browser owns; timestamps and asset sizes stay the Host's. */
-type DocumentPayload = Pick<ThemeDocument, 'id' | 'name' | 'base' | 'theme' | 'assets'> & {
+type DocumentPayload = Pick<ThemeDocument, 'id' | 'name' | 'base' | 'theme' | 'cssEnabled' | 'assets'> & {
     /** Repairing the background is this module's job, so the wire value stays unknown. */
     background: unknown;
 };
@@ -50,6 +50,18 @@ export declare function importTheme(file: File): Promise<{
  * the content-hashed name to record in the document.
  */
 export declare function uploadThemeMedia(themeId: string, media: Blob): Promise<ThemeAsset>;
+/** One theme's stylesheet and its metadata, as the Host reports it. */
+export declare function fetchThemeCss(id: string): Promise<ThemeCssInfo>;
+/** Create or replace one theme's stylesheet. */
+export declare function saveThemeCss(id: string, css: string): Promise<void>;
+/** Turn one theme's stylesheet on or off, without touching the theme draft. */
+export declare function setThemeCssEnabled(id: string, enabled: boolean): Promise<void>;
+/**
+ * Ask the Host to open the stylesheet in the native text editor. The request
+ * carries no path: the Host resolves the theme's own `theme.css`. Only a
+ * loopback page is allowed to call this, and the Host enforces that too.
+ */
+export declare function openThemeCss(id: string): Promise<void>;
 /**
  * The themes a browser saved before files became the store, minus those the
  * Host already has.

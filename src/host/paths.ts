@@ -9,6 +9,7 @@
 
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { THEME_CSS_NAME } from '../contract.js'
 
 /**
  * Theme ids become directory names, so they are restricted to a conservative
@@ -48,4 +49,12 @@ export const ASSETS_DIR = 'assets'
 /** Absolute path of a theme's media directory. */
 export function assetsDir(id: string): string {
   return join(themeDir(id), ASSETS_DIR)
+}
+
+/**
+ * Absolute path of a theme's optional stylesheet. The name is fixed, so the
+ * native-open route can never be pointed at another file by the client.
+ */
+export function cssPath(id: string): string {
+  return join(themeDir(id), THEME_CSS_NAME)
 }

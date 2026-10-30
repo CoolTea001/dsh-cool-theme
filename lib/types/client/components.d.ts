@@ -26,10 +26,15 @@ export declare function ThemePanel(props: {
     getSelection: () => Selection;
     setSelection: (s: Selection) => void;
     getCustom: () => CustomState;
-    setCustom: (theme: CustomTheme) => void;
+    /**
+     * Push an edited seed set. `cssId` is the saved entry the edit belongs to;
+     * null while composing a brand-new draft, whose file does not exist yet.
+     */
+    setCustom: (theme: CustomTheme, cssId?: string | null) => void;
     /** Pick the preset future custom themes seed from, without applying it. */
     setCustomBase: (base: PresetId) => void;
-    resetCustom: () => CustomTheme;
+    /** Reseed the draft; `cssId` is the entry it belongs to, or null. */
+    resetCustom: (cssId?: string | null) => CustomTheme;
     /** Whether the sidebar keeps DSH's native translucency (darwin only). */
     getSidebarTransparent: () => boolean;
     setSidebarTransparent: (on: boolean) => void;

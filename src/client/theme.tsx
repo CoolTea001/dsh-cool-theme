@@ -36,6 +36,7 @@ import {
 } from './background.js'
 import { THEME_NAV_MARKUP } from './icons.js'
 import {
+  fetchThemeCss,
   fetchThemes,
   pushThemes,
   removeTheme as removeThemeFile,
@@ -50,6 +51,14 @@ function isValidSelection(v: string | null): v is Selection {
 function presetDef(id: PresetId): PresetDef {
   return isBuiltinPresetId(id) ? PRESETS[id] : PRESETS.dsh
 }
+
+/**
+ * The source last applied, plus the custom theme whose stylesheet belongs to
+ * it. The id is explicit rather than derived from the active pointer: while a
+ * brand-new draft is open, the pointer still names the previously active entry,
+ * and a draft must not inherit that entry's CSS.
+ */
+type Applied = { src: Selection | PresetDef; cssId: string | null }
 
 export function registerTheme(ctx: any) {
   const slots = ctx.get('slots')
@@ -75,13 +84,22 @@ export function registerTheme(ctx: any) {
   // to it.
   let previewActive = false
   let previewBackground: ResolvedBackground | null = null
-  /** The last selection applied, so a preview change can rebuild the same one. */
-  let lastApplied: Selection | PresetDef | null = null
+  /** The last source applied, so a preview change can rebuild the same one. */
+  let lastApplied: Applied | null = null
   /** The custom preset currently painted, for its two surface colours. */
   let lastCustom: PresetDef | null = null
   let baselineDisposer: (() => void) | null = null
   let overrideDispose: (() => void) | null = null
   let fallbackDispose: (() => void) | null = null
+  /**
+   * The stylesheet layer currently on the page, and the file version it was
+   * built from. The cache is keyed by theme id; `updatedAt` lets a focus reload
+   * skip re-injecting an unchanged file.
+   */
+  let cssDisposer: (() => void) | null = null
+  let cssApplied: { id: string; updatedAt: string } | null = null
+  const cssCache = new Map<string, { text: string; updatedAt: string }>()
+  let cssSeq = 0
 
   // Resolve the initial selection before any closure below can read `lastPreset`.
   const initialSelection = getSelection()
@@ -226,8 +244,8 @@ export function registerTheme(ctx: any) {
    * tokens themselves stay opaque so every overlay that has to occlude
    * scrolling content keeps working.
    */
-  function apply(src: Selection | PresetDef) {
-    lastApplied = src
+  function apply(src: Selection | PresetDef, cssId: string | null = null) {
+    lastApplied = { src, cssId }
     const isCustom = src === CUSTOM_SELECTION || typeof src !== 'string'
     const target: PresetId | PresetDef = src === CUSTOM_SELECTION ? buildCustomPreset(loadCustom().theme) : src
     // Presets never carry media; a background only exists on a custom theme.
@@ -240,6 +258,7 @@ export function registerTheme(ctx: any) {
       fallbackDispose = release(fallbackDispose)
       ensureBaseline(false)
       backgroundLayer.render(null, null)
+      applyCss(null)
       return
     }
     ensureBaseline(true)
@@ -250,6 +269,7 @@ export function registerTheme(ctx: any) {
         overrideDispose = theme.overrideTokens('dsh-cool-theme', overrides)
         // The token layer owns the palette now; a previous CSS fallback is inert.
         fallbackDispose = release(fallbackDispose)
+        applyCss(cssId)
         return
       } catch {
         // No token service to install into: fall through to the stylesheet
@@ -259,6 +279,70 @@ export function registerTheme(ctx: any) {
     overrideDispose = release(overrideDispose)
     fallbackDispose = release(fallbackDispose)
     fallbackDispose = injector.insert(buildFullCssFallback(target))
+    applyCss(cssId)
+  }
+
+  /**
+   * Put the active custom theme's stylesheet on the page, or take it off.
+   *
+   * The text is cached per theme and re-read only when the panel asks or the
+   * window regains focus, so dragging a colour never refetches it. A fetch that
+   * lands after a switch is dropped by the generation check; a failed reload
+   * keeps the layer already applied, while a file that disappeared is reported
+   * as `css: null` and does remove it.
+   */
+  function applyCss(id: string | null) {
+    if (id === null) {
+      cssDisposer = release(cssDisposer)
+      cssApplied = null
+      return
+    }
+    const entry = readList().find((item) => item.id === id)
+    if (!entry || !entry.cssEnabled) {
+      cssDisposer = release(cssDisposer)
+      cssApplied = null
+      return
+    }
+    const cached = cssCache.get(id)
+    // A cache hit avoids a refetch while the same theme is being repainted (a
+    // colour drag). A switch to another theme re-reads the file instead, so an
+    // edit made while that theme was inactive cannot come back stale.
+    if (cached !== undefined && cssApplied?.id === id) {
+      injectCss(id, cached)
+      return
+    }
+    const seq = ++cssSeq
+    void fetchThemeCss(id)
+      .then((info) => {
+        if (seq !== cssSeq || lastApplied?.cssId !== id) return
+        if (info.css === null) {
+          // Missing, or over the cap: there is nothing safe to inject. The
+          // panel still offers to open and trim the file.
+          cssDisposer = release(cssDisposer)
+          cssApplied = null
+          return
+        }
+        const next = { text: info.css, updatedAt: info.updatedAt ?? '' }
+        cssCache.set(id, next)
+        injectCss(id, next)
+      })
+      .catch(() => {
+        // A transient read failure keeps whatever layer is already on screen.
+      })
+  }
+
+  /** Inject one cached stylesheet, skipping a re-insert of the same version. */
+  function injectCss(id: string, cached: { text: string; updatedAt: string }) {
+    if (cssApplied?.id === id && cssApplied.updatedAt === cached.updatedAt) return
+    cssDisposer = release(cssDisposer)
+    if (cached.text.trim() !== '') cssDisposer = injector.insert(cached.text)
+    cssApplied = { id, updatedAt: cached.updatedAt }
+  }
+
+  /** Drop the cached text and re-read it, for an external edit or the panel. */
+  function reloadCss(id: string) {
+    cssCache.delete(id)
+    if (lastApplied?.cssId === id) applyCss(id)
   }
 
   /**
@@ -383,8 +467,8 @@ export function registerTheme(ctx: any) {
    */
   function reapply() {
     if (lastApplied === null) return
-    const src = lastApplied
-    scheduleApply(() => apply(src))
+    const { src, cssId } = lastApplied
+    scheduleApply(() => apply(src, cssId))
   }
 
   /**
@@ -413,22 +497,25 @@ export function registerTheme(ctx: any) {
     writeRaw(THEME_STORAGE_KEY, id)
     if (id !== CUSTOM_SELECTION) lastPreset = id as PresetId
     // CUSTOM_SELECTION is resolved when it runs, so a burst ends on the newest
-    // seeds in storage rather than a snapshot taken at schedule time.
-    scheduleApply(() => apply(id))
+    // seeds in storage rather than a snapshot taken at schedule time. The CSS
+    // id follows the selection: a preset has none, a custom selection uses the
+    // active entry.
+    const cssId = id === CUSTOM_SELECTION ? readActiveId() : null
+    scheduleApply(() => apply(id, cssId))
   }
 
-  function setCustom(next: CustomTheme) {
+  function setCustom(next: CustomTheme, cssId: string | null = null) {
     // Persist synchronously: the roster reads the draft back from storage, so it
     // must never observe a coalesced edit. Only the visual application is lazy.
     persistCustom(next)
-    scheduleApply(() => apply(buildCustomPreset(next)))
+    scheduleApply(() => apply(buildCustomPreset(next), cssId))
   }
 
-  function resetCustom(): CustomTheme {
+  function resetCustom(cssId: string | null = null): CustomTheme {
     const base = customBase()
     const theme = extractSeeds(presetDef(base))
     persistCustom(theme)
-    scheduleApply(() => apply(buildCustomPreset(theme)))
+    scheduleApply(() => apply(buildCustomPreset(theme), cssId))
     return theme
   }
 
@@ -477,6 +564,15 @@ export function registerTheme(ctx: any) {
   /** Re-read the roster from the Host, migrating the legacy list on first load. */
   async function refreshSaved(): Promise<SavedTheme[]> {
     themeCache = await migrateLegacyThemes(await fetchThemes(fallbackForBase))
+    // The initial custom selection resolved before the roster existed, so its
+    // CSS id could not be known then. Now that the active id is, attach it to
+    // the same applied source. A draft applies a `PresetDef`, not
+    // `CUSTOM_SELECTION`, so this never gives a new draft the previous entry's
+    // stylesheet.
+    if (lastApplied !== null && lastApplied.src === CUSTOM_SELECTION && lastApplied.cssId === null) {
+      const active = readActiveId()
+      if (active !== null) lastApplied = { ...lastApplied, cssId: active }
+    }
     // The active theme's background lives in this roster, so the first answer
     // can change what the canvas has to paint even though no palette moved.
     reapply()
@@ -490,7 +586,7 @@ export function registerTheme(ctx: any) {
     if (isBuiltinPresetId(entry.base)) lastPreset = entry.base
     writeRaw(CUSTOM_ACTIVE_STORAGE_KEY, entry.id)
     writeRaw(CUSTOM_THEME_STORAGE_KEY, encodeCustom(entry.base, entry.theme))
-    scheduleApply(() => apply(buildCustomPreset(entry.theme)))
+    scheduleApply(() => apply(buildCustomPreset(entry.theme), entry.id))
     return entry.theme
   }
 
@@ -516,11 +612,17 @@ export function registerTheme(ctx: any) {
         name,
         base: draft.base,
         theme: draft.theme,
+        // Every theme starts with the stylesheet off; the panel's switch creates
+        // and enables the file, so an unused theme never grows one by itself.
+        cssEnabled: false,
         assets: [],
         background,
       }
       await pushThemes([entry], fallbackForBase)
       writeRaw(CUSTOM_ACTIVE_STORAGE_KEY, entry.id)
+      // The draft applied a `PresetDef` with no id; the new entry owns whatever
+      // stylesheet is already in its directory.
+      if (lastApplied !== null) lastApplied = { ...lastApplied, cssId: entry.id }
       return refreshSaved()
     },
     /** Write the current draft (and a new name) back to an existing entry. */
@@ -534,6 +636,11 @@ export function registerTheme(ctx: any) {
     async remove(id: string): Promise<SavedTheme[]> {
       if (readRaw(CUSTOM_ACTIVE_STORAGE_KEY) === id) writeRaw(CUSTOM_ACTIVE_STORAGE_KEY, null)
       await removeThemeFile(id)
+      // The deleted theme's stylesheet must not survive on the page or in the
+      // cache; a remaining fallback entry re-attaches its own id through
+      // `loadSaved` below.
+      if (lastApplied?.cssId === id) lastApplied = { ...lastApplied, cssId: null }
+      cssCache.delete(id)
       const next = await refreshSaved()
       // Deleting the active entry would otherwise leave no selection while the
       // list still has entries: fall back to the first one, which also swaps in
@@ -544,7 +651,7 @@ export function registerTheme(ctx: any) {
     },
   }
 
-  apply(initialSelection)
+  apply(initialSelection, initialSelection === CUSTOM_SELECTION ? readActiveId() : null)
   // Restore the sidebar switch before the panel is ever opened.
   applySidebarOpaque(!sidebarTransparent())
   // A background lives in the roster, not in localStorage, so a custom theme
@@ -555,6 +662,20 @@ export function registerTheme(ctx: any) {
     // The panel's own refresh retries; a failed startup load is not worth a toast.
   })
 
+  // A stylesheet is a file the user may edit while the theme is active, so a
+  // focus return re-reads the active theme's copy. The debounce coalesces the
+  // burst of focus/visibility events a window switch can produce.
+  let focusTimer: ReturnType<typeof setTimeout> | null = null
+  function onWindowFocus() {
+    if (focusTimer !== null) clearTimeout(focusTimer)
+    focusTimer = setTimeout(() => {
+      focusTimer = null
+      const id = lastApplied?.cssId
+      if (id) reloadCss(id)
+    }, 150)
+  }
+  if (typeof window !== 'undefined') window.addEventListener('focus', onWindowFocus)
+
   ctx.effect(() => () => {
     // A coalesced application must not outlive the fiber: firing after this
     // cleanup would install a token layer nothing is left to release.
@@ -564,6 +685,15 @@ export function registerTheme(ctx: any) {
     baselineDisposer = release(baselineDisposer)
     overrideDispose = release(overrideDispose)
     fallbackDispose = release(fallbackDispose)
+    cssDisposer = release(cssDisposer)
+    // Invalidate any stylesheet fetch still in flight, and forget cached text.
+    cssSeq += 1
+    cssCache.clear()
+    if (focusTimer !== null) {
+      clearTimeout(focusTimer)
+      focusTimer = null
+    }
+    if (typeof window !== 'undefined') window.removeEventListener('focus', onWindowFocus)
     sidebarOpaqueDisposer = release(sidebarOpaqueDisposer)
     backgroundLayer.dispose()
     injector.disposeAll()

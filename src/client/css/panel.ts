@@ -22,8 +22,9 @@ export const PANEL_CSS = [
   '.ct-select:disabled{opacity:.5;cursor:not-allowed;}',
   '.ct-select:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
   '.ct-select-label{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;}',
-  '.ct-select-chevron{flex:none;color:var(--dsw-alias-label-tertiary);display:inline-flex;transition:transform 120ms ease;}',
-  '.ct-select[aria-expanded="true"] .ct-select-chevron{transform:rotate(180deg);}',
+  // The chevron stays pointing down in both states: the open list already says
+  // which control it belongs to, so the trigger's arrow never flips.
+  '.ct-select-chevron{flex:none;color:var(--dsw-alias-label-tertiary);display:inline-flex;}',
   '.ct-row{border-bottom:1px solid var(--dsw-alias-border-l2);padding:16px 2px;display:flex;align-items:center;gap:16px;}',
   '.ct-row:last-child{border-bottom:none;}',
   '.ct-row-flush{border-bottom:none;}',
@@ -161,7 +162,7 @@ export const PANEL_CSS = [
   // buttons, segmented control and tooltip are the shell's. No hairline above
   // it — the spacing alone separates it from the rows, and a rule there only cut
   // the card in two.
-  '.ct-bg-section{padding-top:12px;display:flex;flex-direction:column;gap:8px;}',
+  '.ct-bg-section{padding:12px 0;display:flex;flex-direction:column;gap:8px;}',
   '.ct-bg-head{display:flex;align-items:center;}',
   '.ct-bg-body{display:flex;align-items:center;gap:16px;}',
   '.ct-bg-controls{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px;}',
@@ -181,6 +182,18 @@ export const PANEL_CSS = [
   // The switch closes that group and is its only control that is not a link: a
   // bare track against two words needs the extra room the group's own gap lacks.
   '.ct-bg-switch{margin-left:4px;}',
+  // --- custom CSS row (inside the custom editor) --------------------------------
+  // The stylesheet row closes the editor before its footer: the title and its
+  // state hint on the left, the enable switch and the "open style file" link on
+  // the right. It reuses the background section's rhythm and link idiom so the
+  // card reads as one stack rather than two unrelated forms.
+  '.ct-css-section{padding:12px 0;display:flex;flex-direction:column;gap:8px;}',
+  '.ct-css-head{display:flex;align-items:center;}',
+  '.ct-css-actions{display:flex;align-items:center;gap:8px;margin-left:auto;}',
+  '.ct-css-link{box-sizing:border-box;display:inline-flex;align-items:center;padding:0 2px;border:none;border-radius:4px;background:transparent;color:var(--dsw-alias-brand-primary);cursor:pointer;font:inherit;font-size:12px;line-height:18px;white-space:nowrap;text-decoration:none;}',
+  '.ct-css-link:hover,.ct-css-link:focus-visible{outline:none;text-decoration:underline dotted;text-underline-offset:3px;}',
+  '.ct-css-link:disabled{opacity:.5;cursor:default;text-decoration:none;}',
+  '.ct-css-switch{margin-left:4px;}',
   '.ct-bg-field{display:flex;align-items:center;gap:16px;}',
   '.ct-bg-field-label{flex:0 0 auto;min-width:108px;padding-left:3px;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);white-space:nowrap;font-variant-numeric:tabular-nums;}',
   // Aligned under the track, not under the label: 96px label + 16px gap + the
