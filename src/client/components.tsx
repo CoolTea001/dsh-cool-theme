@@ -314,12 +314,15 @@ function SchemeMenu(props: {
         'aria-expanded': expanded,
         onClick: () => setOpen(!open),
       },
-      React.createElement('span', { className: 'ct-select-label' }, selected?.label ?? ''),
-      React.createElement(
-        'span',
-        { className: 'ct-select-chevron' },
-        React.createElement(IconChevronDownOutlineRegular, { size: ICON_SIZE }),
-      ),
+      // Same shape as the shell's own settings selector: the value is the
+      // button's text, the chevron is the only child element, and the icon
+      // carries the layout class itself. Nothing is wrapped that DSH does not
+      // wrap, so the metrics line up with its rows without a second box.
+      selected?.label ?? '',
+      React.createElement(IconChevronDownOutlineRegular, {
+        size: ICON_SIZE,
+        className: 'ct-select-chevron',
+      }),
     ),
   })
 }

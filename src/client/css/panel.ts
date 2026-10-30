@@ -12,19 +12,21 @@
  */
 
 export const PANEL_CSS = [
-  // The value pickers' trigger. Feature-owned, like DSH's own settings
-  // switcher, which styles its anchor the same way: the pill is the row's
-  // affordance, and everything it opens — list material, rows, scroll, focus —
-  // comes from the shell's `Menu`, so only the closed face is drawn here.
-  '.ct-select{box-sizing:border-box;display:inline-flex;align-items:center;gap:12px;height:36px;padding:0 14px;border:none;border-radius:18px;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:14px;line-height:22px;white-space:nowrap;width:auto;min-width:0;max-width:100%;}',
+  // The value pickers' trigger, copied from the shell's own settings selector
+  // (`ui-permission-presets`' row): same button, same metrics, same states. The
+  // shell exposes no select primitive, so matching its recipe is what keeps the
+  // two rows from reading as a different control family. Radius and colours
+  // come from tokens: a token change carries here without touching this file.
+  '.ct-select{box-sizing:border-box;display:inline-flex;align-items:center;gap:12px;height:36px;padding:0 14px;border:none;border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;font-size:14px;line-height:22px;white-space:nowrap;width:auto;min-width:0;max-width:100%;}',
   '.ct-select:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);}',
-  // Locked while the custom theme owns the colours: dimmed and not clickable.
-  '.ct-select:disabled{opacity:.5;cursor:not-allowed;}',
-  '.ct-select:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-border-l3);}',
-  '.ct-select-label{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;}',
-  // The chevron stays pointing down in both states: the open list already says
-  // which control it belongs to, so the trigger's arrow never flips.
-  '.ct-select-chevron{flex:none;color:var(--dsw-alias-label-tertiary);display:inline-flex;}',
+  // Locked while the custom theme owns the colours. The trigger and its chevron
+  // fade together; the cursor stays the shell selector's, so the only difference
+  // from DSH's own row is the dimming the row needs to read as unavailable.
+  '.ct-select:disabled{opacity:.5;cursor:default;}',
+  '.ct-select:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));}',
+  // The chevron always points down: opening the list is what the list itself
+  // shows, so the trigger's arrow does not flip while it is open.
+  '.ct-select-chevron{flex:none;}',
   '.ct-row{border-bottom:1px solid var(--dsw-alias-border-l2);padding:16px 2px;display:flex;align-items:center;gap:16px;}',
   '.ct-row:last-child{border-bottom:none;}',
   '.ct-row-flush{border-bottom:none;}',
