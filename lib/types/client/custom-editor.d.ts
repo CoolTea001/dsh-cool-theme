@@ -116,11 +116,13 @@ export declare function BackgroundSection(props: {
 /**
  * The starter stylesheet written when the user opens a theme that has none.
  *
- * It is comment-only, so creating the file cannot change the interface, and it
- * names the three things a first rule usually needs: when the sheet applies,
- * the dark-appearance marker, and how to override a token. The theme name is
- * user data and may arrive from a shared archive, so a closing comment marker
- * in it must not end the comment early.
+ * It is comment-only, so creating the file cannot change the interface. Besides
+ * when the sheet applies and the dark-appearance marker, it carries the one
+ * thing a hand-written selector gets wrong first: DSH's component class names
+ * are CSS-modules hashes (`._card_1pq26_9`) that move with every build, so the
+ * comment points at variables and attributes instead and shows one variable
+ * override. The theme name is user data and may arrive from a shared archive,
+ * so a closing comment marker in it must not end the comment early.
  */
 export declare function cssTemplate(t: (key: ThemeKey) => string, name: string, id: string): string;
 /**

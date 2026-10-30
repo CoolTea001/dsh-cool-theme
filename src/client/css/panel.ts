@@ -27,7 +27,9 @@ export const PANEL_CSS = [
   // The chevron always points down: opening the list is what the list itself
   // shows, so the trigger's arrow does not flip while it is open.
   '.ct-select-chevron{flex:none;}',
-  '.ct-row{border-bottom:1px solid var(--dsw-alias-border-l2);padding:16px 2px;display:flex;align-items:center;gap:16px;}',
+  // Hairline as thin as the shell's own rows use (`.5px`, not `1px`): at this
+  // panel's scale a full pixel reads as a box edge rather than a separator.
+  '.ct-row{border-bottom:.5px solid var(--dsw-alias-border-l2);padding:16px 2px;display:flex;align-items:center;gap:16px;}',
   '.ct-row:last-child{border-bottom:none;}',
   '.ct-row-flush{border-bottom:none;}',
   '.ct-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding-right:48px;}',

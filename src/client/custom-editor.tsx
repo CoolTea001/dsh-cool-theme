@@ -334,11 +334,13 @@ export function BackgroundSection(props: {
 /**
  * The starter stylesheet written when the user opens a theme that has none.
  *
- * It is comment-only, so creating the file cannot change the interface, and it
- * names the three things a first rule usually needs: when the sheet applies,
- * the dark-appearance marker, and how to override a token. The theme name is
- * user data and may arrive from a shared archive, so a closing comment marker
- * in it must not end the comment early.
+ * It is comment-only, so creating the file cannot change the interface. Besides
+ * when the sheet applies and the dark-appearance marker, it carries the one
+ * thing a hand-written selector gets wrong first: DSH's component class names
+ * are CSS-modules hashes (`._card_1pq26_9`) that move with every build, so the
+ * comment points at variables and attributes instead and shows one variable
+ * override. The theme name is user data and may arrive from a shared archive,
+ * so a closing comment marker in it must not end the comment early.
  */
 export function cssTemplate(t: (key: ThemeKey) => string, name: string, id: string): string {
   const safeName = name.replace(/\*\//g, '* /')
@@ -347,8 +349,15 @@ export function cssTemplate(t: (key: ThemeKey) => string, name: string, id: stri
     ` * ${safeName} — ${t('custom.css.title')}`,
     ' *',
     ` * ${t('custom.css.template.active')}`,
+    ' *',
+    ` * ${t('custom.css.template.variables')}`,
+    ` *   ${t('custom.css.template.example')}`,
+    ' *',
+    ` * ${t('custom.css.template.classes')}`,
+    ` * ${t('custom.css.template.classesHint')}`,
+    ` *   ${t('custom.css.template.exampleAttribute')}`,
+    ' *',
     ` * ${t('custom.css.template.dark')}`,
-    ` * ${t('custom.css.template.token')}`,
     ` * ${t('custom.css.template.assets')} /cool-theme/api/themes/${id}/assets/<file>`,
     ` * ${t('custom.css.template.warning')}`,
     ' */',
@@ -389,9 +398,7 @@ export function CssSection(props: {
           ? t('custom.css.loading')
           : info.tooLarge
             ? t('custom.css.tooLarge')
-            : info.enabled && info.css === null
-              ? t('custom.css.missingHint')
-              : ''
+            : ''
   // The switch is the opt-in and the only control that creates the file; the
   // open action exists only while it is on.
   const showSwitch = info !== null && !newTheme && error === null

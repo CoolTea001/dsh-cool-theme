@@ -821,11 +821,22 @@ export function ThemePanel(props: {
       return
     }
     let cancelled = false
+    // An enabled theme whose stylesheet is gone cannot apply anything, so the
+    // row settles on the truthful state — switch off — instead of explaining a
+    // file the user evidently deleted. Writing the flag down keeps the next
+    // open on the same footing, and turning the switch back on recreates the
+    // template. A metadata read that failed stays an error: that is not the
+    // user's verdict on the file.
+    const settle = (info: ThemeCssInfo): ThemeCssInfo => {
+      if (!info.enabled || info.css !== null || info.tooLarge) return info
+      void setThemeCssEnabled(id, false).catch(() => {})
+      return { ...info, enabled: false }
+    }
     const load = () => {
       void fetchThemeCss(id)
         .then((info) => {
           if (!cancelled) {
-            setCssInfo(info)
+            setCssInfo(settle(info))
             setCssError(null)
           }
         })
@@ -1409,43 +1420,21 @@ export function ThemePanel(props: {
 
   // --- custom CSS -----------------------------------------------------------
   //
-  // The file is external, so the row has no draft to save: "open" creates the
-  // starter file when none exists and hands it to the Host, and the switch
-  // writes the document's trust flag immediately. The apply layer re-reads the
-  // file when the window regains focus, so editing in a native editor needs no
-  // extra button.
+  // The file is external, so the row has no draft to save: the switch is the
+  // only thing that creates the starter file, and it writes the document's
+  // trust flag immediately; "open" just hands the file to the Host. The apply
+  // layer re-reads the file when the window regains focus, so editing in a
+  // native editor needs no extra button.
 
-  /** Create the template when the file is confirmed absent, then open it. */
+  /** Hand the existing stylesheet to the Host; creation belongs to the switch. */
   async function openCustomCss() {
     const id = editing?.id
     if (!id || cssBusy) return
-    // Only a confirmed absence creates the template. `cssInfo === null` can also
-    // mean the metadata read failed, and overwriting an existing file would lose
-    // the user's work.
-    const creating = cssInfo !== null && cssInfo.css === null && !cssInfo.tooLarge
-    let stage: 'save' | 'open' = creating ? 'save' : 'open'
     setCssBusy(true)
     try {
-      if (creating) {
-        const name = editing?.name.trim() || t('custom.defaultName')
-        await saveThemeCss(id, cssTemplate(t, name, id))
-        setCssInfo(await fetchThemeCss(id))
-        stage = 'open'
-      }
       await openThemeCss(id)
-      // A created file has to reach the page; an existing one is already
-      // applied, and a focus return picks up edits made in the editor.
-      if (creating) {
-        await saved.refresh()
-        syncSaved()
-      }
     } catch (error) {
-      const key = error instanceof ThemeApiUnavailableError
-        ? 'custom.toast.unavailable'
-        : stage === 'save'
-          ? 'custom.css.saveFailed'
-          : 'custom.css.openFailed'
-      showToast(t(key))
+      showToast(t(error instanceof ThemeApiUnavailableError ? 'custom.toast.unavailable' : 'custom.css.openFailed'))
     } finally {
       setCssBusy(false)
     }
