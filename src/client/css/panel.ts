@@ -33,7 +33,7 @@ export const PANEL_CSS = [
   '.ct-row:last-child{border-bottom:none;}',
   '.ct-row-flush{border-bottom:none;}',
   '.ct-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding-right:48px;}',
-  '.ct-row-title{padding-left:3px;color:var(--dsw-alias-label-primary);font-size:14px;font-weight:400;line-height:22px;}',
+  '.ct-row-title{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:400;line-height:22px;}',
   '.ct-row-desc{color:var(--dsw-alias-label-tertiary);font-size:12px;font-weight:400;line-height:18px;}',
   // Colour editor: one row per group, its name on the left and every seed's
   // round swatch on the right. A swatch is a plain button — it paints the seed
