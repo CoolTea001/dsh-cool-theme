@@ -14,6 +14,7 @@ import {
 } from '../contract.js'
 import { PRESETS, NOOP_PRESET_IDS, isBuiltinPresetId, type PresetId, type PresetDef } from './presets.js'
 import { buildBaseCss, buildOverrides, buildFullCssFallback } from './tokens.js'
+import { bubbleOverrides, buildBubbleCss } from './css/bubble.js'
 import { PANEL_CSS } from './css/panel.js'
 import { createStyleInjector } from './style-injector.js'
 import { ThemePanel, CUSTOM_SELECTION, type Selection, type CustomState } from './components.js'
@@ -231,6 +232,25 @@ export function registerTheme(ctx: any) {
   }
 
   /**
+   * Install the bubble surface on its own, for the selections that publish no
+   * palette of their own (the native preset). The token layer is preferred so
+   * the shell's presenter owns the write; the stylesheet fallback covers a
+   * client that exposes no `theme.overrideTokens`. Returns the disposer, which
+   * the caller parks in `overrideDispose`/`fallbackDispose` so every teardown
+   * path releases it.
+   */
+  function installBubbleLayer(): () => void {
+    if (theme?.overrideTokens) {
+      try {
+        return theme.overrideTokens('dsh-cool-theme', bubbleOverrides())
+      } catch {
+        // Fall through to the stylesheet, exactly as `apply` does.
+      }
+    }
+    return injector.insert(buildBubbleCss())
+  }
+
+  /**
    * Install a palette. The override layer for our source is replaced in place
    * rather than torn down first: `theme.overrideTokens` restacks the same source
    * atomically, while disposing the old layer emits an extra `theme/change` with
@@ -253,12 +273,16 @@ export function registerTheme(ctx: any) {
     lastCustom = isCustom && typeof target !== 'string' ? (target as PresetDef) : null
 
     if (typeof target === 'string' && NOOP_PRESET_IDS.has(target)) {
-      // The base stylesheets are the theme again, so the layer has to go.
+      // The base stylesheets are the theme again, so the palette layer has to
+      // go. The bubble is the exception: it is a deliberate deviation from the
+      // shell's own surface, so it keeps its own layer even here — "native"
+      // means "the shell's palette", not "the shell's bubble".
       overrideDispose = release(overrideDispose)
       fallbackDispose = release(fallbackDispose)
       ensureBaseline(false)
       backgroundLayer.render(null, null)
       applyCss(null)
+      overrideDispose = installBubbleLayer()
       return
     }
     ensureBaseline(true)
