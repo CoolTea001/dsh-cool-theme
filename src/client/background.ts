@@ -224,14 +224,54 @@ export const BACKGROUND_CSS = [
   // viewport again, which is where `.ct-bg` painted them.
   'html.ct-bg-on [class*="centerCol"] [data-phase="active"] [data-composer-seat]{background:transparent !important;isolation:isolate;will-change:auto !important;}',
   'html.ct-bg-on [class*="centerCol"] [data-phase="active"] [data-composer-seat]::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background-image:linear-gradient(var(--ct-bg-wash,transparent),var(--ct-bg-wash,transparent)),var(--ct-bg-image,none);background-size:auto,cover;background-position:center,center;background-repeat:no-repeat;background-attachment:fixed,fixed;filter:blur(var(--ct-bg-blur,0px));-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 36px);mask-image:linear-gradient(180deg,transparent 0,#000 36px);}',
+  // The plugin manager's page bar does the same job for its own page: it is a
+  // sticky band whose `::before` paints the whole `bg-base` rectangle so the
+  // scrolling list is occluded behind the title, the actions and the tab strip.
+  // Clearing it would let the list scroll through the heading, so it gets the
+  // same treatment as the composer band — repaint the wallpaper instead of the
+  // flat colour. The bar is matched by `data-plugin-bar`, which is a stable
+  // public hook: its class hash rotates, and so do the `--plugin-*` variables.
+  // `data-natural` only gates the sticky behaviour, not the paint, so the copy
+  // is not limited to it; a measuring clone carries neither attribute.
+  //
+  // The copy is a plain background, not a nested fixed element, so it does not
+  // need the containing-block care the composer's video copy does: the bar sets
+  // `container-type`, and confinement was measured not to affect a fixed
+  // background there — the grid stayed on the same phase as the layer above,
+  // `275, 367, 459…` in both. No mask: the shell's band has a hard top edge,
+  // and the bar clips its own head with `clip-path` as it collapses.
+  'html.ct-bg-on [data-plugin-bar]::before{background-image:linear-gradient(var(--ct-bg-wash,transparent),var(--ct-bg-wash,transparent)),var(--ct-bg-image,none) !important;background-size:auto,cover !important;background-position:center,center !important;background-repeat:no-repeat !important;background-attachment:fixed,fixed !important;filter:blur(var(--ct-bg-blur,0px));}',
   // The video copy of that same band. The wrapper is a real child of the seat
-  // (see `ensureComposer`), `overflow: hidden` clips the fixed video to its box
-  // and the mask fades its top edge. It exists only while the active side is a
-  // video; an image keeps using the pseudo-element above.
-  '.ct-bg-composer{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden;display:none;-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 36px);mask-image:linear-gradient(180deg,transparent 0,#000 36px);}',
+  // (see `ensureComposer`) and the mask fades its top edge. It exists only while
+  // the active side is a video; an image keeps using the pseudo-element above.
+  //
+  // `clip-path` rather than `overflow: hidden` is what clips the copy, because
+  // the seat no longer establishes a containing block for it: `overflow` only
+  // clips descendants whose containing block is the clipping box, and a fixed
+  // child is now contained by the viewport instead, so it would escape the
+  // wrapper and cover the whole window. `clip-path` clips by geometry, so it
+  // holds either way — which also keeps this wrapper honest if a future shell
+  // reintroduces a containing block on the seat.
+  '.ct-bg-composer{position:absolute;inset:0;z-index:-1;pointer-events:none;display:none;clip-path:inset(0);-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 36px);mask-image:linear-gradient(180deg,transparent 0,#000 36px);}',
   '.ct-bg-composer[data-kind="video"]{display:block;}',
   '.ct-bg-composer-video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;filter:blur(var(--ct-bg-blur,0px));}',
   '.ct-bg-composer-wash{position:absolute;inset:0;background:var(--ct-bg-wash,transparent);}',
+  // The plugin page bar's video copy, built by the same helper and clipped the
+  // same way. Its height follows the painted band rather than the bar's own
+  // box: the bar keeps the tag strip's full height while the paint shrinks to
+  // the compact header, so `inset: 0` would repaint wallpaper over the list.
+  // Prepended, and at z-index 0, so it paints above the `::before` that would
+  // otherwise draw the wash twice but below the head, which is later in tree
+  // order and carries the title and tabs.
+  '.ct-bg-pagebar{position:absolute;left:0;right:0;top:0;height:var(--plugin-header-paint-height,var(--plugin-header-rest-height,100%));z-index:0;pointer-events:none;display:none;clip-path:inset(0);}',
+  '.ct-bg-pagebar[data-kind="video"]{display:block;}',
+  '.ct-bg-pagebar-video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;filter:blur(var(--ct-bg-blur,0px));}',
+  '.ct-bg-pagebar-wash{position:absolute;inset:0;background:var(--ct-bg-wash,transparent);}',
+  // The video copy carries the wash itself, so the band's own `::before` has to
+  // stop painting it: two washes over one frame is `1-(1-a)^2` opaque instead of
+  // `a`, which washes the wallpaper out. A video side aliases `--ct-bg-image` to
+  // `none`, so clearing the whole background costs nothing else.
+  'html.ct-bg-on [data-plugin-bar][data-ct-copy="video"]::before{background:none !important;}',
   // The wash is the panel colour at the alpha the media leaves free, and the
   // composer copy blurs by the same radius as the layer below; media, wash and
   // blur all have to follow the appearance, exactly like the layer's own
@@ -326,6 +366,9 @@ export function createBackgroundLayer() {
   /** The video copy painted inside the shell's composer seat. */
   let composer: HTMLDivElement | null = null
   let composerVideo: HTMLVideoElement | null = null
+  /** The same, inside the plugin manager's sticky page bar. */
+  let pageBar: HTMLDivElement | null = null
+  let pageBarVideo: HTMLVideoElement | null = null
   /** Re-attaches the composer copy if React removes it; bound to a video side. */
   let composerTimer: ReturnType<typeof setInterval> | null = null
   /** Follows the shell's appearance attribute so the right side's video plays. */
@@ -434,6 +477,29 @@ export function createBackgroundLayer() {
     return wrapper
   }
 
+  function ensurePageBar(): HTMLDivElement | null {
+    if (typeof document === 'undefined') return null
+    const bar = document.querySelector('[data-plugin-bar]')
+    if (!(bar instanceof HTMLElement)) return null
+    if (pageBar !== null && pageBarVideo !== null) {
+      if (pageBar.parentElement !== bar) bar.prepend(pageBar)
+      return pageBar
+    }
+    const wrapper = document.createElement('div')
+    wrapper.className = 'ct-bg-pagebar'
+    wrapper.dataset.kind = 'none'
+    wrapper.setAttribute('aria-hidden', 'true')
+    const video = createVideo()
+    video.className = 'ct-bg-pagebar-video'
+    const wash = document.createElement('div')
+    wash.className = 'ct-bg-pagebar-wash'
+    wrapper.append(video, wash)
+    bar.prepend(wrapper)
+    pageBar = wrapper
+    pageBarVideo = video
+    return wrapper
+  }
+
   /** Keep the composer copy attached while the active side is a video. */
   function startComposerTimer(): void {
     if (composerTimer !== null) return
@@ -444,10 +510,24 @@ export function createBackgroundLayer() {
         stopComposer()
         return
       }
+      // Both copies are retried independently: they belong to different pages,
+      // so at most one of them has a host element at a time, and neither may
+      // block the other.
       const wrapper = ensureComposer()
-      if (wrapper === null) return
-      wrapper.dataset.kind = 'video'
-      if (composerVideo !== null) setVideoSource(composerVideo, side.url)
+      if (wrapper !== null) {
+        wrapper.dataset.kind = 'video'
+        if (composerVideo !== null) setVideoSource(composerVideo, side.url)
+      }
+      const bar = ensurePageBar()
+      if (bar !== null) {
+        bar.dataset.kind = 'video'
+        if (pageBarVideo !== null) setVideoSource(pageBarVideo, side.url)
+        // Marking is part of showing the copy, not a separate step: reaching
+        // this page after the initial render is the common path, and without
+        // the mark the bar's own `::before` would paint the wash a second time.
+        markPageBarCopy(true)
+      }
+      if (wrapper === null && bar === null) stopComposer()
     }, 1000)
   }
 
@@ -458,6 +538,11 @@ export function createBackgroundLayer() {
     }
     if (composerVideo !== null) clearVideoSource(composerVideo)
     if (composer !== null) composer.dataset.kind = 'none'
+    if (pageBarVideo !== null) clearVideoSource(pageBarVideo)
+    if (pageBar !== null) pageBar.dataset.kind = 'none'
+    // With no copy painting the band, its own `::before` is the only painter
+    // again, so the wash it applies must come back.
+    markPageBarCopy(false)
   }
 
   /**
@@ -484,17 +569,35 @@ export function createBackgroundLayer() {
     const side = current?.[active]
     if (side === undefined || side.kind !== 'video' || side.url === null) {
       stopComposer()
+      markPageBarCopy(false)
       return
     }
+    startComposerTimer()
+    // The page bar may be mounted while the seat is not (its page has no
+    // composer), so each copy is driven on its own.
+    const bar = ensurePageBar()
+    if (bar !== null && pageBarVideo !== null) {
+      bar.dataset.kind = 'video'
+      setVideoSource(pageBarVideo, side.url)
+    }
+    markPageBarCopy(true)
     const wrapper = ensureComposer()
-    if (wrapper === null || composerVideo === null) {
-      // The seat is not mounted yet; the timer retries.
-      startComposerTimer()
-      return
-    }
+    if (wrapper === null || composerVideo === null) return
     wrapper.dataset.kind = 'video'
     setVideoSource(composerVideo, side.url)
-    startComposerTimer()
+  }
+
+  /**
+   * Tell the page bar's own `::before` whether a video copy is painting it, so
+   * the wash is applied once. The attribute lives on the shell's element, not on
+   * this plugin's, because the rule that reads it targets that element.
+   */
+  function markPageBarCopy(copying: boolean): void {
+    if (typeof document === 'undefined') return
+    const bar = document.querySelector('[data-plugin-bar]')
+    if (!(bar instanceof HTMLElement)) return
+    if (copying) bar.dataset.ctCopy = 'video'
+    else delete bar.dataset.ctCopy
   }
 
   function unmount(): void {
@@ -504,6 +607,10 @@ export function createBackgroundLayer() {
     composer?.remove()
     composer = null
     composerVideo = null
+    pageBar?.remove()
+    pageBar = null
+    pageBarVideo = null
+    markPageBarCopy(false)
     layer?.remove()
     layer = null
     sides = null
