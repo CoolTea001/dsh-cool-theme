@@ -7,8 +7,12 @@
  * reveal the wallpaper.
  *
  * One fixed layer spans the whole window, so the sidebar and the main canvas
- * always share the same wallpaper and the same alignment. Only the two canvas
- * surfaces are cleared (`BACKGROUND_CSS`): the shell's background tokens stay
+ * always share the same wallpaper and the same alignment. Since the two
+ * appearances carry independent media, the canvases are cleared only while the
+ * appearance on screen has a wallpaper of its own: the other side paints
+ * nothing, and emptying the shell's surfaces for it would only replace their
+ * own paint with the layer's flat colour. Only the two canvas surfaces are
+ * cleared (`BACKGROUND_CSS`): the shell's background tokens stay
  * opaque, because the composer's fade, sticky code-block banners and table
  * headers paint themselves with those same tokens to occlude what scrolls under
  * them. Making the tokens transparent is what let scrolled text show through
@@ -75,6 +79,14 @@ export function backgroundHasMedia(background: ResolvedBackground): boolean {
   return background.light.url !== null || background.dark.url !== null
 }
 
+/**
+ * Whether one appearance actually paints. A URL without a kind is not paint:
+ * `render` skips it, so every other reader has to skip it too.
+ */
+function sidePaints(side: ResolvedBackgroundSide): boolean {
+  return side.url !== null && side.kind !== null
+}
+
 /** The two surface colours the media is composited over, per appearance. */
 export type BackgroundSurfaceColors = { light: string; dark: string }
 
@@ -115,8 +127,23 @@ export const BACKGROUND_CSS = [
   // `centerCol` and `sidebarCol` are the only layout classes carrying these
   // names, and the desktop frame patch is limited to non-darwin, where macOS
   // already leaves the frame transparent.
+  //
+  // `ct-bg-on` means "the appearance on screen has a wallpaper", not merely
+  // "a wallpaper is mounted": the two sides are independent files, so one of
+  // them can be empty. Clearing the shell's surfaces for a side that paints
+  // nothing would replace their own paint with the layer's flat colour, and on
+  // macOS it would also hide the vibrancy the sidebar switch exposes. The class
+  // therefore follows the appearance, as {@link syncCanvas} keeps it in step.
   'html.ct-bg-on [data-phase]{background:transparent !important;}',
   'html.ct-bg-on [class*="centerCol"]{background:transparent !important;}',
+  // The layer's own flat surface colour is the base the media is composited
+  // over, so it is only ever meant to show through a cleared canvas. With the
+  // gate off the layer stays mounted (the other appearance still needs it) but
+  // paints nothing — including this colour, which would otherwise sit opaque
+  // behind the shell and hide the macOS vibrancy the sidebar switch exposes.
+  // The dark variant is named explicitly: it ties with the base rule above on
+  // specificity, so the outcome would otherwise depend on this list's order.
+  'html:not(.ct-bg-on) .ct-bg,html:not(.ct-bg-on) body[data-ds-dark-theme] .ct-bg{background-color:transparent;}',
   // The sidebar column and its own root both paint with the sidebar fill, so
   // the token is cleared on the column and inherited by everything under it.
   'html.ct-bg-on body [class*="sidebarCol"]{--dsw-specific-sidebar-fill:transparent;background:transparent !important;}',
@@ -183,7 +210,19 @@ export const BACKGROUND_CSS = [
   // composer's own content but above the transcript. Without a stacking context
   // on the seat, that negative layer falls into the page's and the transcript
   // paints over it.
-  'html.ct-bg-on [class*="centerCol"] [data-phase="active"] [data-composer-seat]{background:transparent !important;isolation:isolate;}',
+  //
+  // `will-change` is reset for the same reason the copy can work at all: DSH
+  // gives the active seat `will-change: transform` for its sticky scroll, and
+  // that declaration silently turns the seat into the containing block for
+  // everything fixed inside it. Both copies below are fixed on purpose — the
+  // pseudo-element's `background-attachment: fixed` and the video's `position:
+  // fixed` — so under that containment they stop tracking the viewport and are
+  // laid out against the seat's own 128px box instead: the wallpaper is
+  // re-scaled and re-centred inside the band, and the video is squeezed into
+  // it. The seam at the band's top edge is that rescale showing. Resetting the
+  // property costs only the compositor hint; the copies then anchor to the
+  // viewport again, which is where `.ct-bg` painted them.
+  'html.ct-bg-on [class*="centerCol"] [data-phase="active"] [data-composer-seat]{background:transparent !important;isolation:isolate;will-change:auto !important;}',
   'html.ct-bg-on [class*="centerCol"] [data-phase="active"] [data-composer-seat]::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background-image:linear-gradient(var(--ct-bg-wash,transparent),var(--ct-bg-wash,transparent)),var(--ct-bg-image,none);background-size:auto,cover;background-position:center,center;background-repeat:no-repeat;background-attachment:fixed,fixed;filter:blur(var(--ct-bg-blur,0px));-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 36px);mask-image:linear-gradient(180deg,transparent 0,#000 36px);}',
   // The video copy of that same band. The wrapper is a real child of the seat
   // (see `ensureComposer`), `overflow: hidden` clips the fixed video to its box
@@ -321,22 +360,48 @@ export function createBackgroundLayer() {
     // Prepended, and at z-index -1: the layer sits above the document canvas
     // but below every in-flow column, so no class hash is involved.
     document.body.prepend(layer)
-    // `BACKGROUND_CSS` clears the canvas only while this class is present, so
-    // removing the wallpaper hands the shell its own opaque surfaces back.
-    document.documentElement.classList.add('ct-bg-on')
     observeAppearance()
   }
 
-  /** Follow `data-ds-dark-theme` so only the visible appearance's video decodes. */
+  /**
+   * Follow `data-ds-dark-theme`, which decides both which side's video decodes
+   * and whether the canvases clear at all.
+   */
   function observeAppearance(): void {
     if (typeof MutationObserver === 'undefined') return
     appearanceObserver?.disconnect()
-    appearanceObserver = new MutationObserver(() => syncVideoSources())
+    appearanceObserver = new MutationObserver(() => {
+      syncVideoSources()
+      syncCanvas()
+    })
     appearanceObserver.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['data-ds-dark-theme'],
       subtree: true,
     })
+  }
+
+  /** Whether the appearance on screen paints a wallpaper of its own. */
+  function activeHasMedia(): boolean {
+    if (current === null) return false
+    return sidePaints(current[isDarkAppearance() ? 'dark' : 'light'])
+  }
+
+  /**
+   * Clear the shell's canvases exactly while the appearance on screen has a
+   * wallpaper, and hand them back the moment it does not.
+   *
+   * The pair's two sides are independent files, so "a wallpaper is mounted" is
+   * not the same question as "this appearance paints one". Clearing for an empty
+   * side would replace the shell's own paint — the sidebar fill, the base
+   * surface — with the layer's flat colour, which shows up as a seam between the
+   * sidebar and the canvas where their two tokens differ, and on macOS it hides
+   * the vibrancy the sidebar switch exposes. `ct-bg-on` is therefore driven by
+   * the active side, on every render and on every appearance change.
+   */
+  function syncCanvas(): void {
+    if (typeof document === 'undefined') return
+    document.documentElement.classList.toggle('ct-bg-on', activeHasMedia())
   }
 
   /**
@@ -462,6 +527,9 @@ export function createBackgroundLayer() {
     ensure()
     if (layer === null || sides === null || videos === null) return
     current = bg
+    // The shell's canvases clear per appearance, not per mount: only the side on
+    // screen is ever painted, so only that side may leave a hole for it.
+    syncCanvas()
     // On `<html>` rather than on the layer: the composer's copy of the
     // wallpaper lives outside this element and reads the same properties.
     const style = document.documentElement.style
@@ -469,8 +537,9 @@ export function createBackgroundLayer() {
     style.setProperty('--ct-bg-dark', colors.dark)
     for (const appearance of THEME_APPEARANCES) {
       const side = bg[appearance]
-      const kind: ThemeAssetKind | 'none' =
-        side.url !== null && side.kind !== null ? side.kind : 'none'
+      // The same predicate `activeHasMedia` clears the canvases by, so a side
+      // can never leave a hole it does not paint into.
+      const kind: ThemeAssetKind | 'none' = sidePaints(side) && side.kind !== null ? side.kind : 'none'
       sides[appearance].dataset.kind = kind
       if (kind === 'none') {
         // No media on this side: nothing paints in the layer. The composer

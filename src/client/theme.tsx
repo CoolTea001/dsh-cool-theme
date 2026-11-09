@@ -160,9 +160,12 @@ export function registerTheme(ctx: any) {
   // (`_6Qf49G_sidebarCol`) rotates between builds; `sidebarCollapsed` contains
   // the same substring, so it is excluded rather than painted opaque with the
   // column.
-  // `:not(.ct-bg-on)` keeps this rule inert while a wallpaper is mounted, so a
-  // custom theme's background always wins over the switch without needing to
-  // out-specify this `!important` declaration.
+  // `:not(.ct-bg-on)` keeps this rule inert while the appearance on screen has a
+  // wallpaper, so a custom theme's background always wins over the switch
+  // without needing to out-specify this `!important` declaration. The class
+  // follows the appearance rather than the mount (see `syncCanvas`), so an
+  // appearance with no wallpaper of its own still gets the switch's meaning
+  // back the moment it is shown.
   const SIDEBAR_OPAQUE_CSS =
     'html[data-platform="darwin"]:not(.ct-bg-on) [class*="sidebarCol"]:not([class*="sidebarCollapsed"]){background:var(--dsw-specific-sidebar-fill) !important;}'
   let sidebarOpaqueDisposer: (() => void) | null = null
@@ -260,9 +263,9 @@ export function registerTheme(ctx: any) {
    * flash per change, which is exactly what a dragged colour slider produces.
    *
    * A custom theme that carries a background needs nothing extra here: the
-   * canvas is cleared by `BACKGROUND_CSS` while the layer is mounted, and the
-   * tokens themselves stay opaque so every overlay that has to occlude
-   * scrolling content keeps working.
+   * canvas is cleared by `BACKGROUND_CSS` while the appearance on screen has a
+   * wallpaper, and the tokens themselves stay opaque so every overlay that has
+   * to occlude scrolling content keeps working.
    */
   function apply(src: Selection | PresetDef, cssId: string | null = null) {
     lastApplied = { src, cssId }
@@ -376,10 +379,11 @@ export function registerTheme(ctx: any) {
    *
    * Each appearance resolves on its own: a side that is switched off or carries
    * no media simply paints nothing, and only when neither side paints is the
-   * whole background nothing at all. That is what lets every consumer stay
-   * unaware of the per-side flags: no layer is mounted, so the canvas keeps its
-   * own opaque surfaces and the sidebar switch works again, exactly as on a
-   * theme that never had a wallpaper.
+   * whole background nothing at all. A pair where just one side paints still
+   * mounts the layer, but the canvas only clears while that side is the one on
+   * screen (see `syncCanvas`), so the empty appearance keeps the shell's own
+   * surfaces and the sidebar switch's meaning, exactly as on a theme that never
+   * had a wallpaper.
    */
   function resolveActiveBackground(): ResolvedBackground | null {
     const id = readActiveId()

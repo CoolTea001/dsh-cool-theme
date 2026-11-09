@@ -7,8 +7,12 @@
  * reveal the wallpaper.
  *
  * One fixed layer spans the whole window, so the sidebar and the main canvas
- * always share the same wallpaper and the same alignment. Only the two canvas
- * surfaces are cleared (`BACKGROUND_CSS`): the shell's background tokens stay
+ * always share the same wallpaper and the same alignment. Since the two
+ * appearances carry independent media, the canvases are cleared only while the
+ * appearance on screen has a wallpaper of its own: the other side paints
+ * nothing, and emptying the shell's surfaces for it would only replace their
+ * own paint with the layer's flat colour. Only the two canvas surfaces are
+ * cleared (`BACKGROUND_CSS`): the shell's background tokens stay
  * opaque, because the composer's fade, sticky code-block banners and table
  * headers paint themselves with those same tokens to occlude what scrolls under
  * them. Making the tokens transparent is what let scrolled text show through
