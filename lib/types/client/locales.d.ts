@@ -59,6 +59,7 @@ export declare const zh: {
     'custom.inUse': string;
     'custom.delete': string;
     'custom.cancel': string;
+    'custom.close': string;
     'custom.toast.saved': string;
     'custom.toast.failed': string;
     'custom.toast.unavailable': string;
@@ -168,6 +169,7 @@ export declare const en: {
     'custom.inUse': string;
     'custom.delete': string;
     'custom.cancel': string;
+    'custom.close': string;
     'custom.toast.saved': string;
     'custom.toast.failed': string;
     'custom.toast.unavailable': string;

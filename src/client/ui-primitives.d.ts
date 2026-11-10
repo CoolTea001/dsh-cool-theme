@@ -134,6 +134,36 @@ declare module '@deepseek-ai/dsh-client-ui-primitives' {
   }
   export const Toast: React.FC<ToastProps>
 
+  export interface ModalProps {
+    open: boolean
+    /** Every dismissal path — mask click, the close button, Escape — ends here. */
+    onClose: () => void
+    /** Also the dialog's `aria-label`, so it can never ship unnamed. */
+    title: string
+    /** Required: names the close button, which is drawn as a glyph. */
+    closeLabel: string
+    description?: string
+    /** Rendered inside the body, below the description. */
+    children?: React.ReactNode
+    /** Rendered as the footer row. The primitive lays it out; it draws no actions. */
+    footer?: React.ReactNode
+    className?: string
+    contentClassName?: string
+    onKeyDownCapture?: React.KeyboardEventHandler<HTMLDivElement>
+    /** Skips the title/description/body chrome and renders `children` alone. */
+    headless?: boolean
+    /** `false` drops the mask's blur, keeping only its tint. */
+    backdropBlur?: boolean
+    /** Tags the dialog so the shell's shortcut layer treats it as modal. */
+    shortcutModal?: string
+  }
+  /**
+   * The shell's dialog: portals to `document.body`, owns the mask, the close
+   * button, Escape and the focus trap (`useModalLayer`), and stacks its layers
+   * so only the topmost answers the key.
+   */
+  export const Modal: React.FC<ModalProps>
+
   export interface IconProps {
     size?: number
     className?: string

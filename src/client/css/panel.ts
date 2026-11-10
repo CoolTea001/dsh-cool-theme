@@ -137,30 +137,44 @@ export const PANEL_CSS = [
   // two buttons in one focus stop, so they are siblings here instead.
   '.ct-add-row{display:flex;align-items:stretch;gap:8px;margin-top:8px;}',
   '.ct-add-row .ct-add-btn{flex:1 1 0;width:auto;margin-top:0;min-width:0;}',
-  // Confirm dialog, matching DSH's own Modal metrics: the same mask token and
-  // blur, the layer-2 card on the promoted elevation, and the shell's own
-  // `radius-panel` so the card's corner follows the panel scale.
-  '.ct-modal-root{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;}',
-  '.ct-modal-mask{position:absolute;inset:0;background:var(--dsw-alias-bg-mask-1,rgba(0,0,0,.24));backdrop-filter:var(--dsw-mask-blur,blur(2px));}',
-  '.ct-modal-card{position:relative;z-index:1;display:flex;flex-direction:column;gap:12px;width:min(380px,100%);padding:24px;border-radius:var(--dsw-radius-panel);background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-elevation-prominent);}',
-  '.ct-modal-title{font-size:16px;line-height:24px;font-weight:600;color:var(--dsw-alias-label-primary);}',
-  '.ct-modal-desc{font-size:13px;line-height:20px;color:var(--dsw-alias-label-tertiary);}',
-  '.ct-modal-footer{display:flex;justify-content:flex-end;gap:12px;margin-top:12px;}',
-  // What this stylesheet no longer draws: the custom-theme switch, the
-  // confirmation banner and the action buttons are the shell's own `Switch`,
-  // `Toast` and `Button` — their track, thumb, material, hold/fade timing,
-  // geometry, fill tokens and focus ring belong to the primitives package.
+  // The confirm dialog is the shell's `Modal`: its mask, tint, blur, card,
+  // radius, elevation, header, close button and focus trap are all drawn by the
+  // primitive, and this stylesheet keeps nothing of the hand-rolled root, mask,
+  // card, title or description that used to mirror them. Only the footer's two
+  // actions are ours, because `Modal` lays out whatever footer it is handed and
+  // draws no actions of its own.
   //
-  // Only the two action widths and the destructive tint below are ours, and all
-  // three are lifted from DSH's own dialogs rather than invented here.
-  '.ct-action-cancel{min-width:72px}', // RiskConfirmation's `.modalAction`
-  '.ct-action-confirm{min-width:136px}', // RiskConfirmation's `.confirmAction`
-  // DSH draws a destructive action as an outlined face tinted with the error
-  // token — error stroke and label over an 8% error hover — never a solid red
-  // fill. The `element.class` selector keeps this ahead of the primitive's
-  // `.outline` rule whatever order the two stylesheets are inserted in, and
-  // rebinding the hover token on the element is DSH's own delete-button recipe.
-  'button.ct-danger{color:var(--dsw-alias-state-error-primary);border-color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent);--dsw-alias-interactive-bg-hover:color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent);}',
+  // The two actions size to their content rather than to DSH's dialog metrics.
+  // `RiskConfirmation` floors them at 72px and 136px (`min-width` in the shell's
+  // own sheet) so English labels such as "Delete theme" keep a comfortable
+  // face, but that floor is what leaves a two-character CJK label like 「删除」
+  // with roughly 80px of dead space inside it, and the 72:136 ratio is why the
+  // pair reads as two different button sizes. Releasing the floor and giving
+  // both the same padding makes them a matched pair that still grows with its
+  // label. min-width:0 also keeps them from being pinned open in the flex
+  // footer, which is where the shell's own value would otherwise win.
+  //
+  // `button.` is load-bearing: the primitive's base `.button` rule (0,1,0) sets
+  // `padding:0 14px`, and a bare `.ct-action-*` (0,1,0) would tie with it and
+  // lose whenever the primitive's sheet lands after ours.
+  'button.ct-action-cancel{min-width:0;padding:0 20px}',
+  'button.ct-action-confirm{min-width:0;padding:0 20px}',
+  // A destructive action keeps DSH's own recipe rather than inventing one:
+  // `TaskManagerPage`'s delete button is an `outline` face whose error tint is
+  // two token rebindings, never a border or a fill.
+  //
+  // The hairline is the part worth spelling out. The primitive's `.outline`
+  // variant draws `border:.5px solid transparent` plus
+  // `box-shadow:inset 0 0 0 .5px var(--dsh-button-outline-color, …)`, so the
+  // visible stroke is that inset shadow reading the custom property — setting
+  // `border-color` here paints nothing, which is what an earlier version of
+  // this rule got wrong. Rebinding the property keeps the hairline on the
+  // primitive's 0.5px scale instead of inventing a 1px border.
+  //
+  // The hover tint rebinds `--dsw-alias-interactive-bg-hover` on the element,
+  // the token the primitive's `.outline:hover:not(:disabled)` reads, so the
+  // error wash arrives without restating that (0,3,0) rule or its timing.
+  'button.ct-danger{color:var(--dsw-alias-state-error-primary);--dsh-button-outline-color:var(--dsw-alias-state-error-primary);--dsw-alias-interactive-bg-hover:color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent);}',
   // --- background image/video section (inside the custom editor) ----------------
   // It sits below the colour rows and owns only its own controls: the switch,
   // buttons, segmented control and tooltip are the shell's. No hairline above

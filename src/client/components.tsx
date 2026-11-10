@@ -77,6 +77,7 @@ import {
   Button,
   IconChevronDownOutlineRegular,
   Menu,
+  Modal,
   SegmentedControl,
   Switch,
   Toast,
@@ -328,19 +329,30 @@ function SchemeMenu(props: {
 }
 
 /**
- * Confirmation dialog for destructive actions, mirroring DSH's own Modal
- * (design-platform mask token + blur, `radius-panel` card on layer-2,
- * prominent shadow) and the footer its `RiskConfirmation` lays out: an outline
- * cancel beside the confirming action.
- * Still rendered inline rather than through the shell's `Modal`: its Escape has
- * to take part in the panel's own leave-the-draft questions, and a shell-owned
- * modal layer would answer the key before this dialog could.
+ * Confirmation dialog, rendered through the shell's own `Modal`.
+ *
+ * The primitive owns everything structural — the portal to `document.body`, the
+ * mask token and its blur, the titled card on layer-2 with the prominent
+ * elevation, the header's close button, Escape and the focus trap — so this
+ * function only decides the footer's two actions. That is deliberate: a
+ * hand-rolled dialog drifts from DSH's material the moment the shell retunes a
+ * token, and it has to re-derive the layer stack on its own.
+ *
+ * The earlier version drew its own root and mask to keep Escape, on the theory
+ * that a shell layer would answer the key before the panel's leave-the-draft
+ * questions could. That worry does not survive contact with the primitive:
+ * `useModalLayer` listens on `document` in the bubble phase, while the panel
+ * intercepts Escape in the capture phase and calls `stopPropagation`, so the
+ * panel's questions still see the key first and the modal only gets what is
+ * left. `useModalLayer` also stacks its layers, letting the topmost one answer.
  */
 function ConfirmDialog(props: {
   title: string
   description: string
   confirmLabel: string
   cancelLabel: string
+  /** Names the header's close glyph; `Modal` requires it for the a11y name. */
+  closeLabel: string
   /**
    * Tints the confirming action with the error token. DSH never fills a
    * destructive button solid — its own delete affordance is an outlined face in
@@ -351,47 +363,40 @@ function ConfirmDialog(props: {
   onConfirm: () => void
   onCancel: () => void
 }) {
-  const { title, description, confirmLabel, cancelLabel, danger, onConfirm, onCancel } = props
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onCancel])
+  const { title, description, confirmLabel, cancelLabel, closeLabel, danger, onConfirm, onCancel } =
+    props
 
-  return React.createElement(
-    'div',
-    { className: 'ct-modal-root' },
-    React.createElement('div', { className: 'ct-modal-mask', 'aria-hidden': true, onClick: onCancel }),
+  // The shell's own action pair, in the order its `RiskConfirmation` footer
+  // uses: an outline cancel, then the confirming action. `RiskConfirmation`
+  // itself is not reused here because it gates the confirm button behind an
+  // acknowledgement checkbox that these questions do not ask for.
+  const footer = React.createElement(
+    React.Fragment,
+    null,
     React.createElement(
-      'div',
-      { className: 'ct-modal-card', role: 'dialog', 'aria-modal': true, 'aria-label': title },
-      React.createElement('div', { className: 'ct-modal-title' }, title),
-      React.createElement('div', { className: 'ct-modal-desc' }, description),
-      React.createElement(
-        'div',
-        { className: 'ct-modal-footer' },
-        // The shell's own action pair, in the order its `RiskConfirmation`
-        // modal footer uses: an outline cancel, then the confirming action.
-        // The min-widths are that component's own, so both dialogs line up.
-        React.createElement(
-          Button,
-          { variant: 'outline', className: 'ct-action-cancel', onClick: onCancel },
-          cancelLabel,
-        ),
-        React.createElement(
-          Button,
-          {
-            variant: danger ? 'outline' : 'primary',
-            className: danger ? 'ct-action-confirm ct-danger' : 'ct-action-confirm',
-            onClick: onConfirm,
-          },
-          confirmLabel,
-        ),
-      ),
+      Button,
+      { variant: 'outline', className: 'ct-action-cancel', onClick: onCancel },
+      cancelLabel,
+    ),
+    React.createElement(
+      Button,
+      {
+        variant: danger ? 'outline' : 'primary',
+        className: danger ? 'ct-action-confirm ct-danger' : 'ct-action-confirm',
+        onClick: onConfirm,
+      },
+      confirmLabel,
     ),
   )
+
+  return React.createElement(Modal, {
+    open: true,
+    onClose: onCancel,
+    title,
+    description,
+    closeLabel,
+    footer,
+  })
 }
 
 /** Which banner a failed roster call deserves. */
@@ -1162,11 +1167,17 @@ export function ThemePanel(props: {
         return
       }
       // Our own questions own Escape while one is up: dismiss the question only.
-      if (confirmCloseRef.current || pendingLeaveRef.current) {
+      // The delete question counts here too. Its dialog is a shell `Modal`,
+      // whose own key handler runs in the bubble phase, so without this guard a
+      // dirty draft would have the capture-phase handler below answer the key
+      // first — raising the discard question on top of the delete one and
+      // leaving the delete dialog unable to close.
+      if (confirmCloseRef.current || pendingLeaveRef.current || pendingDeleteRef.current) {
         e.preventDefault()
         e.stopPropagation()
         setConfirmClose(false)
         setPendingLeave(null)
+        setPendingDelete(null)
         return
       }
       if (!dirtyRef.current || !onRequestClose) return
@@ -2010,6 +2021,7 @@ export function ThemePanel(props: {
         description: t('custom.delete.desc').replace('{0}', pendingDelete.name),
         confirmLabel: t('custom.delete'),
         cancelLabel: t('custom.cancel'),
+        closeLabel: t('custom.close'),
         // Removing a saved theme is the destructive question; the two
         // unsaved-draft questions below are not, and stay on the primary face.
         danger: true,
@@ -2033,6 +2045,7 @@ export function ThemePanel(props: {
         ),
         confirmLabel: t('custom.unsaved.confirm'),
         cancelLabel: t('custom.unsaved.cancel'),
+        closeLabel: t('custom.close'),
         onConfirm: () => {
           setConfirmClose(false)
           onRequestClose()
@@ -2057,6 +2070,7 @@ export function ThemePanel(props: {
         ),
         confirmLabel: t('custom.unsaved.leaveConfirm'),
         cancelLabel: t('custom.unsaved.cancel'),
+        closeLabel: t('custom.close'),
         onConfirm: () => {
           const next = pendingLeave
           setPendingLeave(null)
