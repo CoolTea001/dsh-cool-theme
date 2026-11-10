@@ -1,224 +1,26 @@
 /**
- * Theme settings dictionaries (zh is the key-set source of truth; en mirrors
- * it completely). Preset names stay as proper nouns in both locales, so they
- * live in presets.ts, not here.
+ * Locale entry point for the theme settings panel.
+ *
+ * One file per language in `locales/`, this module only re-exports them and
+ * derives the namespace key union from the Chinese source of truth.
+ *
+ * The ids are the shell's own (`zh`, `en`, `ja`, `es`, `fr`, `de`, `ru`, `pt`),
+ * so a language picked in Settings reaches this panel without a mapping table.
+ * `zh` and `en` are the locale service's required baselines; the rest are
+ * optional ids, each still checked against this same key union.
+ *
+ * Preset names stay as proper nouns in every locale, so they live in
+ * `presets.ts` rather than here.
  */
-/** Simplified Chinese dictionary (the key-set source of truth). */
-export declare const zh: {
-    nav: string;
-    'appearance.title': string;
-    'appearance.desc': string;
-    'presets.title': string;
-    'presets.desc': string;
-    'presets.disabled': string;
-    'sidebar.title': string;
-    'sidebar.desc': string;
-    'background.title': string;
-    'background.add': string;
-    'background.replace': string;
-    'background.remove': string;
-    'background.opacity': string;
-    'background.blur': string;
-    'background.badType': string;
-    'background.tooLarge': string;
-    'background.uploadFailed': string;
-    'scheme.light': string;
-    'scheme.dark': string;
-    'scheme.system': string;
-    'custom.title': string;
-    'custom.toggle.desc': string;
-    'custom.group.seeds': string;
-    'custom.group.shiki': string;
-    'custom.mode.label': string;
-    'custom.neutral.title': string;
-    'custom.neutral.desc': string;
-    'custom.neutral.lightest': string;
-    'custom.neutral.darkest': string;
-    'custom.neutral.roleBackground': string;
-    'custom.neutral.roleForeground': string;
-    'custom.accent.title': string;
-    'custom.accent.desc': string;
-    'custom.green.title': string;
-    'custom.green.desc': string;
-    'custom.amber.title': string;
-    'custom.amber.desc': string;
-    'custom.red.title': string;
-    'custom.red.desc': string;
-    'custom.border.title': string;
-    'custom.border.desc': string;
-    'custom.shiki.desc': string;
-    'custom.seed.light': string;
-    'custom.seed.dark': string;
-    'custom.save': string;
-    'custom.add': string;
-    'custom.edit': string;
-    'custom.export': string;
-    'custom.import': string;
-    'custom.name.placeholder': string;
-    'custom.defaultName': string;
-    'custom.inUse': string;
-    'custom.delete': string;
-    'custom.cancel': string;
-    'custom.close': string;
-    'custom.toast.saved': string;
-    'custom.toast.failed': string;
-    'custom.toast.unavailable': string;
-    'custom.toast.exported': string;
-    'custom.toast.imported': string;
-    'custom.importFailed.notArchive': string;
-    'custom.importFailed.noDocument': string;
-    'custom.importFailed.badDocument': string;
-    'custom.importFailed.tooNew': string;
-    'custom.importFailed.media': string;
-    'custom.importFailed.tooLarge': string;
-    'custom.importFailed.other': string;
-    'custom.delete.title': string;
-    'custom.delete.desc': string;
-    'custom.unsaved.title': string;
-    'custom.unsaved.desc': string;
-    'custom.unsaved.confirm': string;
-    'custom.unsaved.leaveDesc': string;
-    'custom.unsaved.leaveConfirm': string;
-    'custom.unsaved.cancel': string;
-    'custom.css.title': string;
-    'custom.css.open': string;
-    'custom.css.copyPath': string;
-    'custom.css.copied': string;
-    'custom.css.copyFailed': string;
-    'custom.css.newTheme': string;
-    'custom.css.loading': string;
-    'custom.css.loadFailed': string;
-    'custom.css.openFailed': string;
-    'custom.css.saveFailed': string;
-    'custom.css.enable': string;
-    'custom.css.tooLarge': string;
-    'custom.css.template.active': string;
-    'custom.css.template.variables': string;
-    'custom.css.template.example': string;
-    'custom.css.template.classes': string;
-    'custom.css.template.classesHint': string;
-    'custom.css.template.exampleAttribute': string;
-    'custom.css.template.dark': string;
-    'custom.css.template.assets': string;
-    'custom.css.template.warning': string;
-    'shiki.constant': string;
-    'shiki.string': string;
-    'shiki.comment': string;
-    'shiki.keyword': string;
-    'shiki.parameter': string;
-    'shiki.function': string;
-    'shiki.string-expression': string;
-    'shiki.punctuation': string;
-    'shiki.link': string;
-};
-/** The theme settings namespace key union. */
+export { zh } from './locales/zh.js';
+export { en } from './locales/en.js';
+export { ja } from './locales/ja.js';
+export { es } from './locales/es.js';
+export { fr } from './locales/fr.js';
+export { de } from './locales/de.js';
+export { ru } from './locales/ru.js';
+export { pt } from './locales/pt.js';
+import { zh } from './locales/zh.js';
+/** The theme settings namespace key union, derived from the Chinese dictionary. */
 export type ThemeKey = keyof typeof zh;
-/** English dictionary, checked complete against the zh key set. */
-export declare const en: {
-    nav: string;
-    'appearance.title': string;
-    'appearance.desc': string;
-    'presets.title': string;
-    'presets.desc': string;
-    'presets.disabled': string;
-    'sidebar.title': string;
-    'sidebar.desc': string;
-    'background.title': string;
-    'background.add': string;
-    'background.replace': string;
-    'background.remove': string;
-    'background.opacity': string;
-    'background.blur': string;
-    'background.badType': string;
-    'background.tooLarge': string;
-    'background.uploadFailed': string;
-    'scheme.light': string;
-    'scheme.dark': string;
-    'scheme.system': string;
-    'custom.title': string;
-    'custom.toggle.desc': string;
-    'custom.group.seeds': string;
-    'custom.group.shiki': string;
-    'custom.mode.label': string;
-    'custom.neutral.title': string;
-    'custom.neutral.desc': string;
-    'custom.neutral.lightest': string;
-    'custom.neutral.darkest': string;
-    'custom.neutral.roleBackground': string;
-    'custom.neutral.roleForeground': string;
-    'custom.accent.title': string;
-    'custom.accent.desc': string;
-    'custom.green.title': string;
-    'custom.green.desc': string;
-    'custom.amber.title': string;
-    'custom.amber.desc': string;
-    'custom.red.title': string;
-    'custom.red.desc': string;
-    'custom.border.title': string;
-    'custom.border.desc': string;
-    'custom.shiki.desc': string;
-    'custom.seed.light': string;
-    'custom.seed.dark': string;
-    'custom.save': string;
-    'custom.add': string;
-    'custom.edit': string;
-    'custom.export': string;
-    'custom.import': string;
-    'custom.name.placeholder': string;
-    'custom.defaultName': string;
-    'custom.inUse': string;
-    'custom.delete': string;
-    'custom.cancel': string;
-    'custom.close': string;
-    'custom.toast.saved': string;
-    'custom.toast.failed': string;
-    'custom.toast.unavailable': string;
-    'custom.toast.exported': string;
-    'custom.toast.imported': string;
-    'custom.importFailed.notArchive': string;
-    'custom.importFailed.noDocument': string;
-    'custom.importFailed.badDocument': string;
-    'custom.importFailed.tooNew': string;
-    'custom.importFailed.media': string;
-    'custom.importFailed.tooLarge': string;
-    'custom.importFailed.other': string;
-    'custom.delete.title': string;
-    'custom.delete.desc': string;
-    'custom.unsaved.title': string;
-    'custom.unsaved.desc': string;
-    'custom.unsaved.confirm': string;
-    'custom.unsaved.leaveDesc': string;
-    'custom.unsaved.leaveConfirm': string;
-    'custom.unsaved.cancel': string;
-    'custom.css.title': string;
-    'custom.css.open': string;
-    'custom.css.copyPath': string;
-    'custom.css.copied': string;
-    'custom.css.copyFailed': string;
-    'custom.css.newTheme': string;
-    'custom.css.loading': string;
-    'custom.css.loadFailed': string;
-    'custom.css.openFailed': string;
-    'custom.css.saveFailed': string;
-    'custom.css.enable': string;
-    'custom.css.tooLarge': string;
-    'custom.css.template.active': string;
-    'custom.css.template.variables': string;
-    'custom.css.template.example': string;
-    'custom.css.template.classes': string;
-    'custom.css.template.classesHint': string;
-    'custom.css.template.exampleAttribute': string;
-    'custom.css.template.dark': string;
-    'custom.css.template.assets': string;
-    'custom.css.template.warning': string;
-    'shiki.constant': string;
-    'shiki.string': string;
-    'shiki.comment': string;
-    'shiki.keyword': string;
-    'shiki.parameter': string;
-    'shiki.function': string;
-    'shiki.string-expression': string;
-    'shiki.punctuation': string;
-    'shiki.link': string;
-};
 //# sourceMappingURL=locales.d.ts.map

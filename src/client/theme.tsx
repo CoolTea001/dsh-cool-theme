@@ -43,7 +43,7 @@ import {
   removeTheme as removeThemeFile,
   legacyThemesToAdopt,
 } from './theme-files.js'
-import { zh, en, type ThemeKey } from './locales.js'
+import { zh, en, ja, es, fr, de, ru, pt, type ThemeKey } from './locales.js'
 
 function isValidSelection(v: string | null): v is Selection {
   return !!v && (v === CUSTOM_SELECTION || NOOP_PRESET_IDS.has(v as PresetId) || isBuiltinPresetId(v))
@@ -70,7 +70,12 @@ export function registerTheme(ctx: any) {
   const locale = ctx.get('locale')
   let t: (key: ThemeKey) => string = (key) => zh[key]
   if (locale) {
-    ctx.effect(() => locale.register(NS, { zh, en }), 'dsh-cool-theme: theme dictionaries')
+    // `zh` and `en` are the service's required baselines; the rest are optional
+    // ids, each still checked against the same key union (see locales.ts).
+    ctx.effect(
+      () => locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }),
+      'dsh-cool-theme: theme dictionaries',
+    )
     t = locale.bind(NS)
   }
 
@@ -850,8 +855,24 @@ export function registerTheme(ctx: any) {
   // between DSH builds, so only the stable parts are matched, and the selectors
   // live here rather than being spelled out again in each patch.
   const GENERAL_SECTION_SELECTOR = '.OVFIkW_section [data-slot="settings.general.item"]'
-  /** Title text the built-in AppearanceRow renders, one entry per shipped locale. */
-  const APPEARANCE_TITLES = ['外观', 'Appearance'] as const
+  /**
+   * Title text the built-in AppearanceRow renders, one entry per locale the
+   * shell ships. These are the shell's own translations of `appearance.title`,
+   * not ours: the row is the shell's, so it is matched in whatever language the
+   * shell is currently painting. Missing an entry here costs only the DOM
+   * fallback for that language — the slot shadow below is what actually hides
+   * the row — but a missing one would let the built-in row reappear.
+   */
+  const APPEARANCE_TITLES = [
+    '外观',
+    'Appearance',
+    '外観',
+    'Apariencia',
+    'Apparence',
+    'Aussehen',
+    'Внешний вид',
+    'Aparência',
+  ] as const
   const HIDE_APPEARANCE_CSS = `${GENERAL_SECTION_SELECTOR} .D7wrZG_group{display:none !important;}`
   let hideCssDisposer: (() => void) | null = null
   let apObs: MutationObserver | null = null
